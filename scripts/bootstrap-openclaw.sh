@@ -73,6 +73,9 @@ mkdir -p "$HOME/.openclaw/credentials"
 
 require_cmd tailscale
 
+say "Initializing OpenClaw config non-interactively"
+openclaw setup --non-interactive --workspace "$HOME/.openclaw/workspace" || true
+
 say "Ensuring OpenClaw gateway baseline config"
 openclaw config set gateway.bind loopback
 openclaw config set gateway.auth.mode token
