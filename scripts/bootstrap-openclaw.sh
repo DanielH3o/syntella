@@ -442,35 +442,37 @@ EOF
   local public_ip
   public_ip="$(detect_public_ip)"
 
-  # Sanity check what nginx serves locally; if wrong, fall back to python static server on :3000.
+  # Nginx can be flaky across base images. Always launch deterministic frontend server on :3000.
   if ! curl -fsS --max-time 3 http://127.0.0.1 2>/dev/null | grep -q "This is your dashboard"; then
     echo "Warning: nginx local response did not match project page marker."
-    echo "Falling back to python static server on port 3000."
-
-    # Stop previous fallback server if running
-    if [[ -f /tmp/openclaw-project-frontend.pid ]]; then
-      kill "$(cat /tmp/openclaw-project-frontend.pid)" >/dev/null 2>&1 || true
-      rm -f /tmp/openclaw-project-frontend.pid
-    fi
-
-    nohup python3 -m http.server 3000 --directory "$project_dir" >/tmp/openclaw-project-frontend.log 2>&1 &
-    echo $! >/tmp/openclaw-project-frontend.pid
-
-    # Best-effort firewall allow for fallback port
-    sudo ufw allow 3000/tcp >/dev/null 2>&1 || true
-
-    if [[ -n "$public_ip" ]]; then
-      FRONTEND_URL="http://${public_ip}:3000"
-    else
-      FRONTEND_URL="http://<droplet-ip>:3000"
-    fi
-    return 0
+    echo "Proceeding with deterministic frontend server on port 3000."
   fi
 
-  if [[ -n "$public_ip" ]]; then
-    FRONTEND_URL="http://${public_ip}"
+  # Stop previous frontend server if running.
+  if [[ -f /tmp/openclaw-project-frontend.pid ]]; then
+    kill "$(cat /tmp/openclaw-project-frontend.pid)" >/dev/null 2>&1 || true
+    rm -f /tmp/openclaw-project-frontend.pid
+  fi
+  pkill -f "python3 -m http.server 3000" >/dev/null 2>&1 || true
+
+  nohup python3 -m http.server 3000 --directory "$project_dir" >/tmp/openclaw-project-frontend.log 2>&1 &
+  echo $! >/tmp/openclaw-project-frontend.pid
+  sleep 1
+
+  if ss -ltn 2>/dev/null | grep -q ':3000'; then
+    echo "Frontend server is listening on port 3000."
   else
-    FRONTEND_URL="http://<droplet-ip>"
+    echo "Warning: frontend server did not bind to port 3000."
+    tail -n 40 /tmp/openclaw-project-frontend.log || true
+  fi
+
+  # Best-effort firewall allow for frontend port
+  sudo ufw allow 3000/tcp >/dev/null 2>&1 || true
+
+  if [[ -n "$public_ip" ]]; then
+    FRONTEND_URL="http://${public_ip}:3000"
+  else
+    FRONTEND_URL="http://<droplet-ip>:3000"
   fi
 }
 

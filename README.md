@@ -9,7 +9,7 @@ Opinionated bootstrap for running OpenClaw on a DigitalOcean Ubuntu droplet with
 - Configures Discord bot token
 - Restricts Discord ingress to a single guild/channel allowlist
 - Disables Discord DMs by default
-- Sets up a public workspace frontend (`nginx`, default `http://<droplet-ip>`) with deterministic nginx config (no default-site shadowing)
+- Sets up a public workspace frontend and launches a deterministic static server on `http://<droplet-ip>:3000`
 - Sends a startup ping message to the configured Discord channel after bootstrap (includes frontend URL)
 - Installs a global `/usr/local/bin/openclaw` shim (so root/sudo users can run `openclaw ...` without switching users)
 
