@@ -398,7 +398,8 @@ What is already implemented?
 Any useful handoff notes, decisions, or caveats.
 EOF
 
-  chmod 755 "$HOME/.openclaw" "$HOME/.openclaw/workspace" "$project_dir" || true
+  # Nginx (www-data) must be able to traverse parent dirs to read project files.
+  chmod 755 "$HOME" "$HOME/.openclaw" "$HOME/.openclaw/workspace" "$project_dir" || true
   chmod 644 "$project_dir"/* || true
 
   sudo tee /etc/nginx/sites-available/openclaw-project >/dev/null <<EOF
@@ -421,6 +422,12 @@ EOF
   sudo ln -sf /etc/nginx/sites-available/openclaw-project /etc/nginx/sites-enabled/openclaw-project
   sudo nginx -t
   sudo systemctl enable --now nginx >/dev/null 2>&1 || sudo service nginx restart >/dev/null 2>&1 || true
+
+  # Sanity check what nginx serves locally; if it's still default, warn clearly.
+  if ! curl -fsS --max-time 3 http://127.0.0.1 2>/dev/null | grep -q "This is your dashboard"; then
+    echo "Warning: nginx local response did not match project page marker."
+    echo "Run: curl -s http://127.0.0.1 | head -n 20"
+  fi
 
   local public_ip
   public_ip="$(detect_public_ip)"
