@@ -489,24 +489,34 @@ start_gateway_with_fallback() {
 
   clear_gateway_processes() {
     oc gateway stop >/dev/null 2>&1 || true
+
+    # Kill common gateway process patterns (current + legacy names).
     pkill -f "openclaw gateway" >/dev/null 2>&1 || true
     pkill -f "openclaw.mjs gateway" >/dev/null 2>&1 || true
+    pkill -f "openclaw-gateway" >/dev/null 2>&1 || true
+    pkill -f "node .*openclaw.*gateway" >/dev/null 2>&1 || true
 
-    # If logs mention a stuck lock PID, kill it explicitly.
+    sudo pkill -f "openclaw gateway" >/dev/null 2>&1 || true
+    sudo pkill -f "openclaw.mjs gateway" >/dev/null 2>&1 || true
+    sudo pkill -f "openclaw-gateway" >/dev/null 2>&1 || true
+    sudo pkill -f "node .*openclaw.*gateway" >/dev/null 2>&1 || true
+
+    # If logs mention a stuck lock PID, kill it explicitly (with sudo fallback).
     local hinted_pid
     hinted_pid="$(grep -Eo 'pid [0-9]+' "$log_file" 2>/dev/null | tail -n1 | awk '{print $2}' || true)"
     if [[ -n "$hinted_pid" ]] && ps -p "$hinted_pid" >/dev/null 2>&1; then
-      kill "$hinted_pid" >/dev/null 2>&1 || true
+      kill "$hinted_pid" >/dev/null 2>&1 || sudo kill "$hinted_pid" >/dev/null 2>&1 || true
       sleep 1
-      ps -p "$hinted_pid" >/dev/null 2>&1 && kill -9 "$hinted_pid" >/dev/null 2>&1 || true
+      ps -p "$hinted_pid" >/dev/null 2>&1 && (kill -9 "$hinted_pid" >/dev/null 2>&1 || sudo kill -9 "$hinted_pid" >/dev/null 2>&1 || true)
     fi
 
     # Remove stale gateway lock files (after stopping/killing processes).
     # OpenClaw lock naming pattern: gateway.<hash>.lock
     local lock_root
-    for lock_root in "$HOME/.openclaw" "${XDG_RUNTIME_DIR:-}" "/tmp"; do
+    for lock_root in "$HOME/.openclaw" "${XDG_RUNTIME_DIR:-}" "/tmp" "/tmp/openclaw-$(id -u)"; do
       [[ -n "$lock_root" && -d "$lock_root" ]] || continue
       find "$lock_root" -type f -name 'gateway.*.lock' -print -delete 2>/dev/null || true
+      sudo find "$lock_root" -type f -name 'gateway.*.lock' -print -delete 2>/dev/null || true
     done
 
     sleep 1
