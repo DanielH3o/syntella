@@ -55,7 +55,7 @@ After bootstrap, frontend files are in:
 
 - `~/.openclaw/workspace/project`
 
-Bootstrap seeds startup context docs at workspace root (create-if-missing):
+Bootstrap writes startup context docs at workspace root (overwrite mode):
 
 - `~/.openclaw/workspace/AGENTS.md`
 - `~/.openclaw/workspace/SOUL.md`

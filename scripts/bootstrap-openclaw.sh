@@ -216,8 +216,7 @@ seed_workspace_context_files() {
   local ws_root="$HOME/.openclaw/workspace"
   mkdir -p "$ws_root/memory"
 
-  if [[ ! -f "$ws_root/AGENTS.md" ]]; then
-    cat >"$ws_root/AGENTS.md" <<'EOF'
+  cat >"$ws_root/AGENTS.md" <<'EOF'
 # AGENTS.md - Workspace Context
 
 ## First read order (main/direct sessions)
@@ -241,34 +240,27 @@ seed_workspace_context_files() {
 2. Save
 3. User refreshes browser
 EOF
-  fi
 
-  if [[ ! -f "$ws_root/SOUL.md" ]]; then
-    cat >"$ws_root/SOUL.md" <<'EOF'
+  cat >"$ws_root/SOUL.md" <<'EOF'
 # SOUL.md
 
 Be practical, concise, and execution-focused.
 Prefer shipping working changes over long theory.
 EOF
-  fi
 
-  if [[ ! -f "$ws_root/USER.md" ]]; then
-    cat >"$ws_root/USER.md" <<'EOF'
+  cat >"$ws_root/USER.md" <<'EOF'
 # USER.md
 
 - Human: Daniel
 - Primary interface: Discord
 - Build mode: iterative, practical, minimal friction
 EOF
-  fi
 
-  if [[ ! -f "$ws_root/MEMORY.md" ]]; then
-    cat >"$ws_root/MEMORY.md" <<'EOF'
+  cat >"$ws_root/MEMORY.md" <<'EOF'
 # MEMORY.md
 
 Long-term notes and durable decisions go here.
 EOF
-  fi
 
   local today yesterday
   today="$(date +%F)"
@@ -280,7 +272,7 @@ EOF
   fi
 }
 
-say "Seeding workspace root context files (if missing)"
+say "Writing workspace root context files (overwrite mode)"
 seed_workspace_context_files
 
 say "Ensuring OpenClaw gateway baseline config"
