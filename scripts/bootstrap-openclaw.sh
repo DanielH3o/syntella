@@ -563,6 +563,28 @@ start_gateway_with_fallback() {
     return 0
   fi
 
+  # If lock says "already running (pid X)", clear once more and retry a clean foreground start.
+  if grep -q "gateway already running (pid" "$log_file" 2>/dev/null; then
+    echo "Detected gateway lock conflict; clearing processes/locks and retrying once..."
+    clear_gateway_processes
+
+    if [[ -n "$NODE_BIN" && -x "$NODE_BIN" ]]; then
+      nohup "$NODE_BIN" "$OPENCLAW_MJS" gateway --port 18789 >>"$log_file" 2>&1 &
+    else
+      nohup "$OPENCLAW_BIN" gateway --port 18789 >>"$log_file" 2>&1 &
+    fi
+
+    local retry_waited=0
+    while (( retry_waited < 20 )); do
+      if is_gateway_listening; then
+        echo "Gateway started after lock-conflict retry."
+        return 0
+      fi
+      sleep 1
+      retry_waited=$((retry_waited + 1))
+    done
+  fi
+
   echo "Failed to start gateway in both service and fallback modes."
   echo "Check logs: $log_file"
   echo "Resolved openclaw binary: $OPENCLAW_BIN"
