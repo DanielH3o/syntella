@@ -402,28 +402,40 @@ EOF
   chmod 755 "$HOME" "$HOME/.openclaw" "$HOME/.openclaw/workspace" "$project_dir" || true
   chmod 644 "$project_dir"/* || true
 
-  sudo tee /etc/nginx/sites-available/openclaw-project >/dev/null <<EOF
-server {
-  listen 80 default_server;
-  listen [::]:80 default_server;
+  # Deterministic nginx config: avoid distro default-site precedence issues.
+  sudo tee /etc/nginx/nginx.conf >/dev/null <<EOF
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+error_log /var/log/nginx/error.log;
+include /etc/nginx/modules-enabled/*.conf;
 
-  root $project_dir;
-  index index.html;
+events {
+  worker_connections 768;
+}
 
-  server_name _;
+http {
+  include /etc/nginx/mime.types;
+  default_type application/octet-stream;
 
-  location / {
-    try_files \$uri \$uri/ /index.html;
+  sendfile on;
+  access_log /var/log/nginx/access.log;
+
+  server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+
+    root $project_dir;
+    index index.html;
+
+    location / {
+      try_files \$uri \$uri/ /index.html;
+    }
   }
 }
 EOF
 
-  # Remove distro/default site definitions that can shadow our project vhost.
-  sudo rm -f /etc/nginx/sites-enabled/default
-  sudo rm -f /etc/nginx/conf.d/default.conf
-  sudo rm -f /etc/nginx/conf.d/*.default.conf 2>/dev/null || true
-
-  sudo ln -sf /etc/nginx/sites-available/openclaw-project /etc/nginx/sites-enabled/openclaw-project
   sudo nginx -t
   sudo systemctl enable --now nginx >/dev/null 2>&1 || sudo service nginx restart >/dev/null 2>&1 || true
 
