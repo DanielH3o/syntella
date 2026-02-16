@@ -68,13 +68,13 @@ if ! ensure_openclaw_on_path; then
 fi
 
 say "Pre-creating OpenClaw state dirs to avoid first-run prompts"
+mkdir -p "$HOME/.openclaw"
+chmod 700 "$HOME/.openclaw" || true
 mkdir -p "$HOME/.openclaw/agents/main/sessions"
 mkdir -p "$HOME/.openclaw/credentials"
+mkdir -p "$HOME/.openclaw/workspace"
 
 require_cmd tailscale
-
-say "Initializing OpenClaw config non-interactively"
-openclaw setup --non-interactive --workspace "$HOME/.openclaw/workspace" || true
 
 say "Ensuring OpenClaw gateway baseline config"
 openclaw config set gateway.bind loopback
