@@ -45,7 +45,7 @@ ensure_openclaw_on_path() {
 
 say "Installing base packages"
 sudo apt-get update -y
-sudo apt-get install -y curl git ca-certificates gnupg lsb-release
+sudo apt-get install -y curl git ca-certificates gnupg lsb-release iproute2 procps lsof
 
 if ! command -v openclaw >/dev/null 2>&1; then
   say "Installing OpenClaw (skip interactive onboarding)"
@@ -127,12 +127,17 @@ start_gateway_with_fallback() {
   echo "systemd user service unavailable; falling back to foreground gateway via nohup"
   pkill -f "openclaw gateway" >/dev/null 2>&1 || true
   nohup "$OPENCLAW_BIN" gateway --port 18789 >"$log_file" 2>&1 &
-  sleep 5
 
-  if is_gateway_listening; then
-    echo "Gateway started in fallback mode (nohup). Logs: $log_file"
-    return 0
-  fi
+  # Wait up to 25s for gateway to bind (cold starts can be slow on fresh droplets)
+  local waited=0
+  while (( waited < 25 )); do
+    if is_gateway_listening; then
+      echo "Gateway started in fallback mode (nohup). Logs: $log_file"
+      return 0
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
 
   echo "Failed to start gateway in both service and fallback modes."
   echo "Check logs: $log_file"
