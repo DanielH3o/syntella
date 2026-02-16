@@ -178,11 +178,11 @@ discord["enabled"] = True
 discord["token"] = token
 discord["groupPolicy"] = "allowlist"
 
-dm = discord.get("dm")
-if not isinstance(dm, dict):
-    dm = {}
-dm["policy"] = "disabled"
-discord["dm"] = dm
+# Current schema uses channels.discord.dmPolicy (doctor migrates old dm.policy).
+discord["dmPolicy"] = "disabled"
+# Remove legacy nested dm block if present.
+if isinstance(discord.get("dm"), dict):
+    discord.pop("dm", None)
 
 guilds = discord.get("guilds")
 if not isinstance(guilds, dict):
@@ -417,17 +417,23 @@ send_discord_boot_ping() {
   ts="$(date -u +"%Y-%m-%d %H:%M:%S UTC")"
 
   if [[ -n "$FRONTEND_URL" ]]; then
-    msg="✅ OpenClaw bootstrap complete (${ts}). Discord route is live. Placeholder frontend: ${FRONTEND_URL}"
+    msg="✅ OpenClaw bootstrap complete (${ts}). Discord route is live. Frontend: ${FRONTEND_URL}"
   else
     msg="✅ OpenClaw bootstrap complete (${ts}). Discord route is live."
   fi
 
-  if oc message send --channel discord --target "channel:${DISCORD_CHANNEL_ID}" --message "$msg" >/dev/null 2>&1; then
-    echo "Sent Discord startup ping to channel:${DISCORD_CHANNEL_ID}"
-  else
-    echo "Warning: failed to send Discord startup ping."
-    echo "Check bot token, guild/channel IDs, and bot permissions."
-  fi
+  local attempt
+  for attempt in 1 2 3 4 5 6; do
+    if oc message send --channel discord --target "channel:${DISCORD_CHANNEL_ID}" --message "$msg" >/dev/null 2>&1; then
+      echo "Sent Discord startup ping to channel:${DISCORD_CHANNEL_ID}"
+      return 0
+    fi
+    sleep 2
+  done
+
+  echo "Warning: failed to send Discord startup ping after retries."
+  echo "Check bot token, guild/channel IDs, and bot permissions."
+  return 1
 }
 
 is_gateway_listening() {
