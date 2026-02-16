@@ -418,15 +418,21 @@ server {
 }
 EOF
 
+  # Remove distro/default site definitions that can shadow our project vhost.
   sudo rm -f /etc/nginx/sites-enabled/default
+  sudo rm -f /etc/nginx/conf.d/default.conf
+  sudo rm -f /etc/nginx/conf.d/*.default.conf 2>/dev/null || true
+
   sudo ln -sf /etc/nginx/sites-available/openclaw-project /etc/nginx/sites-enabled/openclaw-project
   sudo nginx -t
   sudo systemctl enable --now nginx >/dev/null 2>&1 || sudo service nginx restart >/dev/null 2>&1 || true
 
-  # Sanity check what nginx serves locally; if it's still default, warn clearly.
+  # Sanity check what nginx serves locally; fail fast if default page still wins.
   if ! curl -fsS --max-time 3 http://127.0.0.1 2>/dev/null | grep -q "This is your dashboard"; then
-    echo "Warning: nginx local response did not match project page marker."
-    echo "Run: curl -s http://127.0.0.1 | head -n 20"
+    echo "Error: nginx local response did not match project page marker."
+    echo "Likely another default vhost is shadowing openclaw-project."
+    echo "Debug: sudo nginx -T | grep -nE 'listen 80|default_server|root '"
+    return 1
   fi
 
   local public_ip
