@@ -9,13 +9,25 @@ Opinionated starter kit to bootstrap an **OpenClaw Gateway** on a fresh DigitalO
 - Easy access to chat/dashboard from your own devices (Tailscale Serve)
 - Idempotent setup (safe to re-run)
 
+## Quick Start (fewest inputs)
+
+```bash
+# 1) SSH into new Ubuntu droplet as root
+ssh root@YOUR_DROPLET_IP
+
+# 2) One command: create user non-interactively + run full bootstrap
+curl -fsSL https://raw.githubusercontent.com/DanielH3o/openclaw-droplet/main/scripts/bootstrap-root.sh | bash
+```
+
+This avoids interactive `adduser` prompts entirely.
+
 ## Quick Start (manual SSH path)
 
 ```bash
 # 1) SSH into new Ubuntu droplet
 ssh root@YOUR_DROPLET_IP
 
-# 2) Create non-root user (optional but recommended)
+# 2) Create non-root user (interactive)
 adduser openclaw
 usermod -aG sudo openclaw
 su - openclaw
