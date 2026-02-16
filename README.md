@@ -55,12 +55,15 @@ After bootstrap, frontend files are in:
 
 - `~/.openclaw/workspace/project`
 
-Bootstrap also creates context docs for the agent in that folder:
+Bootstrap seeds startup context docs at workspace root (create-if-missing):
 
-- `~/.openclaw/workspace/project/AGENTS.md`
-- `~/.openclaw/workspace/project/PROJECT_CONTEXT.md`
-- `~/.openclaw/workspace/project/TASK.md`
+- `~/.openclaw/workspace/AGENTS.md`
+- `~/.openclaw/workspace/SOUL.md`
+- `~/.openclaw/workspace/USER.md`
+- `~/.openclaw/workspace/MEMORY.md`
+- `~/.openclaw/workspace/memory/YYYY-MM-DD.md` (today + yesterday)
 
+Project files remain in `~/.openclaw/workspace/project`.
 Edit files (or ask your agent to edit them), then refresh browser.
 
 ## Manual path

@@ -212,6 +212,77 @@ PY
 
 require_discord_inputs
 
+seed_workspace_context_files() {
+  local ws_root="$HOME/.openclaw/workspace"
+  mkdir -p "$ws_root/memory"
+
+  if [[ ! -f "$ws_root/AGENTS.md" ]]; then
+    cat >"$ws_root/AGENTS.md" <<'EOF'
+# AGENTS.md - Workspace Context
+
+## First read order (main/direct sessions)
+
+1. `SOUL.md`
+2. `USER.md`
+3. `memory/YYYY-MM-DD.md` (today)
+4. `memory/YYYY-MM-DD.md` (yesterday)
+5. `MEMORY.md`
+
+## Environment
+
+- Host type: DigitalOcean Ubuntu droplet
+- Workspace root: `~/.openclaw/workspace`
+- Frontend project root: `~/.openclaw/workspace/project`
+- Frontend is served publicly via nginx
+
+## Frontend workflow
+
+1. Edit files in `~/.openclaw/workspace/project`
+2. Save
+3. User refreshes browser
+EOF
+  fi
+
+  if [[ ! -f "$ws_root/SOUL.md" ]]; then
+    cat >"$ws_root/SOUL.md" <<'EOF'
+# SOUL.md
+
+Be practical, concise, and execution-focused.
+Prefer shipping working changes over long theory.
+EOF
+  fi
+
+  if [[ ! -f "$ws_root/USER.md" ]]; then
+    cat >"$ws_root/USER.md" <<'EOF'
+# USER.md
+
+- Human: Daniel
+- Primary interface: Discord
+- Build mode: iterative, practical, minimal friction
+EOF
+  fi
+
+  if [[ ! -f "$ws_root/MEMORY.md" ]]; then
+    cat >"$ws_root/MEMORY.md" <<'EOF'
+# MEMORY.md
+
+Long-term notes and durable decisions go here.
+EOF
+  fi
+
+  local today yesterday
+  today="$(date +%F)"
+  yesterday="$(date -d 'yesterday' +%F 2>/dev/null || date -v-1d +%F 2>/dev/null || true)"
+
+  [[ -f "$ws_root/memory/${today}.md" ]] || echo "# ${today}" >"$ws_root/memory/${today}.md"
+  if [[ -n "$yesterday" ]]; then
+    [[ -f "$ws_root/memory/${yesterday}.md" ]] || echo "# ${yesterday}" >"$ws_root/memory/${yesterday}.md"
+  fi
+}
+
+say "Seeding workspace root context files (if missing)"
+seed_workspace_context_files
+
 say "Ensuring OpenClaw gateway baseline config"
 oc config set gateway.mode local
 oc config set gateway.bind loopback
@@ -309,89 +380,8 @@ This folder is served by nginx at the droplet public URL.
 - Ask the OpenClaw agent to edit files in this folder directly
 EOF
 
-  cat >"$project_dir/AGENTS.md" <<'EOF'
-# AGENTS.md - Project Context
-
-You are operating on a **DigitalOcean Ubuntu droplet**.
-
-## Environment
-
-- Host type: remote VPS (DigitalOcean droplet)
-- OS: Ubuntu
-- OpenClaw workspace root: `~/.openclaw/workspace`
-- Frontend project root: `~/.openclaw/workspace/project`
-
-## Frontend Serving
-
-- Public frontend URL: `http://<droplet-ip>`
-- Served by: `nginx`
-- Nginx root: `~/.openclaw/workspace/project`
-
-## Editing Workflow
-
-1. Make frontend edits in `~/.openclaw/workspace/project`
-2. Save files
-3. User refreshes browser to see changes
-
-No dashboard-specific changes are needed for this workflow.
-EOF
-
-  cat >"$project_dir/PROJECT_CONTEXT.md" <<'EOF'
-# PROJECT_CONTEXT.md
-
-This project is intentionally bootstrapped as a minimal editable web app.
-
-## Canonical Paths
-
-- Project directory: `~/.openclaw/workspace/project`
-- Main HTML: `~/.openclaw/workspace/project/index.html`
-- Styles: `~/.openclaw/workspace/project/styles.css`
-- JS: `~/.openclaw/workspace/project/app.js`
-
-## Runtime Assumptions
-
-- Deployment target is this same droplet
-- Static assets are served directly by nginx
-- Browser refresh is the deployment/update mechanism during early development
-
-## Priority
-
-When asked to work on the frontend, operate directly in this project directory first.
-EOF
-
-  cat >"$project_dir/TASK.md" <<'EOF'
-# TASK.md - Working Brief
-
-## Current Goal
-
-Describe what you are trying to build right now.
-
-## Success Criteria
-
-- [ ] Criterion 1
-- [ ] Criterion 2
-- [ ] Criterion 3
-
-## Constraints
-
-- Keep edits inside `~/.openclaw/workspace/project`
-- Frontend is static and served by nginx
-- User validates by refreshing browser
-
-## Current State
-
-What is already implemented?
-
-## Next Actions
-
-1. First concrete step
-2. Second concrete step
-3. Third concrete step
-
-## Notes for Next Agent Session
-
-Any useful handoff notes, decisions, or caveats.
-EOF
+  # Project-level instruction docs removed intentionally.
+  # Startup/system guidance now lives at workspace root: ~/.openclaw/workspace/*.md
 
   # Nginx (www-data) must be able to traverse parent dirs to read project files.
   chmod 755 "$HOME" "$HOME/.openclaw" "$HOME/.openclaw/workspace" "$project_dir" || true
