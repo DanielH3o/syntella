@@ -21,6 +21,8 @@ curl -fsSL https://raw.githubusercontent.com/DanielH3o/openclaw-droplet/main/scr
 
 This avoids interactive `adduser` prompts entirely.
 
+It also installs a global `/usr/local/bin/openclaw` shim so you can run `openclaw ...` from root/sudo users without switching accounts (commands run in the `openclaw` user context).
+
 If you want deterministic SSH key install for the `openclaw` user, run with your public key explicitly:
 
 ```bash

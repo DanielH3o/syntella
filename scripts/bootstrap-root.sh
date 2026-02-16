@@ -111,5 +111,20 @@ fi
 say "Running user bootstrap script"
 sudo --preserve-env=PUBLIC_UI,ALLOW_CIDRS -u "$OPENCLAW_USER" -H bash -lc "cd '$REPO_DIR' && bash scripts/bootstrap-openclaw.sh"
 
+say "Installing global shim: /usr/local/bin/openclaw (runs as $OPENCLAW_USER)"
+TARGET_BIN="$(sudo -u "$OPENCLAW_USER" -H bash -lc 'command -v openclaw' 2>/dev/null || true)"
+cat >/usr/local/bin/openclaw <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+TARGET_USER="${OPENCLAW_USER}"
+TARGET_BIN="${TARGET_BIN}"
+if [[ -z "\$TARGET_BIN" ]]; then
+  echo "openclaw not found for user ${OPENCLAW_USER}"
+  exit 127
+fi
+exec sudo -u "\$TARGET_USER" -H "\$TARGET_BIN" "\$@"
+EOF
+chmod 755 /usr/local/bin/openclaw
+
 echo
-echo "Done. You can now SSH directly as '$OPENCLAW_USER'."
+echo "Done. You can now run 'openclaw' from root or any sudo user (it uses '$OPENCLAW_USER' context)."
