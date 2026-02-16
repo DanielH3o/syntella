@@ -442,37 +442,33 @@ EOF
   local public_ip
   public_ip="$(detect_public_ip)"
 
-  # Nginx can be flaky across base images. Always launch deterministic frontend server on :3000.
-  if ! curl -fsS --max-time 3 http://127.0.0.1 2>/dev/null | grep -q "This is your dashboard"; then
-    echo "Warning: nginx local response did not match project page marker."
-    echo "Proceeding with deterministic frontend server on port 3000."
+  # Deterministic validation: stamp marker, validate local and public responses.
+  local marker local_ok public_ok
+  marker="oc-bootstrap-marker-$(date +%s)-$RANDOM"
+  echo "<!-- ${marker} -->" >> "$project_dir/index.html"
+
+  local_ok=0
+  public_ok=0
+
+  if curl -fsS --max-time 3 http://127.0.0.1 2>/dev/null | grep -q "$marker"; then
+    local_ok=1
   fi
-
-  # Stop previous frontend server if running.
-  if [[ -f /tmp/openclaw-project-frontend.pid ]]; then
-    kill "$(cat /tmp/openclaw-project-frontend.pid)" >/dev/null 2>&1 || true
-    rm -f /tmp/openclaw-project-frontend.pid
-  fi
-  pkill -f "python3 -m http.server 3000" >/dev/null 2>&1 || true
-
-  nohup python3 -m http.server 3000 --directory "$project_dir" >/tmp/openclaw-project-frontend.log 2>&1 &
-  echo $! >/tmp/openclaw-project-frontend.pid
-  sleep 1
-
-  if ss -ltn 2>/dev/null | grep -q ':3000'; then
-    echo "Frontend server is listening on port 3000."
-  else
-    echo "Warning: frontend server did not bind to port 3000."
-    tail -n 40 /tmp/openclaw-project-frontend.log || true
-  fi
-
-  # Best-effort firewall allow for frontend port
-  sudo ufw allow 3000/tcp >/dev/null 2>&1 || true
 
   if [[ -n "$public_ip" ]]; then
-    FRONTEND_URL="http://${public_ip}:3000"
+    if curl -fsS --max-time 5 "http://${public_ip}" 2>/dev/null | grep -q "$marker"; then
+      public_ok=1
+    fi
+  fi
+
+  if [[ "$local_ok" == "1" && "$public_ok" == "1" ]]; then
+    FRONTEND_URL="http://${public_ip}"
+    echo "Frontend validation passed (local + public)."
   else
-    FRONTEND_URL="http://<droplet-ip>:3000"
+    FRONTEND_URL=""
+    echo "Warning: frontend validation failed (local_ok=${local_ok}, public_ok=${public_ok})."
+    echo "Debug commands:"
+    echo "  curl -s http://127.0.0.1 | head -n 20"
+    echo "  IP=\$(curl -fsS ifconfig.me); echo \$IP; curl -s http://\$IP | head -n 20"
   fi
 }
 
@@ -483,7 +479,7 @@ send_discord_boot_ping() {
   if [[ -n "$FRONTEND_URL" ]]; then
     msg="✅ OpenClaw bootstrap complete (${ts}). Discord route is live. Frontend: ${FRONTEND_URL}"
   else
-    msg="✅ OpenClaw bootstrap complete (${ts}). Discord route is live."
+    msg="⚠️ OpenClaw bootstrap complete (${ts}), Discord route is live, but frontend validation failed. Run: curl -s http://127.0.0.1 | head -n 20"
   fi
 
   local attempt
