@@ -466,11 +466,35 @@ EOF
     FRONTEND_URL="http://${public_ip}"
     echo "Frontend validation passed (local + public)."
   else
-    FRONTEND_URL=""
     echo "Warning: frontend validation failed (local_ok=${local_ok}, public_ok=${public_ok})."
-    echo "Debug commands:"
-    echo "  curl -s http://127.0.0.1 | head -n 20"
-    echo "  IP=\$(curl -fsS ifconfig.me); echo \$IP; curl -s http://\$IP | head -n 20"
+    echo "Applying compatibility fallback: serve project from /var/www/html."
+
+    sudo rm -rf /var/www/html
+    sudo ln -s "$project_dir" /var/www/html
+    sudo nginx -t
+    sudo systemctl restart nginx >/dev/null 2>&1 || sudo service nginx restart >/dev/null 2>&1 || true
+
+    local_ok=0
+    public_ok=0
+    if curl -fsS --max-time 3 http://127.0.0.1 2>/dev/null | grep -q "$marker"; then
+      local_ok=1
+    fi
+    if [[ -n "$public_ip" ]]; then
+      if curl -fsS --max-time 5 "http://${public_ip}" 2>/dev/null | grep -q "$marker"; then
+        public_ok=1
+      fi
+    fi
+
+    if [[ "$local_ok" == "1" && "$public_ok" == "1" ]]; then
+      FRONTEND_URL="http://${public_ip}"
+      echo "Frontend validation passed after /var/www/html fallback."
+    else
+      FRONTEND_URL=""
+      echo "Warning: frontend validation still failed after fallback (local_ok=${local_ok}, public_ok=${public_ok})."
+      echo "Debug commands:"
+      echo "  curl -s http://127.0.0.1 | head -n 20"
+      echo "  IP=\$(curl -fsS ifconfig.me); echo \$IP; curl -s http://\$IP | head -n 20"
+    fi
   fi
 }
 
