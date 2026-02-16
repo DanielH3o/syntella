@@ -67,6 +67,10 @@ if ! ensure_openclaw_on_path; then
   exit 1
 fi
 
+say "Pre-creating OpenClaw state dirs to avoid first-run prompts"
+mkdir -p "$HOME/.openclaw/agents/main/sessions"
+mkdir -p "$HOME/.openclaw/credentials"
+
 require_cmd tailscale
 
 say "Ensuring OpenClaw gateway baseline config"
