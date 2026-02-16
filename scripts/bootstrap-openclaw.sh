@@ -345,6 +345,40 @@ This project is intentionally bootstrapped as a minimal editable web app.
 When asked to work on the frontend, operate directly in this project directory first.
 EOF
 
+  cat >"$project_dir/TASK.md" <<'EOF'
+# TASK.md - Working Brief
+
+## Current Goal
+
+Describe what you are trying to build right now.
+
+## Success Criteria
+
+- [ ] Criterion 1
+- [ ] Criterion 2
+- [ ] Criterion 3
+
+## Constraints
+
+- Keep edits inside `~/.openclaw/workspace/project`
+- Frontend is static and served by nginx
+- User validates by refreshing browser
+
+## Current State
+
+What is already implemented?
+
+## Next Actions
+
+1. First concrete step
+2. Second concrete step
+3. Third concrete step
+
+## Notes for Next Agent Session
+
+Any useful handoff notes, decisions, or caveats.
+EOF
+
   chmod 755 "$HOME/.openclaw" "$HOME/.openclaw/workspace" "$project_dir" || true
   chmod 644 "$project_dir"/* || true
 
