@@ -165,6 +165,13 @@ start_gateway_with_fallback() {
   local log_file="$HOME/.openclaw/logs/gateway.log"
   mkdir -p "$HOME/.openclaw/logs"
 
+  clear_gateway_processes() {
+    oc gateway stop >/dev/null 2>&1 || true
+    pkill -f "openclaw gateway" >/dev/null 2>&1 || true
+    pkill -f "openclaw.mjs gateway" >/dev/null 2>&1 || true
+    sleep 1
+  }
+
   if is_gateway_listening; then
     echo "Gateway already listening on port 18789."
     return 0
@@ -177,8 +184,10 @@ start_gateway_with_fallback() {
     fi
   fi
 
+  # Handle stale lock/process state (common on fresh droplets during first bootstrap).
+  clear_gateway_processes
+
   echo "systemd user service unavailable; falling back to foreground gateway via nohup"
-  pkill -f "openclaw gateway" >/dev/null 2>&1 || true
 
   if [[ -n "$NODE_BIN" && -x "$NODE_BIN" ]]; then
     nohup "$NODE_BIN" "$OPENCLAW_MJS" gateway --port 18789 >"$log_file" 2>&1 &
