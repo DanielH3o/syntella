@@ -10,13 +10,6 @@ if [[ "${EUID}" -eq 0 ]]; then
   exit 1
 fi
 
-require_cmd() {
-  command -v "$1" >/dev/null 2>&1 || {
-    echo "Missing required command: $1"
-    exit 1
-  }
-}
-
 say() { echo -e "\n==> $*"; }
 
 DISCORD_BOT_TOKEN="${DISCORD_BOT_TOKEN:-}"
@@ -249,7 +242,7 @@ detect_public_ip() {
     || true
 }
 
-setup_placeholder_frontend() {
+setup_frontend_workspace() {
   if [[ "$FRONTEND_ENABLED" != "1" ]]; then
     return 0
   fi
@@ -672,7 +665,7 @@ if ! start_gateway_with_fallback; then
   echo "Warning: gateway startup reported failure; continuing with frontend setup + diagnostics."
 fi
 
-setup_placeholder_frontend
+setup_frontend_workspace
 
 say "Checking gateway health"
 if is_gateway_listening; then

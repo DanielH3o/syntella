@@ -108,6 +108,7 @@ say "Configuring SSH authorized_keys for '$OPENCLAW_USER'"
 install_authorized_keys_for_user "$OPENCLAW_USER"
 
 say "Cloning/updating openclaw-droplet repo"
+sudo -u "$OPENCLAW_USER" -H bash -lc "git config --global --add safe.directory '$REPO_DIR'"
 if [[ -d "$REPO_DIR/.git" ]]; then
   sudo -u "$OPENCLAW_USER" -H bash -lc "cd '$REPO_DIR' && git pull --ff-only"
 else

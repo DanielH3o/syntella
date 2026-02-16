@@ -79,6 +79,16 @@ export ANTHROPIC_API_KEY="YOUR_ANTHROPIC_API_KEY"
 bash scripts/bootstrap-openclaw.sh
 ```
 
+## v1 Hardening / Verification
+
+After bootstrap, run:
+
+```bash
+sudo -u openclaw -H bash /home/openclaw/openclaw-droplet/scripts/smoke-test.sh
+```
+
+This checks gateway listener, Discord config, project files, and local/public frontend responses.
+
 ## Troubleshooting
 
 ### `Permission denied (publickey)` for `openclaw`
@@ -115,5 +125,6 @@ tail -n 120 ~/.openclaw/logs/gateway.log
 
 - `scripts/bootstrap-openclaw.sh` — main installer (Discord-first)
 - `scripts/bootstrap-root.sh` — non-interactive root bootstrap
+- `scripts/smoke-test.sh` — post-bootstrap verification checks
 - `cloud-init/user-data.yaml` — optional unattended first boot
 - `docs/rollout-plan.md` — roadmap
