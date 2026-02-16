@@ -85,11 +85,35 @@ openclaw config set gateway.trustedProxies '["127.0.0.1"]'
 say "Generating gateway token (if needed)"
 openclaw doctor --generate-gateway-token || true
 
-say "Starting/restarting gateway service"
-openclaw gateway restart || openclaw gateway start
+start_gateway_with_fallback() {
+  local log_file="$HOME/.openclaw/logs/gateway.log"
+  mkdir -p "$HOME/.openclaw/logs"
 
-say "Checking service status"
-openclaw gateway status || true
+  if openclaw gateway restart >/dev/null 2>&1 || openclaw gateway start >/dev/null 2>&1; then
+    echo "Gateway started via service manager."
+    return 0
+  fi
+
+  echo "systemd user service unavailable; falling back to foreground gateway via nohup"
+  pkill -f "openclaw gateway" >/dev/null 2>&1 || true
+  nohup openclaw gateway --port 18789 >"$log_file" 2>&1 &
+  sleep 2
+
+  if curl -fsS http://127.0.0.1:18789 >/dev/null 2>&1; then
+    echo "Gateway started in fallback mode (nohup). Logs: $log_file"
+    return 0
+  fi
+
+  echo "Failed to start gateway in both service and fallback modes."
+  echo "Check logs: $log_file"
+  return 1
+}
+
+say "Starting/restarting gateway service"
+start_gateway_with_fallback
+
+say "Checking gateway health"
+curl -fsS http://127.0.0.1:18789 >/dev/null && echo "Gateway is responding on 127.0.0.1:18789"
 
 say "Tailscale setup"
 if ! tailscale status >/dev/null 2>&1; then
