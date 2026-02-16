@@ -20,6 +20,9 @@ Opinionated bootstrap for running OpenClaw on a DigitalOcean Ubuntu droplet with
   - `<guildId>/<channelId>`
   - `<guildId>:<channelId>`
   - `guild:<guildId>/channel:<channelId>`
+- `ANTHROPIC_API_KEY`
+
+Bootstrap configures `anthropic/claude-sonnet-4-5` as the default model.
 
 ## Quick Start (fewest inputs)
 
@@ -27,9 +30,10 @@ Opinionated bootstrap for running OpenClaw on a DigitalOcean Ubuntu droplet with
 # 1) SSH into new droplet as root
 ssh root@YOUR_DROPLET_IP
 
-# 2) Set Discord values
+# 2) Set required values
 export DISCORD_BOT_TOKEN="YOUR_DISCORD_BOT_TOKEN"
 export DISCORD_TARGET="YOUR_GUILD_ID/YOUR_CHANNEL_ID"
+export ANTHROPIC_API_KEY="YOUR_ANTHROPIC_API_KEY"
 # Optional: disable placeholder frontend
 # export FRONTEND_ENABLED=0
 
@@ -43,6 +47,7 @@ curl -fsSL https://raw.githubusercontent.com/DanielH3o/openclaw-droplet/main/scr
 export OPENCLAW_AUTHORIZED_KEY="$(cat ~/.ssh/id_ed25519.pub)"
 export DISCORD_BOT_TOKEN="YOUR_DISCORD_BOT_TOKEN"
 export DISCORD_TARGET="YOUR_GUILD_ID/YOUR_CHANNEL_ID"
+export ANTHROPIC_API_KEY="YOUR_ANTHROPIC_API_KEY"
 curl -fsSL https://raw.githubusercontent.com/DanielH3o/openclaw-droplet/main/scripts/bootstrap-root.sh | bash
 ```
 
@@ -70,6 +75,7 @@ git clone https://github.com/DanielH3o/openclaw-droplet.git
 cd openclaw-droplet
 export DISCORD_BOT_TOKEN="YOUR_DISCORD_BOT_TOKEN"
 export DISCORD_TARGET="YOUR_GUILD_ID/YOUR_CHANNEL_ID"
+export ANTHROPIC_API_KEY="YOUR_ANTHROPIC_API_KEY"
 bash scripts/bootstrap-openclaw.sh
 ```
 

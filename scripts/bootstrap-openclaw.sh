@@ -21,6 +21,7 @@ say() { echo -e "\n==> $*"; }
 
 DISCORD_BOT_TOKEN="${DISCORD_BOT_TOKEN:-}"
 DISCORD_TARGET="${DISCORD_TARGET:-}"
+ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
 DISCORD_GUILD_ID=""
 DISCORD_CHANNEL_ID=""
 FRONTEND_ENABLED="${FRONTEND_ENABLED:-1}"
@@ -151,6 +152,12 @@ require_discord_inputs() {
     exit 1
   fi
 
+  if [[ -z "$ANTHROPIC_API_KEY" ]]; then
+    echo "Missing ANTHROPIC_API_KEY."
+    echo "Export ANTHROPIC_API_KEY before running this script."
+    exit 1
+  fi
+
   parse_discord_target "$DISCORD_TARGET"
 }
 
@@ -218,6 +225,10 @@ oc config set gateway.bind loopback
 oc config set gateway.auth.mode token
 oc config set gateway.trustedProxies '["127.0.0.1"]'
 ensure_gateway_token
+
+say "Configuring model provider (Anthropic)"
+oc config set models.providers.anthropic.apiKey "$ANTHROPIC_API_KEY"
+oc config set agents.defaults.model.primary "anthropic/claude-sonnet-4-5"
 
 say "Configuring Discord channel allowlist"
 configure_discord_channel
