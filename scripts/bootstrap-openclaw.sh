@@ -105,14 +105,15 @@ ensure_gateway_token
 
 is_gateway_listening() {
   if command -v ss >/dev/null 2>&1; then
-    ss -ltn 2>/dev/null | grep -qE '127\.0\.0\.1:18789|\[::1\]:18789|:18789'
-    return $?
+    ss -ltn 2>/dev/null | grep -q ':18789' && return 0
   fi
 
   if command -v lsof >/dev/null 2>&1; then
-    lsof -iTCP:18789 -sTCP:LISTEN >/dev/null 2>&1
-    return $?
+    lsof -iTCP:18789 -sTCP:LISTEN >/dev/null 2>&1 && return 0
   fi
+
+  # Best-effort active connect test (bash built-in)
+  (echo >/dev/tcp/127.0.0.1/18789) >/dev/null 2>&1 && return 0
 
   pgrep -f "openclaw gateway" >/dev/null 2>&1
 }
@@ -159,6 +160,30 @@ start_gateway_with_fallback() {
     return 0
   fi
 
+  echo "No listener detected after nohup; running foreground diagnostic (10s timeout)..."
+  if [[ -n "$NODE_BIN" && -x "$NODE_BIN" ]]; then
+    if command -v timeout >/dev/null 2>&1; then
+      timeout 10s "$NODE_BIN" "$OPENCLAW_MJS" gateway --port 18789 >>"$log_file" 2>&1 || true
+    else
+      "$NODE_BIN" "$OPENCLAW_MJS" gateway --port 18789 >>"$log_file" 2>&1 &
+      sleep 10
+      pkill -f "openclaw gateway" >/dev/null 2>&1 || true
+    fi
+  else
+    if command -v timeout >/dev/null 2>&1; then
+      timeout 10s "$OPENCLAW_BIN" gateway --port 18789 >>"$log_file" 2>&1 || true
+    else
+      "$OPENCLAW_BIN" gateway --port 18789 >>"$log_file" 2>&1 &
+      sleep 10
+      pkill -f "openclaw gateway" >/dev/null 2>&1 || true
+    fi
+  fi
+
+  if is_gateway_listening; then
+    echo "Gateway came up after diagnostic start; continuing."
+    return 0
+  fi
+
   echo "Failed to start gateway in both service and fallback modes."
   echo "Check logs: $log_file"
   echo "Resolved openclaw binary: $OPENCLAW_BIN"
@@ -167,7 +192,7 @@ start_gateway_with_fallback() {
   ls -l "$OPENCLAW_BIN" || true
   pgrep -af "openclaw gateway" || true
   echo "Last gateway log lines:"
-  tail -n 80 "$log_file" || true
+  tail -n 120 "$log_file" || true
   return 1
 }
 
