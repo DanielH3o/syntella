@@ -226,8 +226,16 @@ oc config set gateway.auth.mode token
 oc config set gateway.trustedProxies '["127.0.0.1"]'
 ensure_gateway_token
 
-say "Configuring model provider (Anthropic)"
-oc config set models.providers.anthropic.apiKey "$ANTHROPIC_API_KEY"
+persist_anthropic_env() {
+  local line="export ANTHROPIC_API_KEY=\"${ANTHROPIC_API_KEY}\""
+  append_path_if_missing "$HOME/.bashrc" "$line"
+  append_path_if_missing "$HOME/.profile" "$line"
+  append_path_if_missing "$HOME/.zshrc" "$line"
+  export ANTHROPIC_API_KEY
+}
+
+say "Configuring model provider (Anthropic env + default model)"
+persist_anthropic_env
 oc config set agents.defaults.model.primary "anthropic/claude-sonnet-4-5"
 
 say "Configuring Discord channel allowlist"
