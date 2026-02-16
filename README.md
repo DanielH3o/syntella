@@ -21,6 +21,15 @@ curl -fsSL https://raw.githubusercontent.com/DanielH3o/openclaw-droplet/main/scr
 
 This avoids interactive `adduser` prompts entirely.
 
+### Zero-prompt Tailscale (optional)
+
+If you have a reusable/ephemeral Tailscale auth key, pass it inline so login is also non-interactive:
+
+```bash
+TAILSCALE_AUTHKEY="tskey-..." \
+curl -fsSL https://raw.githubusercontent.com/DanielH3o/openclaw-droplet/main/scripts/bootstrap-root.sh | bash
+```
+
 ## Quick Start (manual SSH path)
 
 ```bash

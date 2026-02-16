@@ -135,11 +135,21 @@ else
 fi
 
 say "Tailscale setup"
-if ! tailscale status >/dev/null 2>&1; then
-  echo "Run this to complete Tailscale auth:"
-  echo "  sudo tailscale up --ssh --hostname=openclaw"
-else
+if tailscale status >/dev/null 2>&1; then
   echo "Tailscale already authenticated."
+else
+  if [[ -n "${TAILSCALE_AUTHKEY:-}" ]]; then
+    echo "Using provided TAILSCALE_AUTHKEY for non-interactive login..."
+    sudo tailscale up --ssh --hostname=openclaw --authkey "$TAILSCALE_AUTHKEY" || true
+  fi
+
+  if tailscale status >/dev/null 2>&1; then
+    echo "Tailscale authenticated."
+  else
+    echo "Tailscale not authenticated yet."
+    echo "Optional one-time command to enable private HTTPS UI:"
+    echo "  sudo tailscale up --ssh --hostname=openclaw"
+  fi
 fi
 
 echo

@@ -8,6 +8,7 @@ set -euo pipefail
 OPENCLAW_USER="${OPENCLAW_USER:-openclaw}"
 REPO_URL="${REPO_URL:-https://github.com/DanielH3o/openclaw-droplet.git}"
 REPO_DIR="${REPO_DIR:-/home/${OPENCLAW_USER}/openclaw-droplet}"
+TAILSCALE_AUTHKEY="${TAILSCALE_AUTHKEY:-}"
 
 if [[ "$EUID" -ne 0 ]]; then
   echo "Please run as root."
@@ -48,7 +49,11 @@ else
 fi
 
 say "Running user bootstrap script"
-sudo -u "$OPENCLAW_USER" -H bash -lc "cd '$REPO_DIR' && bash scripts/bootstrap-openclaw.sh"
+if [[ -n "$TAILSCALE_AUTHKEY" ]]; then
+  sudo -u "$OPENCLAW_USER" -H env TAILSCALE_AUTHKEY="$TAILSCALE_AUTHKEY" bash -lc "cd '$REPO_DIR' && bash scripts/bootstrap-openclaw.sh"
+else
+  sudo -u "$OPENCLAW_USER" -H bash -lc "cd '$REPO_DIR' && bash scripts/bootstrap-openclaw.sh"
+fi
 
 echo
 echo "Done. You can now SSH directly as '$OPENCLAW_USER'."
