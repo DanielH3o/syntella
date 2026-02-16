@@ -4,6 +4,9 @@ set -euo pipefail
 # Root-level non-interactive bootstrap for fresh Ubuntu droplets.
 # Usage (as root):
 #   curl -fsSL https://raw.githubusercontent.com/DanielH3o/openclaw-droplet/main/scripts/bootstrap-root.sh | bash
+# Required Discord env vars:
+#   export DISCORD_BOT_TOKEN="..."
+#   export DISCORD_TARGET="<guildId>/<channelId>"
 # Optional explicit key injection:
 #   OPENCLAW_AUTHORIZED_KEY="$(cat ~/.ssh/id_ed25519.pub)" \
 #   curl -fsSL https://raw.githubusercontent.com/DanielH3o/openclaw-droplet/main/scripts/bootstrap-root.sh | bash
@@ -109,7 +112,7 @@ else
 fi
 
 say "Running user bootstrap script"
-sudo --preserve-env=PUBLIC_UI,ALLOW_CIDRS -u "$OPENCLAW_USER" -H bash -lc "cd '$REPO_DIR' && bash scripts/bootstrap-openclaw.sh"
+sudo --preserve-env=DISCORD_BOT_TOKEN,DISCORD_TARGET -u "$OPENCLAW_USER" -H bash -lc "cd '$REPO_DIR' && bash scripts/bootstrap-openclaw.sh"
 
 say "Installing global shim: /usr/local/bin/openclaw (runs as $OPENCLAW_USER)"
 TARGET_BIN="$(sudo -u "$OPENCLAW_USER" -H bash -lc 'command -v openclaw' 2>/dev/null || true)"

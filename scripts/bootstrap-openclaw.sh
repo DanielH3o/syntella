@@ -19,8 +19,10 @@ require_cmd() {
 
 say() { echo -e "\n==> $*"; }
 
-PUBLIC_UI="${PUBLIC_UI:-0}"
-ALLOW_CIDRS_RAW="${ALLOW_CIDRS:-}"
+DISCORD_BOT_TOKEN="${DISCORD_BOT_TOKEN:-}"
+DISCORD_TARGET="${DISCORD_TARGET:-}"
+DISCORD_GUILD_ID=""
+DISCORD_CHANNEL_ID=""
 
 append_path_if_missing() {
   local rc_file="$1"
@@ -48,7 +50,7 @@ ensure_openclaw_on_path() {
 
 say "Installing base packages"
 sudo apt-get update -y
-sudo apt-get install -y curl git ca-certificates gnupg lsb-release iproute2 procps lsof
+sudo apt-get install -y curl git ca-certificates gnupg lsb-release iproute2 procps lsof python3
 
 if ! command -v openclaw >/dev/null 2>&1; then
   say "Installing OpenClaw (skip interactive onboarding)"
@@ -99,52 +101,124 @@ PY
   oc config set gateway.auth.token "$token"
 }
 
-configure_public_ui_firewall() {
-  # Public UI mode keeps token auth but limits ingress to explicit CIDRs.
-  # Requires sudo privileges.
-  say "Configuring firewall allowlist for public UI mode"
+parse_discord_target() {
+  local raw="$1"
+  local cleaned
+  cleaned="$(echo "$raw" | tr -d '[:space:]')"
+  cleaned="${cleaned#guild:}"
+  cleaned="${cleaned#guild=}"
+  cleaned="${cleaned#g:}"
 
-  sudo apt-get update -y
-  sudo apt-get install -y ufw
+  local guild=""
+  local channel=""
 
-  sudo ufw --force reset
-  sudo ufw default deny incoming
-  sudo ufw default allow outgoing
+  if [[ "$cleaned" == *"/"* ]]; then
+    guild="${cleaned%%/*}"
+    channel="${cleaned##*/}"
+    channel="${channel#channel:}"
+    channel="${channel#channel=}"
+    channel="${channel#c:}"
+  elif [[ "$cleaned" == *":"* ]]; then
+    guild="${cleaned%%:*}"
+    channel="${cleaned##*:}"
+  fi
 
-  # Keep SSH reachable.
-  sudo ufw allow 22/tcp
-
-  local trimmed
-  trimmed="$(echo "$ALLOW_CIDRS_RAW" | tr ',' '\n' | sed 's/^ *//;s/ *$//' | awk 'NF {print}')"
-  if [[ -z "$trimmed" ]]; then
-    echo "PUBLIC_UI=1 requires ALLOW_CIDRS (comma-separated CIDRs)."
-    echo "Example: ALLOW_CIDRS=\"1.2.3.4/32,5.6.7.8/32\""
+  if [[ -z "$guild" || -z "$channel" || ! "$guild" =~ ^[0-9]+$ || ! "$channel" =~ ^[0-9]+$ ]]; then
+    echo "Invalid DISCORD_TARGET: '$raw'"
+    echo "Expected one of:"
+    echo "  DISCORD_TARGET=\"<guildId>/<channelId>\""
+    echo "  DISCORD_TARGET=\"<guildId>:<channelId>\""
+    echo "  DISCORD_TARGET=\"guild:<guildId>/channel:<channelId>\""
     exit 1
   fi
 
-  while IFS= read -r cidr; do
-    [[ -n "$cidr" ]] || continue
-    sudo ufw allow from "$cidr" to any port 18789 proto tcp
-  done <<< "$trimmed"
-
-  sudo ufw --force enable
-  sudo ufw status verbose || true
+  DISCORD_GUILD_ID="$guild"
+  DISCORD_CHANNEL_ID="$channel"
 }
+
+require_discord_inputs() {
+  if [[ -z "$DISCORD_BOT_TOKEN" ]]; then
+    echo "Missing DISCORD_BOT_TOKEN."
+    echo "Export DISCORD_BOT_TOKEN before running this script."
+    exit 1
+  fi
+
+  if [[ -z "$DISCORD_TARGET" ]]; then
+    echo "Missing DISCORD_TARGET."
+    echo "Example: DISCORD_TARGET=\"123456789012345678/987654321098765432\""
+    exit 1
+  fi
+
+  parse_discord_target "$DISCORD_TARGET"
+}
+
+configure_discord_channel() {
+  local config_file="$HOME/.openclaw/openclaw.json"
+
+  python3 - "$config_file" "$DISCORD_BOT_TOKEN" "$DISCORD_GUILD_ID" "$DISCORD_CHANNEL_ID" <<'PY'
+import json
+import os
+import sys
+
+config_path, token, guild_id, channel_id = sys.argv[1:5]
+
+cfg = {}
+if os.path.exists(config_path):
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+    except Exception:
+        cfg = {}
+
+channels = cfg.setdefault("channels", {})
+discord = channels.setdefault("discord", {})
+discord["enabled"] = True
+discord["token"] = token
+discord["groupPolicy"] = "allowlist"
+
+dm = discord.get("dm")
+if not isinstance(dm, dict):
+    dm = {}
+dm["policy"] = "disabled"
+discord["dm"] = dm
+
+guilds = discord.get("guilds")
+if not isinstance(guilds, dict):
+    guilds = {}
+
+guild_cfg = guilds.get(guild_id)
+if not isinstance(guild_cfg, dict):
+    guild_cfg = {}
+
+guild_cfg["requireMention"] = False
+
+channels_cfg = guild_cfg.get("channels")
+if not isinstance(channels_cfg, dict):
+    channels_cfg = {}
+
+channels_cfg[channel_id] = {"allow": True, "requireMention": False}
+guild_cfg["channels"] = channels_cfg
+
+guilds[guild_id] = guild_cfg
+discord["guilds"] = guilds
+
+with open(config_path, "w", encoding="utf-8") as f:
+    json.dump(cfg, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+PY
+}
+
+require_discord_inputs
 
 say "Ensuring OpenClaw gateway baseline config"
 oc config set gateway.mode local
+oc config set gateway.bind loopback
 oc config set gateway.auth.mode token
-if [[ "$PUBLIC_UI" == "1" ]]; then
-  # Valid bind modes: loopback|lan|tailnet|auto|custom
-  # Use lan for direct droplet-IP access without tunnels/domains.
-  oc config set gateway.bind lan
-  oc config set gateway.trustedProxies '["127.0.0.1"]'
-  configure_public_ui_firewall
-else
-  oc config set gateway.bind loopback
-  oc config set gateway.trustedProxies '["127.0.0.1"]'
-fi
+oc config set gateway.trustedProxies '["127.0.0.1"]'
 ensure_gateway_token
+
+say "Configuring Discord channel allowlist"
+configure_discord_channel
 
 is_gateway_listening() {
   if command -v ss >/dev/null 2>&1; then
@@ -280,22 +354,12 @@ echo
 echo "----------------------------------------"
 echo "Bootstrap complete."
 echo
-if [[ "$PUBLIC_UI" == "1" ]]; then
-  DROPLET_IP="$(curl -fsS --max-time 2 ifconfig.me 2>/dev/null || echo '<droplet-ip>')"
-  echo "Public UI mode is enabled."
-  echo "Open this from allowed IPs only: http://${DROPLET_IP}:18789"
-  echo
-  echo "Security applied:"
-  echo "- gateway.bind=lan"
-  echo "- gateway.auth.mode=token"
-  echo "- UFW allows tcp/18789 only from ALLOW_CIDRS"
-else
-  echo "Access UI via SSH tunnel from your local machine:"
-  echo "  ssh -N -L 18789:127.0.0.1:18789 openclaw@<droplet-ip>"
-  echo "  then open http://localhost:18789"
-  echo
-  echo "Gateway is loopback-only + token-authenticated by default."
-fi
-
-echo "Gateway token is stored under ~/.openclaw (mode token)."
+echo "Discord mode configured."
+echo "- Guild ID:   ${DISCORD_GUILD_ID}"
+echo "- Channel ID: ${DISCORD_CHANNEL_ID}"
+echo "- DM policy:  disabled"
+echo "- Group mode: allowlist (only configured guild/channel)"
+echo
+echo "Gateway is loopback-only (no public dashboard access configured)."
+echo "Use Discord as your primary interface."
 echo "----------------------------------------"

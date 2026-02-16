@@ -1,133 +1,90 @@
 # openclaw-droplet-kit
 
-Opinionated starter kit to bootstrap an **OpenClaw Gateway** on a fresh DigitalOcean Ubuntu droplet in minutes.
+Opinionated bootstrap for running OpenClaw on a DigitalOcean Ubuntu droplet with **Discord as the primary interface**.
 
-## Goals
+## What this setup does
 
-- Fast first deploy (copy/paste + one script)
-- Safe defaults (Gateway bound to loopback, token auth)
-- Easy access to chat/dashboard from your own devices (SSH tunnel, no extra accounts)
-- Idempotent setup (safe to re-run)
+- Installs OpenClaw non-interactively
+- Keeps gateway private (`gateway.bind=loopback`, token auth)
+- Configures Discord bot token
+- Restricts Discord ingress to a single guild/channel allowlist
+- Disables Discord DMs by default
+- Installs a global `/usr/local/bin/openclaw` shim (so root/sudo users can run `openclaw ...` without switching users)
+
+## Required inputs
+
+- `DISCORD_BOT_TOKEN`
+- `DISCORD_TARGET` in one of these formats:
+  - `<guildId>/<channelId>`
+  - `<guildId>:<channelId>`
+  - `guild:<guildId>/channel:<channelId>`
 
 ## Quick Start (fewest inputs)
 
 ```bash
-# 1) SSH into new Ubuntu droplet as root
+# 1) SSH into new droplet as root
 ssh root@YOUR_DROPLET_IP
 
-# 2) One command: create user non-interactively + run full bootstrap
+# 2) Set Discord values
+export DISCORD_BOT_TOKEN="YOUR_DISCORD_BOT_TOKEN"
+export DISCORD_TARGET="YOUR_GUILD_ID/YOUR_CHANNEL_ID"
+
+# 3) Run bootstrap
 curl -fsSL https://raw.githubusercontent.com/DanielH3o/openclaw-droplet/main/scripts/bootstrap-root.sh | bash
 ```
 
-This avoids interactive `adduser` prompts entirely.
-
-It also installs a global `/usr/local/bin/openclaw` shim so you can run `openclaw ...` from root/sudo users without switching accounts (commands run in the `openclaw` user context).
-
-If you want deterministic SSH key install for the `openclaw` user, run with your public key explicitly:
+## Optional: deterministic SSH key install for `openclaw` user
 
 ```bash
 export OPENCLAW_AUTHORIZED_KEY="$(cat ~/.ssh/id_ed25519.pub)"
+export DISCORD_BOT_TOKEN="YOUR_DISCORD_BOT_TOKEN"
+export DISCORD_TARGET="YOUR_GUILD_ID/YOUR_CHANNEL_ID"
 curl -fsSL https://raw.githubusercontent.com/DanielH3o/openclaw-droplet/main/scripts/bootstrap-root.sh | bash
 ```
 
-## Quick Start (manual SSH path)
+## Manual path
 
 ```bash
-# 1) SSH into new Ubuntu droplet
 ssh root@YOUR_DROPLET_IP
-
-# 2) Create non-root user (interactive)
 adduser openclaw
 usermod -aG sudo openclaw
 su - openclaw
 
-# 3) Get this repo + run installer
 git clone https://github.com/DanielH3o/openclaw-droplet.git
 cd openclaw-droplet
+export DISCORD_BOT_TOKEN="YOUR_DISCORD_BOT_TOKEN"
+export DISCORD_TARGET="YOUR_GUILD_ID/YOUR_CHANNEL_ID"
 bash scripts/bootstrap-openclaw.sh
 ```
 
-When done, the script prints:
-- SSH tunnel command for dashboard/chat
-- Local URL (`http://localhost:18789`)
-- Gateway token location
-
-## Security Model (default)
-
-- `gateway.bind = loopback`
-- `gateway.auth.mode = token`
-- Remote access via **SSH tunnel**
-- No need to publicly expose port `18789`
-
-## Family Mode (no tunnel, no domain)
-
-If you want direct access from browser via droplet IP, use public UI mode with an IP allowlist.
-
-```bash
-# On droplet as root
-export PUBLIC_UI=1
-export ALLOW_CIDRS="YOUR_IP/32,DADS_IP/32"
-curl -fsSL https://raw.githubusercontent.com/DanielH3o/openclaw-droplet/main/scripts/bootstrap-root.sh | bash
-```
-
-What this does:
-- Sets `gateway.bind = lan`
-- Keeps `gateway.auth.mode = token`
-- Configures UFW to allow port `18789/tcp` **only** from `ALLOW_CIDRS`
-- Keeps SSH (`22/tcp`) open
-
-Then open:
-- `http://<droplet-ip>:18789` (from an allowed IP)
-
-## Files
-
-- `scripts/bootstrap-openclaw.sh` — main installer
-- `scripts/bootstrap-root.sh` — root one-shot bootstrap (non-interactive user creation)
-- `cloud-init/user-data.yaml` — optional unattended first boot path
-- `docs/rollout-plan.md` — roadmap from MVP to reusable product
-
-## What this does *not* do yet
-
-- Create droplets for you (Terraform/API integration planned)
-- Auto-DNS to a public domain
-- Team SSO or multi-tenant setup
-
 ## Troubleshooting
 
-### `Permission denied (publickey)` when tunneling as `openclaw`
-
-From your local machine, test auth with verbose logs and explicit key:
+### `Permission denied (publickey)` for `openclaw`
 
 ```bash
 ssh -i ~/.ssh/id_ed25519 -v openclaw@YOUR_DROPLET_IP
-```
-
-On the droplet (as root), verify key file + perms:
-
-```bash
 ls -ld /home/openclaw/.ssh
 ls -l /home/openclaw/.ssh/authorized_keys
-sudo -u openclaw -H bash -lc 'wc -l ~/.ssh/authorized_keys && head -n 1 ~/.ssh/authorized_keys'
 ```
 
-If needed, re-run root bootstrap with explicit key injection:
+If needed, re-run root bootstrap with explicit key injection (`OPENCLAW_AUTHORIZED_KEY=...`).
+
+### Discord messages not reaching agent
+
+- Verify bot is invited to the target guild/channel
+- Verify token is correct
+- Verify target IDs are correct
+- On droplet:
 
 ```bash
-export OPENCLAW_AUTHORIZED_KEY="$(cat ~/.ssh/id_ed25519.pub)"
-curl -fsSL https://raw.githubusercontent.com/DanielH3o/openclaw-droplet/main/scripts/bootstrap-root.sh | bash
+openclaw status
+openclaw gateway status || true
+tail -n 120 ~/.openclaw/logs/gateway.log
 ```
 
-### `Disconnected from gateway (1008): unauthorized: device token mismatch`
+## Files
 
-This is usually stale browser device auth for `localhost:18789`.
-
-1. Ensure SSH tunnel is active.
-2. Open in a private/incognito window.
-3. If that works, clear local storage for `http://localhost:18789` (or remove keys `openclaw-device-identity-v1` and `openclaw.device.auth.v1`) and reload.
-
-## Next steps
-
-1. Replace placeholders in `cloud-init/user-data.yaml`
-2. Add Terraform for one-command droplet provisioning
-3. Add CI to test script on Ubuntu LTS versions
-4. Publish as template repo and/or GitHub Action
+- `scripts/bootstrap-openclaw.sh` — main installer (Discord-first)
+- `scripts/bootstrap-root.sh` — non-interactive root bootstrap
+- `cloud-init/user-data.yaml` — optional unattended first boot
+- `docs/rollout-plan.md` — roadmap
