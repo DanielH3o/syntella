@@ -352,6 +352,58 @@ EOF
 - Build mode: iterative, practical, minimal friction
 EOF
 
+  cat >"$ws_root/AGENT-SPAWN.md" <<'EOF'
+# AGENT-SPAWN.md
+
+
+```bash
+# 1. Create profile workspace
+mkdir -p ~/.openclaw-<profile>/workspace
+
+# 2. Create config
+# Base it on main config (~/.openclaw/openclaw.json)
+# Key changes:
+#   - New Discord token (if using Discord)
+#   - Different gateway port (19002, 19003, etc.)
+#   - Same guild/channel permissions
+
+# 3. Copy workspace templates
+cp ~/.openclaw/workspace/{AGENTS.md,SOUL.md,USER.md,TOOLS.md,IDENTITY.md,HEARTBEAT.md,MEMORY.md} \
+   ~/.openclaw-<profile>/workspace/
+
+# 4. Create BOOTSTRAP.md for new agent
+# (Instructions for them to set up identity)
+
+# 5. Create startup script with API key
+cat > ~/.openclaw-<profile>/start.sh << 'EOF'
+#!/bin/bash
+export ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
+cd ~/.openclaw-<profile>
+nohup openclaw --profile <profile> gateway > gateway.log 2>&1 &
+\EOF
+chmod +x ~/.openclaw-<profile>/start.sh
+
+# 6. Start the agent
+~/.openclaw-<profile>/start.sh
+
+# 7. Verify
+sleep 8
+ps aux | grep openclaw-gateway
+tail -20 ~/.openclaw-<profile>/gateway.log
+```
+
+### Key Gotchas
+- **Auth:** API keys come from env vars (not auth-profiles.json in this setup)
+- **Ports:** Each agent needs a unique gateway port
+- **Startup:** Use the start.sh script to ensure env vars are inherited
+- **Discord:** Each agent needs its own bot token
+
+### After Spawn
+- Ask the new agent to read BOOTSTRAP.md and self-initialize
+- They should pick introduce themselves in the discord and begin to build their identity.
+- Monitor their logs for auth/connection issues
+EOF
+
   cat >"$ws_root/MEMORY.md" <<'EOF'
 # MEMORY.md
 
