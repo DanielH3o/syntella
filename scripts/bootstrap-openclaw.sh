@@ -14,7 +14,7 @@ say() { echo -e "\n==> $*"; }
 
 DISCORD_BOT_TOKEN="${DISCORD_BOT_TOKEN:-}"
 DISCORD_TARGET="${DISCORD_TARGET:-}"
-ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
+OPENAI_API_KEY="${OPENAI_API_KEY:-}"
 DISCORD_GUILD_ID=""
 DISCORD_CHANNEL_ID=""
 FRONTEND_ENABLED="${FRONTEND_ENABLED:-1}"
@@ -151,9 +151,9 @@ require_discord_inputs() {
     exit 1
   fi
 
-  if [[ -z "$ANTHROPIC_API_KEY" ]]; then
-    echo "Missing ANTHROPIC_API_KEY."
-    echo "Export ANTHROPIC_API_KEY before running this script."
+  if [[ -z "$OPENAI_API_KEY" ]]; then
+    echo "Missing OPENAI_API_KEY."
+    echo "Export OPENAI_API_KEY before running this script."
     exit 1
   fi
 
@@ -405,7 +405,7 @@ openclaw status
 ```
 
 ### Key Gotchas
-- **Auth is per-agent dir.** If a new agent reports missing API key, ensure `ANTHROPIC_API_KEY` is present in `~/.openclaw/.env` and restart gateway.
+- **Auth is per-agent dir.** If a new agent reports missing API key, ensure `OPENAI_API_KEY` is present in `~/.openclaw/.env` and restart gateway.
 - **Do not create extra homes** like `~/.openclaw-aurora` for normal team agents.
 - **Do not spawn extra gateways** unless you explicitly want rescue/isolation mode.
 - **Discord token is gateway-level** in this setup (shared bot). Route by bindings/channels per agent.
@@ -453,7 +453,7 @@ setup_openclaw_env_file() {
   sudo tee "$env_file" >/dev/null <<EOF
 # Shared OpenClaw runtime environment
 # Source this file before starting OpenClaw-related processes.
-ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}"
+OPENAI_API_KEY="${OPENAI_API_KEY}"
 OPENCLAW_HOME="${HOME}"
 EOF
   sudo chown root:openclaw "$env_file"
@@ -477,7 +477,7 @@ setup_openclaw_global_dotenv() {
   cat >"$dotenv_file" <<EOF
 # OpenClaw daemon-level environment fallback.
 # Gateway reads this even when it does not inherit shell env.
-ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}"
+OPENAI_API_KEY="${OPENAI_API_KEY}"
 EOF
   chmod 600 "$dotenv_file"
 }
@@ -485,7 +485,7 @@ EOF
 say "Configuring model provider (shared env file + defaults)"
 setup_openclaw_env_file
 setup_openclaw_global_dotenv
-oc config set agents.defaults.model.primary "anthropic/claude-sonnet-4-5"
+oc config set agents.defaults.model.primary "openai/gpt-5.2"
 # Force canonical shared workspace path for the main gateway.
 oc config set agents.defaults.workspace "~/.openclaw/workspace"
 
