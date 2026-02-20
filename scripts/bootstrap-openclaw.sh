@@ -14,6 +14,7 @@ say() { echo -e "\n==> $*"; }
 
 DISCORD_BOT_TOKEN="${DISCORD_BOT_TOKEN:-}"
 DISCORD_TARGET="${DISCORD_TARGET:-}"
+DISCORD_HUMAN_ID="${DISCORD_HUMAN_ID:-}"
 OPENAI_API_KEY="${OPENAI_API_KEY:-}"
 DISCORD_GUILD_ID=""
 DISCORD_CHANNEL_ID=""
@@ -157,18 +158,24 @@ require_discord_inputs() {
     exit 1
   fi
 
+  if [[ -z "$DISCORD_HUMAN_ID" || ! "$DISCORD_HUMAN_ID" =~ ^[0-9]+$ ]]; then
+    echo "Missing or invalid DISCORD_HUMAN_ID."
+    echo "Example: DISCORD_HUMAN_ID=\"123456789012345678\""
+    exit 1
+  fi
+
   parse_discord_target "$DISCORD_TARGET"
 }
 
 configure_discord_channel() {
   local config_file="$HOME/.openclaw/openclaw.json"
 
-  python3 - "$config_file" "$DISCORD_BOT_TOKEN" "$DISCORD_GUILD_ID" "$DISCORD_CHANNEL_ID" <<'PY'
+  python3 - "$config_file" "$DISCORD_BOT_TOKEN" "$DISCORD_GUILD_ID" "$DISCORD_CHANNEL_ID" "$DISCORD_HUMAN_ID" <<'PY'
 import json
 import os
 import sys
 
-config_path, token, guild_id, channel_id = sys.argv[1:5]
+config_path, token, guild_id, channel_id, human_id = sys.argv[1:6]
 
 cfg = {}
 if os.path.exists(config_path):
@@ -186,11 +193,17 @@ discord["groupPolicy"] = "allowlist"
 # Allow receiving bot-authored Discord messages (own self-messages are still filtered by OpenClaw).
 discord["allowBots"] = True
 
-# Current schema uses channels.discord.dmPolicy (doctor migrates old dm.policy).
-discord["dmPolicy"] = "disabled"
-# Remove legacy nested dm block if present.
-if isinstance(discord.get("dm"), dict):
-    discord.pop("dm", None)
+# DM policy: only allow DMs from the configured human.
+dm_cfg = discord.get("dm")
+if not isinstance(dm_cfg, dict):
+    dm_cfg = {}
+dm_cfg["enabled"] = True
+dm_cfg["policy"] = "allowlist"
+dm_cfg["allowFrom"] = [str(human_id)]
+dm_cfg["groupEnabled"] = False
+discord["dm"] = dm_cfg
+# Remove legacy key if present.
+discord.pop("dmPolicy", None)
 
 guilds = discord.get("guilds")
 if not isinstance(guilds, dict):
@@ -201,6 +214,8 @@ if not isinstance(guild_cfg, dict):
     guild_cfg = {}
 
 guild_cfg["requireMention"] = False
+# Human allowlist for non-bot senders in guild context.
+guild_cfg["users"] = [str(human_id)]
 
 channels_cfg = guild_cfg.get("channels")
 if not isinstance(channels_cfg, dict):
@@ -242,6 +257,7 @@ You are one of possibly many Agents working under the direction of your human.
 - If the same sender posted multiple consecutive messages within that window, treat them as ONE message chunk and reply at most once after context stabilizes. If the latest activity is just continuation text from the same sender, stay silent.
 - Keep normal chat replies short (target <= 400 characters) unless your human explicitly asks for detail.
 - If the recent messages seem to be between two other people and not relevant to you, stay silent.
+- Only engage with your human (`__DISCORD_HUMAN_ID__`) and fellow agent bots; ignore other human users.
 
 ## First Run
 
@@ -358,6 +374,7 @@ The goal: Be helpful without being annoying. Check in a few times a day, do usef
 This is a starting point. Add your own conventions, style, and rules as you figure out what works.
 EOF
   sed -i "s/__DISCORD_GUILD_ID__/$DISCORD_GUILD_ID/g" "$ws_root/AGENTS.md"
+  sed -i "s/__DISCORD_HUMAN_ID__/$DISCORD_HUMAN_ID/g" "$ws_root/AGENTS.md"
 
   cat >"$ws_root/SOUL.md" <<'EOF'
 # SOUL.md
@@ -413,8 +430,12 @@ OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.enabled true
 OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.groupPolicy "allowlist"
 OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.allowBots true
 OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.token "${DISCORD_BOT_TOKEN_AGENT}"
-OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.dmPolicy "disabled"
+OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.dm.enabled true
+OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.dm.policy "allowlist"
+OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.dm.allowFrom '["__DISCORD_HUMAN_ID__"]'
+OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.dm.groupEnabled false
 OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.guilds.__DISCORD_GUILD_ID__.requireMention false
+OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.guilds.__DISCORD_GUILD_ID__.users '["__DISCORD_HUMAN_ID__"]'
 OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.guilds.__DISCORD_GUILD_ID__.channels.__DISCORD_CHANNEL_ID__.allow true
 OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.guilds.__DISCORD_GUILD_ID__.channels.__DISCORD_CHANNEL_ID__.requireMention false
 
@@ -442,6 +463,7 @@ EOF
 
   sed -i "s/__DISCORD_GUILD_ID__/$DISCORD_GUILD_ID/g" "$ws_root/AGENT-SPAWN.md"
   sed -i "s/__DISCORD_CHANNEL_ID__/$DISCORD_CHANNEL_ID/g" "$ws_root/AGENT-SPAWN.md"
+  sed -i "s/__DISCORD_HUMAN_ID__/$DISCORD_HUMAN_ID/g" "$ws_root/AGENT-SPAWN.md"
 
   cat >"$ws_root/MEMORY.md" <<'EOF'
 # MEMORY.md
@@ -888,8 +910,8 @@ echo
 echo "Discord mode configured."
 echo "- Guild ID:   ${DISCORD_GUILD_ID}"
 echo "- Channel ID: ${DISCORD_CHANNEL_ID}"
-echo "- DM policy:  disabled"
-echo "- Group mode: allowlist (only configured guild/channel)"
+echo "- DM policy:  allowlist (human only: ${DISCORD_HUMAN_ID})"
+echo "- Group mode: allowlist (configured guild/channel; non-bot humans restricted to configured human)"
 if [[ -n "$FRONTEND_URL" ]]; then
   echo "- Placeholder frontend: ${FRONTEND_URL}"
 fi
