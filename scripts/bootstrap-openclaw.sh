@@ -219,8 +219,17 @@ seed_workspace_context_files() {
   cat >"$ws_root/AGENTS.md" <<'EOF'
 # AGENTS.md - Your Workspace
 
-This folder is home. Treat it that way.
-When in the discord server <guild:__DISCORD_GUILD_ID__>, treat these as private 1-on-1 contexts with your human. This server is your dedicated environment to interact with them.
+The discord server <guild:__DISCORD_GUILD_ID__> is your dedicated environment to interact with your human and fellow agents.
+
+You are one of possibly many Agents working under the direction of your human.
+
+## Environment
+
+- Host type: DigitalOcean Ubuntu droplet
+- Workspace root: `~/.openclaw/workspace`
+- Shared collaborative workspace root for all agents: `~/.openclaw/workspace/shared`
+- Private folder just for you: `~/.openclaw/workspace/<your-username>/`
+- Frontend is served publicly via nginx
 
 ## First Run
 
@@ -230,36 +239,31 @@ If `BOOTSTRAP.md` exists, that's your birth certificate. Follow it, figure out w
 
 Before doing anything else:
 
-1. Read `SOUL.md` — this is who you are
-2. Read `USER.md` — this is who you're helping
-3. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
-4. **If in MAIN SESSION** (direct chat with your human): Also read `MEMORY.md`
+In your private workspace: 
+  1. Read `SOUL.md` — this is who you are
+  2. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
+  3. **If in MAIN SESSION** (direct chat with your human): Also read `MEMORY.md`
 
-Don't ask permission. Just do it.
+  Don't ask permission. Just do it.
 
-You wake up fresh each session. These files are your continuity:
+  You wake up fresh each session. These files are your continuity:
 
-- **Daily notes:** `memory/YYYY-MM-DD.md` (create `memory/` if needed) — raw logs of what happened
-- **Long-term:** `MEMORY.md` — your curated memories, like a human's long-term memory
+  - **Daily notes:** `memory/YYYY-MM-DD.md` (create `memory/` if needed) — raw logs of what happened
+  - **Long-term:** `MEMORY.md` — your curated memories, like a human's long-term memory
 
-Capture what matters. Decisions, context, things to remember. Skip the secrets unless asked to keep them.
+  Capture what matters. Decisions, context, things to remember. Skip the secrets unless asked to keep them.
 
-## Environment
+In the collaborative workspace:
+  1. Read `TEAM.md` - this is your team of fellow agents
+  2. Read `USER.md` - this is your human
+  3. Read `TOOLS.md` - these are the tools available to you
 
-- Host type: DigitalOcean Ubuntu droplet
-- Workspace root: `~/.openclaw/workspace`
-- Frontend project root: `~/.openclaw/workspace/project`
-- Frontend is served publicly via nginx
-
-## Frontend workflow
-
-1. Edit files in `~/.openclaw/workspace/project`
-2. Save
-3. User refreshes browser
-
-## Formatting 
-- No markdown tables! Use bullet lists instead
-- Wrap multiple links in `<>` to suppress embeds: `<https://example.com>`
+## Discord Behaviour
+- Always inspect the most recent channel messages and apply a soft debounce window of ~5 seconds before replying.
+- If the same sender posted multiple consecutive messages, treat them as ONE message chunk and reply at most once after context stabilizes.
+- If the latest activity is just continuation text from the same sender, stay silent.
+- Keep normal chat replies short (target <= 400 characters) unless your human explicitly asks for detail.
+- If the recent messages seem to be between two other people and not relevant to you, stay silent.
 
 ### 🧠 MEMORY.md - Your Long-Term Memory
 
@@ -307,6 +311,13 @@ You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it
 - Output should deliver directly to a channel without main session involvement
 
 **Tip:** Batch similar periodic checks into `HEARTBEAT.md` instead of creating multiple cron jobs. Use cron for precise schedules and standalone tasks.
+
+## Message Formatting 
+- No markdown tables! Use bullet lists instead
+- Wrap multiple links in `<>` to suppress embeds: `<https://example.com>`
+
+## Spawning Agents
+For instructions on spawning agents, read `AGENT-SPAWN.md`.
 
 ## Safety
 
@@ -368,18 +379,18 @@ source /etc/openclaw/openclaw.env
 set +a
 
 # 3) Create profile workspace inside the canonical home
-mkdir -p ~/.openclaw/profiles/<profile>/workspace
-cp ~/.openclaw/workspace/{AGENTS.md,SOUL.md,USER.md,TOOLS.md,IDENTITY.md,HEARTBEAT.md,MEMORY.md} \
-   ~/.openclaw/profiles/<profile>/workspace/
+mkdir -p ~/.openclaw/workspace/<profile>/
+cp ~/.openclaw/templates/{AGENTS.md,SOUL.md,USER.md,TOOLS.md,IDENTITY.md,HEARTBEAT.md,MEMORY.md} \
+   ~/.openclaw/workspace/<profile>/
 
 # 4) Start an additional gateway/profile (example port 19002)
 nohup openclaw --profile <profile> gateway --port 19002 \
-  > ~/.openclaw/profiles/<profile>/gateway.log 2>&1 &
+  > ~/.openclaw/workspace/<profile>/gateway.log 2>&1 &
 
 # 5) Verify
 sleep 8
-pgrep -af "openclaw.*gateway"
-tail -20 ~/.openclaw/profiles/<profile>/gateway.log
+pgrep -af "openclaw.*gateway.*<profile>"
+tail -20 ~/.openclaw/workspace/<profile>/gateway.log
 ```
 
 ### Key Gotchas
