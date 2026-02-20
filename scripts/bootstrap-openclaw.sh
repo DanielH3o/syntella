@@ -183,6 +183,8 @@ discord = channels.setdefault("discord", {})
 discord["enabled"] = True
 discord["token"] = token
 discord["groupPolicy"] = "allowlist"
+# Allow receiving bot-authored Discord messages (own self-messages are still filtered by OpenClaw).
+discord["allowBots"] = True
 
 # Current schema uses channels.discord.dmPolicy (doctor migrates old dm.policy).
 discord["dmPolicy"] = "disabled"
@@ -204,7 +206,7 @@ channels_cfg = guild_cfg.get("channels")
 if not isinstance(channels_cfg, dict):
     channels_cfg = {}
 
-channels_cfg[channel_id] = {"allow": True, "requireMention": False}
+channels_cfg[channel_id] = {"allow": True, "requireMention": False, "allowBots": True}
 guild_cfg["channels"] = channels_cfg
 
 guilds[guild_id] = guild_cfg
