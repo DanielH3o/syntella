@@ -324,6 +324,12 @@ You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it
 ## Spawning Agents
 For instructions on spawning agents, read `AGENT-SPAWN.md`.
 
+When a human asks to "spawn/create a new bot/agent", this means a **dedicated bot runtime**.
+- Do NOT use `sessions_spawn` for this.
+- Do NOT claim allowlist limitations for `sessions_spawn`.
+- Collect exactly 3 inputs: agent name/id, role/personality, Discord bot token.
+- Reuse the default guild/channel already configured by bootstrap.
+
 ## Safety
 
 - Don't exfiltrate private data. Ever.
