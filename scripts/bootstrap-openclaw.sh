@@ -466,9 +466,11 @@ EOF
   set +a
 }
 
-say "Configuring model provider (shared env file + default model)"
+say "Configuring model provider (shared env file + defaults)"
 setup_openclaw_env_file
 oc config set agents.defaults.model.primary "anthropic/claude-sonnet-4-5"
+# Keep profile=main while forcing canonical shared workspace path.
+oc config set agents.defaults.workspace "~/.openclaw/workspace"
 
 say "Configuring Discord channel allowlist"
 configure_discord_channel
