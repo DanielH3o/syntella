@@ -14,7 +14,8 @@ say() { echo -e "\n==> $*"; }
 
 DISCORD_BOT_TOKEN="${DISCORD_BOT_TOKEN:-}"
 DISCORD_TARGET="${DISCORD_TARGET:-}"
-DISCORD_HUMAN_ID="${DISCORD_HUMAN_ID:-}"
+# Accept common aliases to reduce bootstrap env mistakes.
+DISCORD_HUMAN_ID="${DISCORD_HUMAN_ID:-${DISCORD_USER_ID:-${DISCORD_HUMAN:-}}}"
 OPENAI_API_KEY="${OPENAI_API_KEY:-}"
 DISCORD_GUILD_ID=""
 DISCORD_CHANNEL_ID=""
@@ -158,9 +159,12 @@ require_discord_inputs() {
     exit 1
   fi
 
+  # Normalize Discord user id (accept raw id, <@id>, <@!id>, or aliases).
+  DISCORD_HUMAN_ID="$(echo "${DISCORD_HUMAN_ID}" | tr -cd '0-9')"
   if [[ -z "$DISCORD_HUMAN_ID" || ! "$DISCORD_HUMAN_ID" =~ ^[0-9]+$ ]]; then
     echo "Missing or invalid DISCORD_HUMAN_ID."
     echo "Example: DISCORD_HUMAN_ID=\"123456789012345678\""
+    echo "(Aliases accepted: DISCORD_USER_ID, DISCORD_HUMAN)"
     exit 1
   fi
 
