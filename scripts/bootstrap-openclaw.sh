@@ -404,8 +404,8 @@ tail -20 ~/.openclaw/workspace/<profile>/gateway.log
 ```
 
 ### Key Gotchas
-- **Auth source of truth:** `/etc/openclaw/openclaw.env`
-- **Homes:** Prefer one `OPENCLAW_HOME` (`~/.openclaw`) to avoid auth drift
+- **Auth source of truth:** `~/.openclaw/.env` (daemon fallback) and `/etc/openclaw/openclaw.env`
+- **Homes:** Prefer one `OPENCLAW_HOME` (`/home/openclaw`) to avoid auth drift
 - **Ports:** Each extra gateway needs a unique port
 - **Discord:** Each concurrently-running Discord bot still needs its own bot token
 
@@ -470,8 +470,20 @@ EOF
   set +a
 }
 
+setup_openclaw_global_dotenv() {
+  local dotenv_file="$HOME/.openclaw/.env"
+  mkdir -p "$HOME/.openclaw"
+  cat >"$dotenv_file" <<EOF
+# OpenClaw daemon-level environment fallback.
+# Gateway reads this even when it does not inherit shell env.
+ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}"
+EOF
+  chmod 600 "$dotenv_file"
+}
+
 say "Configuring model provider (shared env file + defaults)"
 setup_openclaw_env_file
+setup_openclaw_global_dotenv
 oc config set agents.defaults.model.primary "anthropic/claude-sonnet-4-5"
 # Keep profile=main while forcing canonical shared workspace path.
 oc config set agents.defaults.workspace "~/.openclaw/workspace"
