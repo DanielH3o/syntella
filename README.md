@@ -13,6 +13,7 @@ Opinionated bootstrap for running OpenClaw on a DigitalOcean Ubuntu droplet with
 - Sets `tools.exec` defaults to `host=gateway security=full ask=off` for non-interactive operator execution
 - Installs a local Operator Bridge (`127.0.0.1:8787`) with `/spawn-agent` endpoint for dedicated-agent provisioning
 - Spawn path now uses per-agent OpenClaw homes (`~/.openclaw-<agent_id>`) to prevent main-token/config collisions
+- Child guild/channel allowlist is written as one JSON object (avoids numeric dotted-key issues), then validated before success
 - Spawn flow still aborts if the main bot token changes during spawn (safety guard)
 - Sets up a public workspace frontend on nginx (`http://<droplet-ip>`) and validates local+public responses with a marker check
 - Sends a startup ping message to the configured Discord channel after bootstrap (includes frontend URL, hostname, and detected droplet IP)

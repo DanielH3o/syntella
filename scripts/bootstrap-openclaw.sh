@@ -695,13 +695,32 @@ oc_child config set channels.discord.dm.enabled true
 oc_child config set channels.discord.dm.policy "allowlist"
 oc_child config set channels.discord.dm.allowFrom '["__DISCORD_HUMAN_ID__"]'
 oc_child config set channels.discord.dm.groupEnabled false
-oc_child config set channels.discord.guilds.__DISCORD_GUILD_ID__.requireMention false
-oc_child config set channels.discord.guilds.__DISCORD_GUILD_ID__.users '["__DISCORD_HUMAN_ID__"]'
-oc_child config set channels.discord.guilds.__DISCORD_GUILD_ID__.channels.__DISCORD_CHANNEL_ID__.allow true
-oc_child config set channels.discord.guilds.__DISCORD_GUILD_ID__.channels.__DISCORD_CHANNEL_ID__.requireMention false
+
+GUILDS_JSON="$(python3 - <<'PY'
+import json
+print(json.dumps({
+  "__DISCORD_GUILD_ID__": {
+    "requireMention": False,
+    "users": ["__DISCORD_HUMAN_ID__"],
+    "channels": {
+      "__DISCORD_CHANNEL_ID__": {"allow": True, "requireMention": False}
+    }
+  }
+}))
+PY
+)"
+oc_child config set channels.discord.guilds "$GUILDS_JSON"
 oc_child config set tools.exec.host gateway
 oc_child config set tools.exec.security full
 oc_child config set tools.exec.ask off
+
+child_group_policy="$(OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get channels.discord.groupPolicy 2>/dev/null | tr -d '"[:space:]' || true)"
+child_guild_allow="$(OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get channels.discord.guilds.__DISCORD_GUILD_ID__.channels.__DISCORD_CHANNEL_ID__.allow 2>/dev/null | tr -d '"[:space:]' || true)"
+if [[ "$child_group_policy" != "allowlist" || "$child_guild_allow" != "true" ]]; then
+  echo "ERROR: child guild allowlist wiring failed (groupPolicy=${child_group_policy:-<unset>}, channelAllow=${child_guild_allow:-<unset>})" >&2
+  OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get channels.discord.guilds >&2 || true
+  exit 1
+fi
 
 main_token_after="$(openclaw config get channels.discord.token 2>/dev/null | tr -d '"[:space:]' || true)"
 if [[ -n "$main_token_before" && "$main_token_before" != "$main_token_after" ]]; then
@@ -735,9 +754,9 @@ d={}
 if os.path.exists(p):
   try:d=json.load(open(p))
   except Exception:d={}
-d[agent]={"port":port,"role":role,"home":home}
+d[agent]={"port":port,"role":role,"home":home,"guild_id":"__DISCORD_GUILD_ID__","channel_id":"__DISCORD_CHANNEL_ID__"}
 json.dump(d, open(p,'w'), indent=2)
-print(json.dumps({"agent_id":agent,"port":port,"home":home,"status":"started"}))
+print(json.dumps({"agent_id":agent,"port":port,"home":home,"guild_id":"__DISCORD_GUILD_ID__","channel_id":"__DISCORD_CHANNEL_ID__","guild_configured":True,"status":"started"}))
 PY
 EOF
   sudo sed -i "s/__DISCORD_GUILD_ID__/${DISCORD_GUILD_ID}/g" "$spawn_sh"
@@ -838,6 +857,12 @@ class H(BaseHTTPRequestHandler):
     r=run(cmd, capture_output=True, text=True)
     dur_ms=int((time.time()-t0)*1000)
 
+    spawn_meta={}
+    try:
+      spawn_meta=json.loads((r.stdout or '').strip().splitlines()[-1]) if (r.stdout or '').strip() else {}
+    except Exception:
+      spawn_meta={}
+
     out={
       "ok": r.returncode==0,
       "exit_code": r.returncode,
@@ -845,8 +870,12 @@ class H(BaseHTTPRequestHandler):
       "stderr": r.stderr[-4000:],
       "request_id": req_id,
       "duration_ms": dur_ms,
+      "spawn": spawn_meta,
+      "guild_configured": bool(spawn_meta.get("guild_configured", False)),
+      "guild_id": spawn_meta.get("guild_id"),
+      "channel_id": spawn_meta.get("channel_id"),
     }
-    log("spawn_done", req_id=req_id, ok=(r.returncode==0), exit_code=r.returncode, duration_ms=dur_ms, stderr_tail=r.stderr[-300:])
+    log("spawn_done", req_id=req_id, ok=(r.returncode==0), exit_code=r.returncode, duration_ms=dur_ms, guild_configured=out["guild_configured"], stderr_tail=r.stderr[-300:])
     return self._send(200 if r.returncode==0 else 500, out)
 
 if __name__=="__main__":
