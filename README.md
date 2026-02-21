@@ -8,7 +8,8 @@ Opinionated bootstrap for running OpenClaw on a DigitalOcean Ubuntu droplet with
 - Keeps gateway private (`gateway.bind=loopback`, token auth)
 - Configures Discord bot token
 - Restricts Discord ingress to a single guild/channel allowlist
-- Disables Discord DMs by default
+- Enables Discord DMs only for the configured human allowlist
+- Installs `/usr/local/bin/kiwi-exec` for owner-DM `/exec` shell command execution (timeout + output cap + audit log)
 - Sets up a public workspace frontend on nginx (`http://<droplet-ip>`) and validates local+public responses with a marker check
 - Sends a startup ping message to the configured Discord channel after bootstrap (includes frontend URL, hostname, and detected droplet IP)
 - Installs a global `/usr/local/bin/openclaw` shim (so root/sudo users can run `openclaw ...` without switching users)
@@ -20,9 +21,10 @@ Opinionated bootstrap for running OpenClaw on a DigitalOcean Ubuntu droplet with
   - `<guildId>/<channelId>`
   - `<guildId>:<channelId>`
   - `guild:<guildId>/channel:<channelId>`
-- `ANTHROPIC_API_KEY`
+- `DISCORD_HUMAN_ID` (owner user id for DM allowlist / privileged commands)
+- `OPENAI_API_KEY`
 
-Bootstrap configures `anthropic/claude-sonnet-4-5` as the default model.
+Bootstrap configures `openai/gpt-5.2` as the default model.
 
 Auth is standardized via `/etc/openclaw/openclaw.env` (root-owned, group-readable by `openclaw`) and sourced by shell startup + bootstrap launchers, so child/spawned agents can inherit the same API key consistently.
 
@@ -35,7 +37,8 @@ ssh root@YOUR_DROPLET_IP
 # 2) Set required values
 export DISCORD_BOT_TOKEN="YOUR_DISCORD_BOT_TOKEN"
 export DISCORD_TARGET="YOUR_GUILD_ID/YOUR_CHANNEL_ID"
-export ANTHROPIC_API_KEY="YOUR_ANTHROPIC_API_KEY"
+export DISCORD_HUMAN_ID="YOUR_DISCORD_USER_ID"
+export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 # Optional: disable placeholder frontend
 # export FRONTEND_ENABLED=0
 
@@ -49,7 +52,8 @@ curl -fsSL https://raw.githubusercontent.com/DanielH3o/openclaw-droplet/main/scr
 export OPENCLAW_AUTHORIZED_KEY="$(cat ~/.ssh/id_ed25519.pub)"
 export DISCORD_BOT_TOKEN="YOUR_DISCORD_BOT_TOKEN"
 export DISCORD_TARGET="YOUR_GUILD_ID/YOUR_CHANNEL_ID"
-export ANTHROPIC_API_KEY="YOUR_ANTHROPIC_API_KEY"
+export DISCORD_HUMAN_ID="YOUR_DISCORD_USER_ID"
+export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 curl -fsSL https://raw.githubusercontent.com/DanielH3o/openclaw-droplet/main/scripts/bootstrap-root.sh | bash
 ```
 
@@ -80,7 +84,8 @@ git clone https://github.com/DanielH3o/openclaw-droplet.git
 cd openclaw-droplet
 export DISCORD_BOT_TOKEN="YOUR_DISCORD_BOT_TOKEN"
 export DISCORD_TARGET="YOUR_GUILD_ID/YOUR_CHANNEL_ID"
-export ANTHROPIC_API_KEY="YOUR_ANTHROPIC_API_KEY"
+export DISCORD_HUMAN_ID="YOUR_DISCORD_USER_ID"
+export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 bash scripts/bootstrap-openclaw.sh
 ```
 
@@ -100,7 +105,7 @@ Use one canonical OpenClaw home and one canonical env file:
 
 - `OPENCLAW_HOME=/home/openclaw/.openclaw`
 - `OPENCLAW_PROFILE=main`
-- `ANTHROPIC_API_KEY=...`
+- `OPENAI_API_KEY=...`
 - env file path: `/etc/openclaw/openclaw.env`
 
 When starting extra profiles/processes, source the env file first:

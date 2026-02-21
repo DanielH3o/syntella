@@ -34,6 +34,9 @@ fi
 say "Checking discord configuration"
 TOKEN="$(openclaw config get channels.discord.token 2>/dev/null | tr -d '"[:space:]' || true)"
 TARGET_GUILDS="$(openclaw config get channels.discord.guilds 2>/dev/null || true)"
+DM_ENABLED="$(openclaw config get channels.discord.dm.enabled 2>/dev/null | tr -d '"[:space:]' || true)"
+DM_POLICY="$(openclaw config get channels.discord.dm.policy 2>/dev/null | tr -d '"[:space:]' || true)"
+DM_OWNER="$(openclaw config get channels.discord.dm.allowFrom.0 2>/dev/null | tr -d '"[:space:]' || true)"
 if [[ -n "$TOKEN" && "$TOKEN" != "null" ]]; then
   pass "Discord token configured"
 else
@@ -43,6 +46,30 @@ if [[ -n "$TARGET_GUILDS" && "$TARGET_GUILDS" != "null" ]]; then
   pass "Discord guild allowlist configured"
 else
   warn "Discord guild allowlist not detected"
+fi
+if [[ "$DM_ENABLED" == "true" && "$DM_POLICY" == "allowlist" && -n "$DM_OWNER" && "$DM_OWNER" != "null" ]]; then
+  pass "Discord DM owner allowlist configured (${DM_OWNER})"
+else
+  fail "Discord DM allowlist misconfigured (enabled=${DM_ENABLED}, policy=${DM_POLICY}, owner=${DM_OWNER})"
+fi
+
+say "Checking Kiwi exec wrapper"
+if [[ -x "/usr/local/bin/kiwi-exec" ]]; then
+  pass "kiwi-exec installed"
+else
+  fail "Missing /usr/local/bin/kiwi-exec"
+fi
+
+if /usr/local/bin/kiwi-exec "echo kiwi-smoke" | grep -q "kiwi-smoke"; then
+  pass "kiwi-exec runs commands"
+else
+  fail "kiwi-exec command execution check failed"
+fi
+
+if openclaw approvals get defaults.ask 2>/dev/null | tr -d '"[:space:]' | grep -q '^off$'; then
+  pass "Exec approvals are non-interactive (defaults.ask=off)"
+else
+  warn "Exec approvals may be interactive (defaults.ask != off)"
 fi
 
 say "Checking frontend files"
