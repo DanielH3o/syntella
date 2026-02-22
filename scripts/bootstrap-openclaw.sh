@@ -150,19 +150,19 @@ install_openclaw_cli() {
     return 0
   fi
 
-  say "Installing OpenClaw CLI via npm"
+  say "Installing OpenClaw CLI via npm (without optional native deps)"
   mkdir -p "$HOME/.npm-global"
   npm config set prefix "$HOME/.npm-global"
-  if ! npm install -g openclaw@latest; then
-    echo "latest install failed; retrying next"
-    npm install -g openclaw@next
-  fi
+
+  # Skip optional deps (e.g. @discordjs/opus) to avoid native build failures on fresh droplets.
+  npm install -g --omit=optional openclaw@latest
+
   ensure_openclaw_on_path || true
 }
 
 say "Installing base packages"
 sudo apt-get update -y
-sudo apt-get install -y curl git ca-certificates gnupg lsb-release iproute2 procps lsof python3
+sudo apt-get install -y curl git ca-certificates gnupg lsb-release iproute2 procps lsof python3 make g++ build-essential pkg-config
 ensure_node_and_npm
 install_openclaw_cli
 
