@@ -118,10 +118,10 @@ else
 fi
 
 say "Running user bootstrap script"
-sudo --preserve-env=DISCORD_BOT_TOKEN,DISCORD_TARGET,DISCORD_HUMAN_ID,DISCORD_USER_ID,DISCORD_HUMAN,OPENAI_API_KEY,ANTHROPIC_API_KEY,FRONTEND_ENABLED,EXEC_APPROVAL_MODE -u "$OPENCLAW_USER" -H bash -lc "cd '$REPO_DIR' && bash scripts/bootstrap-openclaw.sh"
+sudo --preserve-env=DISCORD_BOT_TOKEN,DISCORD_TARGET,DISCORD_HUMAN_ID,DISCORD_USER_ID,DISCORD_HUMAN,OPENAI_API_KEY,ANTHROPIC_API_KEY,FRONTEND_ENABLED,FRONTEND_ALLOWED_IP,EXEC_APPROVAL_MODE,OPERATOR_BRIDGE_PORT,KIWI_EXEC_TIMEOUT_SECONDS,KIWI_EXEC_MAX_OUTPUT_BYTES -u "$OPENCLAW_USER" -H bash -lc "cd '$REPO_DIR' && bash scripts/bootstrap-openclaw.sh"
 
 say "Installing global shim: /usr/local/bin/openclaw (runs as $OPENCLAW_USER)"
-TARGET_BIN="$(sudo -u "$OPENCLAW_USER" -H bash -lc 'command -v openclaw' 2>/dev/null || true)"
+TARGET_BIN="$(sudo -u "$OPENCLAW_USER" -H bash -lc 'export PATH="$HOME/.npm-global/bin:$PATH"; command -v openclaw || test -x "$HOME/.npm-global/bin/openclaw" && echo "$HOME/.npm-global/bin/openclaw"' 2>/dev/null || true)"
 cat >/usr/local/bin/openclaw <<EOF
 #!/usr/bin/env bash
 set -euo pipefail

@@ -65,6 +65,35 @@ ensure_openclaw_on_path() {
   command -v openclaw >/dev/null 2>&1
 }
 
+resolve_openclaw_bin() {
+  local candidate=""
+
+  candidate="$(command -v openclaw 2>/dev/null || true)"
+  if [[ -n "$candidate" && -x "$candidate" ]]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+
+  for candidate in "$HOME/.npm-global/bin/openclaw" "$HOME/.local/bin/openclaw" "/usr/local/bin/openclaw"; do
+    if [[ -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  if command -v npm >/dev/null 2>&1; then
+    local npm_prefix
+    npm_prefix="$(npm config get prefix 2>/dev/null || true)"
+    candidate="${npm_prefix%/}/bin/openclaw"
+    if [[ -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
 render_template() {
   local src="$1"
   local dst="$2"
@@ -111,13 +140,17 @@ if ! command -v openclaw >/dev/null 2>&1; then
 fi
 
 if ! ensure_openclaw_on_path; then
-  echo "OpenClaw appears installed but is not on PATH."
+  echo "OpenClaw appears installed but is not on PATH; attempting direct binary resolution..."
+fi
+
+OPENCLAW_BIN="$(resolve_openclaw_bin || true)"
+if [[ -z "$OPENCLAW_BIN" ]]; then
+  echo "OpenClaw installed but executable could not be resolved."
+  echo "Checked: command -v openclaw, ~/.npm-global/bin/openclaw, ~/.local/bin/openclaw, /usr/local/bin/openclaw"
   echo "Try: export PATH=\"$HOME/.npm-global/bin:$PATH\""
   echo "Then re-run this script."
   exit 1
 fi
-
-OPENCLAW_BIN="$(command -v openclaw)"
 NODE_BIN="$(command -v node || true)"
 OPENCLAW_MJS="$(readlink -f "$OPENCLAW_BIN" 2>/dev/null || realpath "$OPENCLAW_BIN" 2>/dev/null || echo "$OPENCLAW_BIN")"
 oc() { "$OPENCLAW_BIN" "$@"; }
