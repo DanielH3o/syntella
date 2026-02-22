@@ -56,6 +56,16 @@ elif [[ -n "${OPENAI_API_KEY:-}" || -n "${ANTHROPIC_API_KEY:-}" ]]; then
 fi
 chmod 600 "$CHILD_HOME/.env" 2>/dev/null || true
 
+# Mirror auth profiles from main runtime when present (avoids missing-provider-key failures).
+MAIN_AUTH_PATH="$(find "$HOME/.openclaw" -type f -path '*/agents/main/agent/auth-profiles.json' 2>/dev/null | head -n1 || true)"
+if [[ -n "$MAIN_AUTH_PATH" && -f "$MAIN_AUTH_PATH" ]]; then
+  REL_AUTH_PATH="${MAIN_AUTH_PATH#"$HOME/.openclaw/"}"
+  CHILD_AUTH_PATH="$CHILD_HOME/$REL_AUTH_PATH"
+  mkdir -p "$(dirname "$CHILD_AUTH_PATH")"
+  cp "$MAIN_AUTH_PATH" "$CHILD_AUTH_PATH"
+  chmod 600 "$CHILD_AUTH_PATH" 2>/dev/null || true
+fi
+
 echo "# Role: $ROLE" >> ~/.openclaw/workspace/"$AGENT_ID"/SOUL.md
 
 oc_child config set agents.defaults.workspace "~/.openclaw/workspace/$AGENT_ID"
