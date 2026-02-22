@@ -45,9 +45,21 @@ main_token_before="$(openclaw config get channels.discord.token 2>/dev/null | tr
 mkdir -p ~/.openclaw/workspace/"$AGENT_ID"/memory ~/.openclaw/workspace/agents "$CHILD_HOME"
 cp ~/.openclaw/workspace/{AGENTS.md,SOUL.md,USER.md,MEMORY.md} ~/.openclaw/workspace/"$AGENT_ID"/ 2>/dev/null || true
 
+# Ensure child runtime has provider env fallback.
+if [[ -f "$HOME/.openclaw/.env" ]]; then
+  cp "$HOME/.openclaw/.env" "$CHILD_HOME/.env"
+elif [[ -n "${OPENAI_API_KEY:-}" || -n "${ANTHROPIC_API_KEY:-}" ]]; then
+  {
+    [[ -n "${OPENAI_API_KEY:-}" ]] && echo "OPENAI_API_KEY=${OPENAI_API_KEY}"
+    [[ -n "${ANTHROPIC_API_KEY:-}" ]] && echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}"
+  } > "$CHILD_HOME/.env"
+fi
+chmod 600 "$CHILD_HOME/.env" 2>/dev/null || true
+
 echo "# Role: $ROLE" >> ~/.openclaw/workspace/"$AGENT_ID"/SOUL.md
 
 oc_child config set agents.defaults.workspace "~/.openclaw/workspace/$AGENT_ID"
+oc_child config set agents.defaults.model.primary "openai/gpt-5.2"
 oc_child config set gateway.mode local
 oc_child config set gateway.bind loopback
 oc_child config set gateway.auth.mode token
@@ -98,7 +110,7 @@ if [[ -n "$main_token_before" && "$main_token_before" != "$main_token_after" ]];
   exit 1
 fi
 
-nohup env OPENCLAW_HOME="$CHILD_HOME" OPENCLAW_PROFILE="$CHILD_PROFILE" openclaw --profile "$CHILD_PROFILE" gateway --allow-unconfigured --port "$PORT" > ~/.openclaw/workspace/"$AGENT_ID"/gateway.log 2>&1 &
+nohup env OPENCLAW_HOME="$CHILD_HOME" OPENCLAW_PROFILE="$CHILD_PROFILE" OPENAI_API_KEY="${OPENAI_API_KEY:-}" ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" openclaw --profile "$CHILD_PROFILE" gateway --allow-unconfigured --port "$PORT" > ~/.openclaw/workspace/"$AGENT_ID"/gateway.log 2>&1 &
 
 ready=0
 for _ in $(seq 1 25); do
