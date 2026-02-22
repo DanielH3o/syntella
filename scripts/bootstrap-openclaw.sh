@@ -21,6 +21,8 @@ DISCORD_GUILD_ID=""
 DISCORD_CHANNEL_ID=""
 FRONTEND_ENABLED="${FRONTEND_ENABLED:-1}"
 FRONTEND_URL=""
+# Lock frontend to this source IP/CIDR (required when FRONTEND_ENABLED=1), e.g. "203.0.113.10" or "203.0.113.0/24".
+FRONTEND_ALLOWED_IP="${FRONTEND_ALLOWED_IP:-}"
 # Exec approval posture for autonomous Discord provisioning:
 # - full: no interactive exec approvals (default for this droplet kit)
 # - strict: leave host approval posture unchanged
@@ -263,13 +265,14 @@ You are one of possibly many Agents working under the direction of your human.
 - Workspace root: `~/.openclaw/workspace`
 - Shared collaborative workspace root for all agents: `~/.openclaw/workspace/shared`
 - Private folder just for you: `~/.openclaw/workspace/<your-username>/`
-- Frontend is served publicly via nginx
+- Frontend is served via nginx and locked down to the human's IP allowlist
 - Communication is via private Discord server. Before responding to a message, ALWAYS inspect the most recent channel messages and apply a soft debounce window of ~5 seconds before replying.
 - If the same sender posted multiple consecutive messages within that window, treat them as ONE message chunk and reply at most once after context stabilizes. If the latest activity is just continuation text from the same sender, stay silent.
 - Keep normal chat replies short (target <= 400 characters) unless your human explicitly asks for detail.
 - If the recent messages seem to be between two other people and not relevant to you, stay silent.
 - Only engage with your human (`__DISCORD_HUMAN_ID__`) and fellow agent bots; ignore other human users.
-- Never collect or process Discord bot tokens in guild/public channels. For new-bot provisioning, move the flow to DM with the human.
+- Never collect or process Discord bot tokens in Discord messages (guild or DM).
+- For new-bot provisioning, direct the human to the frontend Admin page at `/admin`.
 
 ## DM command contract (owner-only control lane)
 
@@ -279,9 +282,9 @@ In Discord DMs, only the configured human (`__DISCORD_HUMAN_ID__`) can issue pri
   - Run the command through `/usr/local/bin/kiwi-exec`.
   - Use the `exec` tool with `host=gateway`, `security=full`, and `ask=off` for this command path.
   - Return exit code + truncated stdout/stderr summary.
-- Spawn/manage agents (preferred path)
-  - For agent creation, call the local Operator Bridge endpoint (`http://127.0.0.1:__OPERATOR_BRIDGE_PORT__/spawn-agent`) with bearer token from `/etc/openclaw/operator-bridge.env`.
-  - This avoids brittle chat command formatting and gives deterministic spawn behavior.
+- Agent management
+  - Do not ask for bot tokens in Discord.
+  - Tell the human to use the frontend Admin page (`/admin`) to view and create agents.
 
 Rules:
 - Never execute shell commands from guild/public messages.
@@ -367,13 +370,8 @@ You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it
 - Wrap multiple links in `<>` to suppress embeds: `<https://example.com>`
 
 ## Spawning Agents
-For instructions on spawning agents, read `AGENT-SPAWN.md`.
-
-When a human asks to "spawn/create a new bot/agent", this means a **dedicated bot runtime**.
-- Do NOT use `sessions_spawn` for this.
-- Do NOT claim allowlist limitations for `sessions_spawn`.
-- Collect exactly 3 inputs: agent name/id, role/personality, Discord bot token.
-- Reuse the default guild/channel already configured by bootstrap.
+When a human asks to create a new bot/agent, direct them to the frontend Admin page (`/admin`).
+Do not collect Discord bot tokens via Discord messages.
 
 ## Safety
 
@@ -404,7 +402,7 @@ This is a starting point. Add your own conventions, style, and rules as you figu
 EOF
   sed -i "s/__DISCORD_GUILD_ID__/$DISCORD_GUILD_ID/g" "$ws_root/AGENTS.md"
   sed -i "s/__DISCORD_HUMAN_ID__/$DISCORD_HUMAN_ID/g" "$ws_root/AGENTS.md"
-  sed -i "s/__OPERATOR_BRIDGE_PORT__/$OPERATOR_BRIDGE_PORT/g" "$ws_root/AGENTS.md"
+  # no operator bridge placeholders in AGENTS.md
 
   cat >"$ws_root/SOUL.md" <<'EOF'
 # SOUL.md
@@ -421,86 +419,22 @@ EOF
 - Build mode: iterative, practical, minimal friction
 EOF
 
-  cat >"$ws_root/AGENT-SPAWN.md" <<'EOF'
-# AGENT-SPAWN.md
+  cat >"$ws_root/ADMIN.md" <<'EOF'
+# ADMIN.md
 
-Policy: when asked to create a **new bot/agent**, always create a **dedicated bot runtime**:
-- its own OpenClaw profile/state
-- its own gateway process (unique port)
-- its own heartbeat/workspace
-- its own Discord bot token
+Use the frontend admin page for agent operations:
+- Visit `/admin` from the allowed IP address
+- View existing dedicated agents
+- Add a new agent by providing:
+  1) name
+  2) role
+  3) brief description/personality
+  4) Discord bot token
 
-Never use `sessions_spawn` for this request type.
-
-Security mode for Discord-only provisioning:
-- If request starts in a guild/public channel, reply with a short handoff: "I can do this—please DM me the bot token."
-- Collect bot tokens **only in DM** with the configured human.
-- Never echo tokens back in messages/log summaries.
-
-## Always collect exactly these 3 inputs first
-1. Agent id/name (slug, e.g. `nova`)
-2. Role/personality brief
-3. Discord bot token
-
-Do **not** ask for guild/channel target. Reuse the build-script defaults for this environment.
-
-```bash
-# Inputs
-AGENT_ID="<agentId>"
-DISCORD_BOT_TOKEN_AGENT="<discord-bot-token>"
-PORT="19002"   # choose a unique base port per agent
-
-# 1) Source shared env/auth baseline
-set -a
-source /etc/openclaw/openclaw.env
-set +a
-
-# 2) Prepare dedicated profile workspace
-mkdir -p ~/.openclaw/workspace/${AGENT_ID}/memory
-cp ~/.openclaw/workspace/{AGENTS.md,SOUL.md,USER.md,MEMORY.md} ~/.openclaw/workspace/${AGENT_ID}/ || true
-
-# 3) Configure this profile to use same guild/channel defaults + this agent token
-OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set agents.defaults.workspace "~/.openclaw/workspace/${AGENT_ID}"
-OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.enabled true
-OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.groupPolicy "allowlist"
-OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.allowBots true
-OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.token "${DISCORD_BOT_TOKEN_AGENT}"
-OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.dm.enabled true
-OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.dm.policy "allowlist"
-OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.dm.allowFrom '["__DISCORD_HUMAN_ID__"]'
-OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.dm.groupEnabled false
-OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.guilds.__DISCORD_GUILD_ID__.requireMention false
-OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.guilds.__DISCORD_GUILD_ID__.users '["__DISCORD_HUMAN_ID__"]'
-OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.guilds.__DISCORD_GUILD_ID__.channels.__DISCORD_CHANNEL_ID__.allow true
-OPENCLAW_PROFILE="${AGENT_ID}" openclaw config set channels.discord.guilds.__DISCORD_GUILD_ID__.channels.__DISCORD_CHANNEL_ID__.requireMention false
-
-# 4) Start dedicated gateway process
-nohup env OPENCLAW_PROFILE="${AGENT_ID}" openclaw gateway --port "${PORT}" \
-  > "~/.openclaw/workspace/${AGENT_ID}/gateway.log" 2>&1 &
-
-# 5) Verify
-sleep 6
-pgrep -af "openclaw.*gateway.*--port ${PORT}"
-OPENCLAW_PROFILE="${AGENT_ID}" openclaw status
-```
-
-### Key gotchas
-- Keep one shared home: `OPENCLAW_HOME=/home/openclaw`
-- Keep provider key in `~/.openclaw/.env` (`OPENAI_API_KEY=...`)
-- Each dedicated bot runtime must have a unique `--port`
-- Bootstrap sets exec approvals to non-interactive by default (`EXEC_APPROVAL_MODE=full`).
-- If you intentionally set `EXEC_APPROVAL_MODE=strict`, runtime exec approvals may require manual approval.
-- If startup fails, check `~/.openclaw/workspace/<agentId>/gateway.log`
-
-### After create
-- Update `~/.openclaw/workspace/<agentId>/SOUL.md` with the provided role/personality
-- Optionally create `IDENTITY.md`
-- Confirm the new bot responds in the default guild/channel
+Security rules:
+- Never ask users to share bot tokens in Discord messages.
+- Redirect token collection to `/admin` only.
 EOF
-
-  sed -i "s/__DISCORD_GUILD_ID__/$DISCORD_GUILD_ID/g" "$ws_root/AGENT-SPAWN.md"
-  sed -i "s/__DISCORD_CHANNEL_ID__/$DISCORD_CHANNEL_ID/g" "$ws_root/AGENT-SPAWN.md"
-  sed -i "s/__DISCORD_HUMAN_ID__/$DISCORD_HUMAN_ID/g" "$ws_root/AGENT-SPAWN.md"
 
   cat >"$ws_root/MEMORY.md" <<'EOF'
 # MEMORY.md
@@ -793,12 +727,14 @@ def log(event, **kw):
 def normalize_payload(body):
   agent_id = body.get("agent_id") or body.get("agentId") or body.get("name")
   role = body.get("role")
+  description = body.get("description") or body.get("personality")
   discord_token = body.get("discord_token") or body.get("discordBotToken") or body.get("discord_bot_token")
   port = body.get("port")
 
   missing=[]
   if not agent_id: missing.append("agent_id")
   if not role: missing.append("role")
+  if not description: missing.append("description")
   if not discord_token: missing.append("discord_token")
   if missing:
     return None, {"error":"bad_request","detail":"missing required fields","missing":missing}
@@ -808,12 +744,13 @@ def normalize_payload(body):
     return None, {"error":"bad_request","detail":"invalid agent_id; use lowercase letters, numbers, hyphen (2-31 chars)"}
 
   role=str(role).strip()
+  description=str(description).strip()
   discord_token=str(discord_token).strip()
   port="" if port is None else str(port).strip()
   if port and not port.isdigit():
     return None, {"error":"bad_request","detail":"port must be numeric when provided"}
 
-  return {"agent_id":agent_id,"role":role,"discord_token":discord_token,"port":port}, None
+  return {"agent_id":agent_id,"role":role,"description":description,"discord_token":discord_token,"port":port}, None
 
 
 class H(BaseHTTPRequestHandler):
@@ -827,19 +764,24 @@ class H(BaseHTTPRequestHandler):
     self.send_header('Content-Length',str(len(b)))
     self.end_headers(); self.wfile.write(b)
 
-  def _auth(self):
-    return self.headers.get('Authorization','')==f'Bearer {TOKEN}'
-
   def do_GET(self):
     if self.path=="/health":
       return self._send(200,{"ok":True})
+
+    if self.path=="/agents":
+      reg=os.path.expanduser('~/.openclaw/workspace/agents/registry.json')
+      data={}
+      if os.path.exists(reg):
+        try:
+          data=json.load(open(reg, 'r', encoding='utf-8'))
+        except Exception:
+          data={}
+      return self._send(200,{"ok":True,"agents":data})
+
     self._send(404,{"error":"not_found"})
 
   def do_POST(self):
     req_id=str(uuid.uuid4())[:8]
-    if not self._auth():
-      log("unauthorized", req_id=req_id, path=self.path)
-      return self._send(401,{"error":"unauthorized"})
     if self.path!="/spawn-agent":
       return self._send(404,{"error":"not_found"})
 
@@ -854,11 +796,12 @@ class H(BaseHTTPRequestHandler):
       log("spawn_rejected", req_id=req_id, error=err)
       return self._send(400, err)
 
-    cmd=["/usr/local/bin/kiwi-spawn-agent", payload["agent_id"], payload["role"], payload["discord_token"]]
+    full_role = f"{payload['role']} — {payload['description']}"
+    cmd=["/usr/local/bin/kiwi-spawn-agent", payload["agent_id"], full_role, payload["discord_token"]]
     if payload["port"]:
       cmd.append(payload["port"])
 
-    log("spawn_start", req_id=req_id, agent_id=payload["agent_id"], role=payload["role"], port=payload["port"], token="***redacted***")
+    log("spawn_start", req_id=req_id, agent_id=payload["agent_id"], role=payload["role"], description=payload["description"], port=payload["port"], token="***redacted***")
     t0=time.time()
     r=run(cmd, capture_output=True, text=True)
     dur_ms=int((time.time()-t0)*1000)
@@ -1003,22 +946,21 @@ setup_frontend_workspace() {
   local project_dir="$HOME/.openclaw/workspace/project"
   mkdir -p "$project_dir"
 
-  cat >"$project_dir/index.html" <<EOF
+  cat >"$project_dir/index.html" <<'EOF'
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Your Dashboard</title>
+  <title>OpenClaw Dashboard</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
   <main class="wrap">
     <section class="card">
-      <h1>🚀 This is your dashboard</h1>
-      <p class="muted">This frontend lives in <code>~/.openclaw/workspace/project</code>.</p>
-      <p>Edit files there (or ask your agent to), then refresh this page.</p>
-      <button id="btn">Click me</button>
+      <h1>🚀 OpenClaw Dashboard</h1>
+      <p class="muted">Workspace: <code>~/.openclaw/workspace/project</code></p>
+      <p><a href="/admin">Go to Admin</a> to monitor existing agents and add a new one.</p>
       <pre id="out"></pre>
     </section>
   </main>
@@ -1027,25 +969,108 @@ setup_frontend_workspace() {
 </html>
 EOF
 
+  cat >"$project_dir/admin.html" <<'EOF'
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin · OpenClaw</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="wrap">
+    <section class="card">
+      <h1>🛠️ Admin</h1>
+      <p class="muted">Manage dedicated agents for this droplet.</p>
+      <button id="refreshAgents">Refresh agents</button>
+      <pre id="agentsOut">Loading...</pre>
+    </section>
+
+    <section class="card" style="margin-top:16px;">
+      <h2>Add agent</h2>
+      <form id="spawnForm">
+        <label>Name (slug)<br /><input name="agent_id" required pattern="[a-z0-9][a-z0-9-]{1,30}" /></label><br /><br />
+        <label>Role<br /><input name="role" required /></label><br /><br />
+        <label>Brief description / personality<br /><textarea name="description" rows="3" required></textarea></label><br /><br />
+        <label>Discord bot token<br /><input name="discord_token" required autocomplete="off" /></label><br /><br />
+        <button type="submit">Add agent</button>
+      </form>
+      <pre id="spawnOut"></pre>
+    </section>
+  </main>
+  <script src="./admin.js"></script>
+</body>
+</html>
+EOF
+
   cat >"$project_dir/styles.css" <<'EOF'
 :root { color-scheme: dark; }
 body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background: #0b1020; color: #e7ecff; }
-.wrap { max-width: 760px; margin: 8vh auto; padding: 24px; }
+.wrap { max-width: 860px; margin: 6vh auto; padding: 24px; }
 .card { background: #121a33; border: 1px solid #2a396e; border-radius: 16px; padding: 24px; }
-h1 { margin-top: 0; }
-code, pre { background: #1f2a50; padding: 2px 6px; border-radius: 6px; }
-pre { padding: 12px; }
+h1, h2 { margin-top: 0; }
+code, pre, input, textarea { background: #1f2a50; color: #e7ecff; border-radius: 6px; border: 1px solid #2a396e; }
+input, textarea { width: 100%; box-sizing: border-box; padding: 10px; }
+pre { padding: 12px; overflow: auto; }
 .muted { color: #9fb0e8; }
 button { background: #3f6fff; color: white; border: 0; border-radius: 10px; padding: 10px 14px; cursor: pointer; }
+a { color: #8bb2ff; }
 EOF
 
   cat >"$project_dir/app.js" <<'EOF'
 const out = document.getElementById('out');
-const btn = document.getElementById('btn');
 out.textContent = `Frontend loaded at ${new Date().toISOString()}`;
-btn?.addEventListener('click', () => {
-  out.textContent = `Button clicked at ${new Date().toISOString()}`;
+EOF
+
+  cat >"$project_dir/admin.js" <<'EOF'
+const agentsOut = document.getElementById('agentsOut');
+const spawnOut = document.getElementById('spawnOut');
+const refreshBtn = document.getElementById('refreshAgents');
+const form = document.getElementById('spawnForm');
+
+async function loadAgents() {
+  agentsOut.textContent = 'Loading...';
+  try {
+    const res = await fetch('/api/agents');
+    const data = await res.json();
+    agentsOut.textContent = JSON.stringify(data, null, 2);
+  } catch (err) {
+    agentsOut.textContent = `Failed to load agents: ${err}`;
+  }
+}
+
+refreshBtn?.addEventListener('click', loadAgents);
+
+form?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(form);
+  const payload = {
+    agent_id: String(fd.get('agent_id') || '').trim(),
+    role: String(fd.get('role') || '').trim(),
+    description: String(fd.get('description') || '').trim(),
+    discord_token: String(fd.get('discord_token') || '').trim(),
+  };
+
+  spawnOut.textContent = 'Spawning agent...';
+  try {
+    const res = await fetch('/api/spawn-agent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    spawnOut.textContent = JSON.stringify(data, null, 2);
+    if (res.ok) {
+      form.reset();
+      loadAgents();
+    }
+  } catch (err) {
+    spawnOut.textContent = `Spawn failed: ${err}`;
+  }
 });
+
+loadAgents();
 EOF
 
   cat >"$project_dir/README.md" <<'EOF'
@@ -1053,9 +1078,13 @@ EOF
 
 This folder is served by nginx at the droplet public URL.
 
-- Edit `index.html`, `styles.css`, `app.js`
-- Refresh browser to see updates
-- Ask the OpenClaw agent to edit files in this folder directly
+- `/` dashboard
+- `/admin` admin panel to list and create dedicated agents
+- `/api/agents` and `/api/spawn-agent` are proxied to localhost operator bridge
+
+Security:
+- Frontend access is IP-allowlisted via `FRONTEND_ALLOWED_IP` in bootstrap.
+- Share bot tokens only through `/admin` (never in Discord).
 EOF
 
   # Project-level instruction docs removed intentionally.
@@ -1065,7 +1094,12 @@ EOF
   chmod 755 "$HOME" "$HOME/.openclaw" "$HOME/.openclaw/workspace" "$project_dir" || true
   chmod 644 "$project_dir"/* || true
 
-  # Apply the exact known-good nginx fix block (validated manually).
+  if [[ -z "$FRONTEND_ALLOWED_IP" ]]; then
+    echo "FRONTEND_ALLOWED_IP is required when FRONTEND_ENABLED=1 (example: 203.0.113.10 or 203.0.113.0/24)."
+    exit 1
+  fi
+
+  # Apply nginx config with strict source-IP allowlist and local API proxy.
   sudo tee /etc/nginx/nginx.conf >/dev/null <<EOF
 user www-data;
 worker_processes auto;
@@ -1085,8 +1119,26 @@ http {
     listen 80 default_server;
     listen [::]:80 default_server;
     server_name _;
+
+    allow 127.0.0.1;
+    allow ${FRONTEND_ALLOWED_IP};
+    deny all;
+
     root ${project_dir};
     index index.html;
+
+    location = /admin {
+      try_files /admin.html =404;
+    }
+
+    location /api/ {
+      proxy_pass http://127.0.0.1:${OPERATOR_BRIDGE_PORT}/;
+      proxy_set_header Host \$host;
+      proxy_set_header X-Real-IP \$remote_addr;
+      proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
     location / {
       try_files \$uri \$uri/ /index.html;
     }
@@ -1105,33 +1157,31 @@ EOF
   local public_ip
   public_ip="$(detect_public_ip)"
 
-  # Validation: stamp marker, validate local and public responses.
-  local marker local_ok public_ok
+  # Validation: local loopback checks (public checks are expected to fail for non-allowlisted IPs).
+  local marker local_ok api_ok
   marker="oc-bootstrap-marker-$(date +%s)-$RANDOM"
   echo "<!-- ${marker} -->" >> "$project_dir/index.html"
 
   local_ok=0
-  public_ok=0
+  api_ok=0
 
   if curl -fsS --max-time 3 http://127.0.0.1 2>/dev/null | grep -q "$marker"; then
     local_ok=1
   fi
 
-  if [[ -n "$public_ip" ]]; then
-    if curl -fsS --max-time 5 "http://${public_ip}" 2>/dev/null | grep -q "$marker"; then
-      public_ok=1
-    fi
+  if curl -fsS --max-time 3 http://127.0.0.1/api/health >/dev/null 2>&1; then
+    api_ok=1
   fi
 
-  if [[ "$local_ok" == "1" && "$public_ok" == "1" ]]; then
+  if [[ "$local_ok" == "1" && "$api_ok" == "1" && -n "$public_ip" ]]; then
     FRONTEND_URL="http://${public_ip}"
-    echo "Frontend validation passed (local + public)."
+    echo "Frontend validation passed (loopback static + API proxy)."
   else
     FRONTEND_URL=""
-    echo "Warning: frontend validation failed (local_ok=${local_ok}, public_ok=${public_ok})."
+    echo "Warning: frontend validation failed (local_ok=${local_ok}, api_ok=${api_ok})."
     echo "Debug commands:"
     echo "  curl -s http://127.0.0.1 | head -n 20"
-    echo "  IP=\$(curl -fsS ifconfig.me); echo \$IP; curl -s http://\$IP | head -n 20"
+    echo "  curl -s http://127.0.0.1/api/health"
   fi
 }
 
@@ -1142,7 +1192,7 @@ send_discord_boot_ping() {
   ip="$(detect_public_ip)"
 
   if [[ -n "$FRONTEND_URL" ]]; then
-    msg="✅ OpenClaw bootstrap complete (${ts}) on ${host}${ip:+ (${ip})}. Discord route is live. Frontend: ${FRONTEND_URL}"
+    msg="✅ OpenClaw bootstrap complete (${ts}) on ${host}${ip:+ (${ip})}. Discord route is live. Frontend: ${FRONTEND_URL} (admin: ${FRONTEND_URL}/admin, allowlist: ${FRONTEND_ALLOWED_IP})"
   else
     msg="⚠️ OpenClaw bootstrap complete (${ts}) on ${host}${ip:+ (${ip})}, Discord route is live, but frontend validation failed. Run: curl -s http://127.0.0.1/ | head -n 20"
   fi
@@ -1354,9 +1404,11 @@ echo "- Guild ID:   ${DISCORD_GUILD_ID}"
 echo "- Channel ID: ${DISCORD_CHANNEL_ID}"
 echo "- DM policy:  allowlist (human only: ${DISCORD_HUMAN_ID})"
 echo "- Group mode: allowlist (configured guild/channel; non-bot humans restricted to configured human)"
-echo "- Operator bridge: http://127.0.0.1:${OPERATOR_BRIDGE_PORT} (spawn endpoint: /spawn-agent)"
+echo "- Operator bridge API (localhost): http://127.0.0.1:${OPERATOR_BRIDGE_PORT}"
 if [[ -n "$FRONTEND_URL" ]]; then
-  echo "- Placeholder frontend: ${FRONTEND_URL}"
+  echo "- Frontend: ${FRONTEND_URL}"
+  echo "- Admin page: ${FRONTEND_URL}/admin"
+  echo "- Frontend allowlist: ${FRONTEND_ALLOWED_IP}"
 fi
 echo
 echo "Gateway is loopback-only (no public OpenClaw dashboard access configured)."
