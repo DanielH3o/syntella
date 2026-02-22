@@ -350,12 +350,12 @@ seed_workspace_context_files() {
   local ws_tmpl="$TEMPLATE_DIR/workspace"
   local kiwi_ws="$ws_root/kiwi"
   local shared_ws="$ws_root/shared"
-  mkdir -p "$ws_root/memory" "$kiwi_ws" "$kiwi_ws/memory" "$shared_ws"
+  mkdir -p "$kiwi_ws" "$kiwi_ws/memory" "$shared_ws"
 
   render_template "$ws_tmpl/AGENTS.KIWI.md.tmpl" "$kiwi_ws/AGENTS.md"
   render_template "$ws_tmpl/AGENTS.SPAWNED.md.tmpl" "$ws_root/AGENTS.SPAWNED.md"
   cp "$ws_tmpl/SOUL.md" "$kiwi_ws/SOUL.md"
-  cp "$ws_tmpl/USER.md" "$kiwi_ws/USER.md"
+  cp "$ws_tmpl/USER.md" "$shared_ws/USER.md"
   cp "$ws_tmpl/MEMORY.md" "$kiwi_ws/MEMORY.md"
   cp "$ws_tmpl/TEAM.md" "$shared_ws/TEAM.md"
 
