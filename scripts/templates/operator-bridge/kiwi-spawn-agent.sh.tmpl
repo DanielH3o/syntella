@@ -61,7 +61,8 @@ if os.path.exists(cfg_path):
         agents.pop('main', None)
         json.dump(cfg, open(cfg_path, 'w', encoding='utf-8'), indent=2)
 PY
-cp "$SHARED_WS_ROOT"/{AGENTS.md,SOUL.md,USER.md,MEMORY.md} "$AGENT_WS"/ 2>/dev/null || true
+cp "$SHARED_WS_ROOT"/AGENTS.SPAWNED.md "$AGENT_WS/AGENTS.md" 2>/dev/null || true
+cp "$SHARED_WS_ROOT/kiwi"/{SOUL.md,USER.md,MEMORY.md} "$AGENT_WS"/ 2>/dev/null || true
 
 # Ensure child runtime has provider env fallback.
 mkdir -p "$CHILD_HOME/.openclaw-main"

@@ -108,7 +108,8 @@ render_template() {
 
 assert_templates_exist() {
   local required=(
-    "$TEMPLATE_DIR/workspace/AGENTS.md.tmpl"
+    "$TEMPLATE_DIR/workspace/AGENTS.KIWI.md.tmpl"
+    "$TEMPLATE_DIR/workspace/AGENTS.SPAWNED.md.tmpl"
     "$TEMPLATE_DIR/workspace/SOUL.md"
     "$TEMPLATE_DIR/workspace/USER.md"
     "$TEMPLATE_DIR/workspace/MEMORY.md"
@@ -347,13 +348,16 @@ PY
 seed_workspace_context_files() {
   local ws_root="$HOME/.openclaw/workspace"
   local ws_tmpl="$TEMPLATE_DIR/workspace"
-  mkdir -p "$ws_root/memory"
+  local kiwi_ws="$ws_root/kiwi"
+  local shared_ws="$ws_root/shared"
+  mkdir -p "$ws_root/memory" "$kiwi_ws" "$kiwi_ws/memory" "$shared_ws"
 
-  render_template "$ws_tmpl/AGENTS.md.tmpl" "$ws_root/AGENTS.md"
-  cp "$ws_tmpl/SOUL.md" "$ws_root/SOUL.md"
-  cp "$ws_tmpl/USER.md" "$ws_root/USER.md"
-  cp "$ws_tmpl/MEMORY.md" "$ws_root/MEMORY.md"
-  cp "$ws_tmpl/TEAM.md" "$ws_root/TEAM.md"
+  render_template "$ws_tmpl/AGENTS.KIWI.md.tmpl" "$kiwi_ws/AGENTS.md"
+  render_template "$ws_tmpl/AGENTS.SPAWNED.md.tmpl" "$ws_root/AGENTS.SPAWNED.md"
+  cp "$ws_tmpl/SOUL.md" "$kiwi_ws/SOUL.md"
+  cp "$ws_tmpl/USER.md" "$kiwi_ws/USER.md"
+  cp "$ws_tmpl/MEMORY.md" "$kiwi_ws/MEMORY.md"
+  cp "$ws_tmpl/TEAM.md" "$shared_ws/TEAM.md"
 
   local today yesterday
   today="$(date +%F)"
@@ -569,7 +573,7 @@ configure_openclaw_runtime() {
   install_operator_bridge
 
   oc config set agents.defaults.model.primary "openai/gpt-5.2"
-  oc config set agents.defaults.workspace "~/.openclaw/workspace"
+  oc config set agents.defaults.workspace "~/.openclaw/workspace/kiwi"
   oc config set tools.exec.host "gateway"
   oc config set tools.exec.security "full"
   oc config set tools.exec.ask "off"
