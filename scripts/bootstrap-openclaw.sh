@@ -128,16 +128,43 @@ assert_templates_exist() {
   done
 }
 
+ensure_node_and_npm() {
+  if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+    return 0
+  fi
+
+  say "Installing Node.js 22 + npm"
+  sudo apt-get update -y
+  sudo apt-get install -y ca-certificates curl gnupg
+  sudo mkdir -p /etc/apt/keyrings
+  curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+    | sudo gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+  echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" \
+    | sudo tee /etc/apt/sources.list.d/nodesource.list >/dev/null
+  sudo apt-get update -y
+  sudo apt-get install -y nodejs
+}
+
+install_openclaw_cli() {
+  if command -v openclaw >/dev/null 2>&1; then
+    return 0
+  fi
+
+  say "Installing OpenClaw CLI via npm"
+  mkdir -p "$HOME/.npm-global"
+  npm config set prefix "$HOME/.npm-global"
+  if ! npm install -g openclaw@latest; then
+    echo "latest install failed; retrying next"
+    npm install -g openclaw@next
+  fi
+  ensure_openclaw_on_path || true
+}
+
 say "Installing base packages"
 sudo apt-get update -y
 sudo apt-get install -y curl git ca-certificates gnupg lsb-release iproute2 procps lsof python3
-
-if ! command -v openclaw >/dev/null 2>&1; then
-  say "Installing OpenClaw (skip interactive onboarding)"
-  curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard
-  # shellcheck disable=SC1090
-  [[ -f "$HOME/.bashrc" ]] && source "$HOME/.bashrc" || true
-fi
+ensure_node_and_npm
+install_openclaw_cli
 
 if ! ensure_openclaw_on_path; then
   echo "OpenClaw appears installed but is not on PATH; attempting direct binary resolution..."
