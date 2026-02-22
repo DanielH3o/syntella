@@ -112,6 +112,7 @@ assert_templates_exist() {
     "$TEMPLATE_DIR/workspace/SOUL.md"
     "$TEMPLATE_DIR/workspace/USER.md"
     "$TEMPLATE_DIR/workspace/MEMORY.md"
+    "$TEMPLATE_DIR/workspace/TEAM.md"
     "$TEMPLATE_DIR/frontend/index.html"
     "$TEMPLATE_DIR/frontend/admin.html"
     "$TEMPLATE_DIR/frontend/styles.css"
@@ -352,6 +353,7 @@ seed_workspace_context_files() {
   cp "$ws_tmpl/SOUL.md" "$ws_root/SOUL.md"
   cp "$ws_tmpl/USER.md" "$ws_root/USER.md"
   cp "$ws_tmpl/MEMORY.md" "$ws_root/MEMORY.md"
+  cp "$ws_tmpl/TEAM.md" "$ws_root/TEAM.md"
 
   local today yesterday
   today="$(date +%F)"
