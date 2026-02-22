@@ -62,6 +62,13 @@ if os.path.exists(cfg_path):
         json.dump(cfg, open(cfg_path, 'w', encoding='utf-8'), indent=2)
 PY
 cp "$SHARED_WS_ROOT"/AGENTS.SPAWNED.md "$AGENT_WS/AGENTS.md" 2>/dev/null || true
+DISPLAY_NAME="$(python3 - <<'PY' "$AGENT_ID"
+import sys
+s=sys.argv[1].replace('-', ' ').strip()
+print(' '.join(w.capitalize() for w in s.split()) or sys.argv[1])
+PY
+)"
+sed -i "s|__AGENT_NAME__|${DISPLAY_NAME}|g" "$AGENT_WS/AGENTS.md" 2>/dev/null || true
 cp "$SHARED_WS_ROOT/kiwi"/{SOUL.md,USER.md,MEMORY.md} "$AGENT_WS"/ 2>/dev/null || true
 
 # Ensure child runtime has provider env fallback.
