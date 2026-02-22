@@ -12,6 +12,9 @@ fi
 
 say() { echo -e "\n==> $*"; }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TEMPLATE_DIR="$SCRIPT_DIR/templates"
+
 DISCORD_BOT_TOKEN="${DISCORD_BOT_TOKEN:-}"
 DISCORD_TARGET="${DISCORD_TARGET:-}"
 # Accept common aliases to reduce bootstrap env mistakes.
@@ -60,6 +63,40 @@ ensure_openclaw_on_path() {
   fi
 
   command -v openclaw >/dev/null 2>&1
+}
+
+render_template() {
+  local src="$1"
+  local dst="$2"
+  sed \
+    -e "s|__DISCORD_GUILD_ID__|${DISCORD_GUILD_ID}|g" \
+    -e "s|__DISCORD_CHANNEL_ID__|${DISCORD_CHANNEL_ID}|g" \
+    -e "s|__DISCORD_HUMAN_ID__|${DISCORD_HUMAN_ID}|g" \
+    -e "s|__OPERATOR_BRIDGE_PORT__|${OPERATOR_BRIDGE_PORT}|g" \
+    -e "s|__OPERATOR_BRIDGE_TOKEN__|${OPERATOR_BRIDGE_TOKEN}|g" \
+    "$src" > "$dst"
+}
+
+assert_templates_exist() {
+  local required=(
+    "$TEMPLATE_DIR/workspace/AGENTS.md.tmpl"
+    "$TEMPLATE_DIR/workspace/SOUL.md"
+    "$TEMPLATE_DIR/workspace/USER.md"
+    "$TEMPLATE_DIR/workspace/ADMIN.md"
+    "$TEMPLATE_DIR/workspace/MEMORY.md"
+    "$TEMPLATE_DIR/frontend/index.html"
+    "$TEMPLATE_DIR/frontend/admin.html"
+    "$TEMPLATE_DIR/frontend/styles.css"
+    "$TEMPLATE_DIR/frontend/app.js"
+    "$TEMPLATE_DIR/frontend/admin.js"
+    "$TEMPLATE_DIR/frontend/README.md"
+    "$TEMPLATE_DIR/operator-bridge/kiwi-spawn-agent.sh.tmpl"
+    "$TEMPLATE_DIR/operator-bridge/server.py"
+  )
+  local f
+  for f in "${required[@]}"; do
+    [[ -f "$f" ]] || { echo "Missing template file: $f"; exit 1; }
+  done
 }
 
 say "Installing base packages"
@@ -249,197 +286,14 @@ PY
 
 seed_workspace_context_files() {
   local ws_root="$HOME/.openclaw/workspace"
+  local ws_tmpl="$TEMPLATE_DIR/workspace"
   mkdir -p "$ws_root/memory"
 
-  cat >"$ws_root/AGENTS.md" <<'EOF'
-# AGENTS.md - Your Workspace
-
-The discord server <guild:__DISCORD_GUILD_ID__> is your dedicated environment to interact with your human and fellow agents.
-
-You are one of possibly many Agents working under the direction of your human.
-
-## Environment
-
-- Host type: DigitalOcean Ubuntu droplet
-- Workspace root: `~/.openclaw/workspace`
-- Shared collaborative workspace root for all agents: `~/.openclaw/workspace/shared`
-- Private folder just for you: `~/.openclaw/workspace/<your-username>/`
-- Frontend is served via nginx and locked down to the human's IP allowlist
-- Communication is via private Discord server. Before responding to a message, ALWAYS inspect the most recent channel messages and apply a soft debounce window of ~5 seconds before replying.
-- If the same sender posted multiple consecutive messages within that window, treat them as ONE message chunk and reply at most once after context stabilizes. If the latest activity is just continuation text from the same sender, stay silent.
-- Keep normal chat replies short (target <= 400 characters) unless your human explicitly asks for detail.
-- If the recent messages seem to be between two other people and not relevant to you, stay silent.
-- Only engage with your human (`__DISCORD_HUMAN_ID__`) and fellow agent bots; ignore other human users.
-- Never collect or process Discord bot tokens in Discord messages (guild or DM).
-- For new-bot provisioning, direct the human to the frontend Admin page at `/admin`.
-
-## DM command contract (owner-only control lane)
-
-In Discord DMs, only the configured human (`__DISCORD_HUMAN_ID__`) can issue privileged commands.
-
-- `/exec <shell command>`
-  - Run the command through `/usr/local/bin/kiwi-exec`.
-  - Use the `exec` tool with `host=gateway`, `security=full`, and `ask=off` for this command path.
-  - Return exit code + truncated stdout/stderr summary.
-- Agent management
-  - Do not ask for bot tokens in Discord.
-  - Tell the human to use the frontend Admin page (`/admin`) to view and create agents.
-
-Rules:
-- Never execute shell commands from guild/public messages.
-- Never execute shell commands from non-owner DMs.
-- For normal non-command DMs, behave as a regular assistant.
-
-## First Run
-
-If `BOOTSTRAP.md` exists, that's your birth certificate. Follow it, figure out who you are, then delete it. You won't need it again.
-
-## Every Session
-
-Before doing anything else:
-
-In your private workspace: 
-  1. Read `SOUL.md` — this is who you are
-  2. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
-  3. **If in MAIN SESSION** (direct chat with your human): Also read `MEMORY.md`
-
-  Don't ask permission. Just do it.
-
-  You wake up fresh each session. These files are your continuity:
-
-  - **Daily notes:** `memory/YYYY-MM-DD.md` (create `memory/` if needed) — raw logs of what happened
-  - **Long-term:** `MEMORY.md` — your curated memories, like a human's long-term memory
-
-  Capture what matters. Decisions, context, things to remember. Skip the secrets unless asked to keep them.
-
-In the collaborative workspace:
-  1. Read `TEAM.md` - this is your team of fellow agents
-  2. Read `USER.md` - this is your human
-  3. Read `TOOLS.md` - these are the tools available to you
-
-### 🧠 MEMORY.md - Your Long-Term Memory
-
-- **ONLY load in main session** (direct chats with your human)
-- **DO NOT load in shared contexts** (Discord, group chats, sessions with other people)
-- This is for **security** — contains personal context that shouldn't leak to strangers
-- You can **read, edit, and update** MEMORY.md freely in main sessions
-- Write significant events, thoughts, decisions, opinions, lessons learned
-- This is your curated memory — the distilled essence, not raw logs
-- Over time, review your daily files and update MEMORY.md with what's worth keeping
-
-### 📝 Write It Down - No "Mental Notes"!
-
-- **Memory is limited** — if you want to remember something, WRITE IT TO A FILE
-- "Mental notes" don't survive session restarts. Files do.
-- When someone says "remember this" → update `memory/YYYY-MM-DD.md` or relevant file
-- When you learn a lesson → update AGENTS.md, TOOLS.md, or the relevant skill
-- When you make a mistake → document it so future-you doesn't repeat it
-- **Text > Brain** 📝
-
-## 💓 Heartbeats - Be Proactive!
-
-When you receive a heartbeat poll (message matches the configured heartbeat prompt), don't just reply `HEARTBEAT_OK` every time. Use heartbeats productively!
-
-Default heartbeat prompt:
-`Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK.`
-
-You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it small to limit token burn.
-
-### Heartbeat vs Cron: When to Use Each
-
-**Use heartbeat when:**
-
-- Multiple checks can batch together (inbox + calendar + notifications in one turn)
-- You need conversational context from recent messages
-- Timing can drift slightly (every ~30 min is fine, not exact)
-- You want to reduce API calls by combining periodic checks
-
-**Use cron when:**
-
-- Exact timing matters ("9:00 AM sharp every Monday")
-- Task needs isolation from main session history
-- You want a different model or thinking level for the task
-- One-shot reminders ("remind me in 20 minutes")
-- Output should deliver directly to a channel without main session involvement
-
-**Tip:** Batch similar periodic checks into `HEARTBEAT.md` instead of creating multiple cron jobs. Use cron for precise schedules and standalone tasks.
-
-## Message Formatting 
-- No markdown tables! Use bullet lists instead
-- Wrap multiple links in `<>` to suppress embeds: `<https://example.com>`
-
-## Spawning Agents
-When a human asks to create a new bot/agent, direct them to the frontend Admin page (`/admin`).
-Do not collect Discord bot tokens via Discord messages.
-
-## Safety
-
-- Don't exfiltrate private data. Ever.
-- Don't run destructive commands without asking.
-- `trash` > `rm` (recoverable beats gone forever)
-- When in doubt, ask.
-
-## External vs Internal
-
-**Safe to do freely:**
-
-- Read files, explore, organize, learn
-- Search the web, check calendars
-- Work within this workspace
-
-Periodically (every few days), use a heartbeat to:
-
-1. Read through recent `memory/YYYY-MM-DD.md` files
-2. Identify significant events, lessons, or insights worth keeping long-term
-3. Update `MEMORY.md` with distilled learnings
-4. Remove outdated info from MEMORY.md that's no longer relevant
-
-Think of it like a human reviewing their journal and updating their mental model. Daily files are raw notes; MEMORY.md is curated wisdom.
-
-The goal: Be helpful without being annoying. Check in a few times a day, do useful background work.
-This is a starting point. Add your own conventions, style, and rules as you figure out what works.
-EOF
-  sed -i "s/__DISCORD_GUILD_ID__/$DISCORD_GUILD_ID/g" "$ws_root/AGENTS.md"
-  sed -i "s/__DISCORD_HUMAN_ID__/$DISCORD_HUMAN_ID/g" "$ws_root/AGENTS.md"
-  # no operator bridge placeholders in AGENTS.md
-
-  cat >"$ws_root/SOUL.md" <<'EOF'
-# SOUL.md
-
-Be practical, concise, and execution-focused.
-Prefer shipping working changes over long theory.
-EOF
-
-  cat >"$ws_root/USER.md" <<'EOF'
-# USER.md
-
-- Human: Daniel
-- Primary interface: Discord
-- Build mode: iterative, practical, minimal friction
-EOF
-
-  cat >"$ws_root/ADMIN.md" <<'EOF'
-# ADMIN.md
-
-Use the frontend admin page for agent operations:
-- Visit `/admin` from the allowed IP address
-- View existing dedicated agents
-- Add a new agent by providing:
-  1) name
-  2) role
-  3) brief description/personality
-  4) Discord bot token
-
-Security rules:
-- Never ask users to share bot tokens in Discord messages.
-- Redirect token collection to `/admin` only.
-EOF
-
-  cat >"$ws_root/MEMORY.md" <<'EOF'
-# MEMORY.md
-
-Long-term notes and durable decisions go here.
-EOF
+  render_template "$ws_tmpl/AGENTS.md.tmpl" "$ws_root/AGENTS.md"
+  cp "$ws_tmpl/SOUL.md" "$ws_root/SOUL.md"
+  cp "$ws_tmpl/USER.md" "$ws_root/USER.md"
+  cp "$ws_tmpl/ADMIN.md" "$ws_root/ADMIN.md"
+  cp "$ws_tmpl/MEMORY.md" "$ws_root/MEMORY.md"
 
   local today yesterday
   today="$(date +%F)"
@@ -450,7 +304,6 @@ EOF
     [[ -f "$ws_root/memory/${yesterday}.md" ]] || echo "# ${yesterday}" >"$ws_root/memory/${yesterday}.md"
   fi
 }
-
 setup_openclaw_env_file() {
   local env_dir="/etc/openclaw"
   local env_file="${env_dir}/openclaw.env"
@@ -555,277 +408,12 @@ EOF
   sudo chown root:openclaw "$env_file"
   sudo chmod 640 "$env_file"
 
-  sudo tee "$spawn_sh" >/dev/null <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-
-AGENT_ID="${1:-}"
-ROLE="${2:-}"
-DISCORD_BOT_TOKEN_AGENT="${3:-}"
-PORT="${4:-}"
-
-[[ -n "$AGENT_ID" && -n "$ROLE" && -n "$DISCORD_BOT_TOKEN_AGENT" ]] || { echo "usage: kiwi-spawn-agent <agent_id> <role> <discord_token> [port]"; exit 2; }
-
-if [[ -z "$PORT" ]]; then
-  PORT="$(python3 - <<'PY'
-import json, os
-p=os.path.expanduser('~/.openclaw/workspace/agents/registry.json')
-base=19002
-used=set()
-if os.path.exists(p):
-  try:
-    d=json.load(open(p))
-    for v in d.values():
-      port=v.get('port')
-      if isinstance(port,int): used.add(port)
-  except Exception:
-    pass
-port=base
-while port in used:
-  port+=1
-print(port)
-PY
-)"
-fi
-
-set -a
-source /etc/openclaw/openclaw.env
-set +a
-
-# Hard isolation: each spawned bot gets its own OpenClaw home/runtime.
-CHILD_HOME="$HOME/.openclaw-$AGENT_ID"
-CHILD_PROFILE="main"
-
-oc_child() { OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" "$@"; }
-
-main_token_before="$(openclaw config get channels.discord.token 2>/dev/null | tr -d '"[:space:]' || true)"
-
-mkdir -p ~/.openclaw/workspace/"$AGENT_ID"/memory ~/.openclaw/workspace/agents "$CHILD_HOME"
-cp ~/.openclaw/workspace/{AGENTS.md,SOUL.md,USER.md,MEMORY.md} ~/.openclaw/workspace/"$AGENT_ID"/ 2>/dev/null || true
-
-echo "# Role: $ROLE" >> ~/.openclaw/workspace/"$AGENT_ID"/SOUL.md
-
-oc_child config set agents.defaults.workspace "~/.openclaw/workspace/$AGENT_ID"
-oc_child config set gateway.mode local
-oc_child config set gateway.bind loopback
-oc_child config set gateway.auth.mode token
-oc_child config set channels.discord.enabled true
-oc_child config set channels.discord.groupPolicy "allowlist"
-oc_child config set channels.discord.allowBots true
-oc_child config set channels.discord.token "$DISCORD_BOT_TOKEN_AGENT"
-oc_child config set channels.discord.dm.enabled true
-oc_child config set channels.discord.dm.policy "allowlist"
-oc_child config set channels.discord.dm.allowFrom '["__DISCORD_HUMAN_ID__"]'
-oc_child config set channels.discord.dm.groupEnabled false
-# Newer OpenClaw schemas may use flattened DM keys; set both forms.
-oc_child config set channels.discord.dmPolicy "allowlist"
-oc_child config set channels.discord.allowFrom '["__DISCORD_HUMAN_ID__"]'
-
-GUILDS_JSON="$(python3 - <<'PY'
-import json
-print(json.dumps({
-  "__DISCORD_GUILD_ID__": {
-    "requireMention": False,
-    "users": ["__DISCORD_HUMAN_ID__"],
-    "channels": {
-      "__DISCORD_CHANNEL_ID__": {"allow": True, "requireMention": False}
-    }
-  }
-}))
-PY
-)"
-oc_child config set channels.discord.guilds "$GUILDS_JSON"
-oc_child config set tools.exec.host gateway
-oc_child config set tools.exec.security full
-oc_child config set tools.exec.ask off
-
-# Normalize schema changes before startup (required on some builds).
-OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" doctor --fix >/dev/null 2>&1 || true
-
-child_group_policy="$(OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get channels.discord.groupPolicy 2>/dev/null | tr -d '"[:space:]' || true)"
-child_guild_allow="$(OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get channels.discord.guilds.__DISCORD_GUILD_ID__.channels.__DISCORD_CHANNEL_ID__.allow 2>/dev/null | tr -d '"[:space:]' || true)"
-if [[ "$child_group_policy" != "allowlist" || "$child_guild_allow" != "true" ]]; then
-  echo "ERROR: child guild allowlist wiring failed (groupPolicy=${child_group_policy:-<unset>}, channelAllow=${child_guild_allow:-<unset>})" >&2
-  OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get channels.discord.guilds >&2 || true
-  exit 1
-fi
-
-main_token_after="$(openclaw config get channels.discord.token 2>/dev/null | tr -d '"[:space:]' || true)"
-if [[ -n "$main_token_before" && "$main_token_before" != "$main_token_after" ]]; then
-  echo "ERROR: main profile discord token changed during child spawn; aborting to protect main bot." >&2
-  exit 1
-fi
-
-nohup env OPENCLAW_HOME="$CHILD_HOME" OPENCLAW_PROFILE="$CHILD_PROFILE" openclaw --profile "$CHILD_PROFILE" gateway --allow-unconfigured --port "$PORT" > ~/.openclaw/workspace/"$AGENT_ID"/gateway.log 2>&1 &
-
-ready=0
-for _ in $(seq 1 25); do
-  if grep -q "listening on ws://127.0.0.1:${PORT}" ~/.openclaw/workspace/"$AGENT_ID"/gateway.log 2>/dev/null; then
-    ready=1
-    break
-  fi
-  sleep 1
-done
-
-if [[ "$ready" != "1" ]]; then
-  echo "ERROR: child gateway did not become ready on port $PORT" >&2
-  tail -n 80 ~/.openclaw/workspace/"$AGENT_ID"/gateway.log >&2 || true
-  exit 1
-fi
-
-python3 - <<'PY' "$AGENT_ID" "$PORT" "$ROLE" "$CHILD_HOME"
-import json, os, sys
-agent,port,role,home=sys.argv[1],int(sys.argv[2]),sys.argv[3],sys.argv[4]
-p=os.path.expanduser('~/.openclaw/workspace/agents/registry.json')
-os.makedirs(os.path.dirname(p), exist_ok=True)
-d={}
-if os.path.exists(p):
-  try:d=json.load(open(p))
-  except Exception:d={}
-d[agent]={"port":port,"role":role,"home":home,"guild_id":"__DISCORD_GUILD_ID__","channel_id":"__DISCORD_CHANNEL_ID__"}
-json.dump(d, open(p,'w'), indent=2)
-print(json.dumps({"agent_id":agent,"port":port,"home":home,"guild_id":"__DISCORD_GUILD_ID__","channel_id":"__DISCORD_CHANNEL_ID__","guild_configured":True,"status":"started"}))
-PY
-EOF
-  sudo sed -i "s/__DISCORD_GUILD_ID__/${DISCORD_GUILD_ID}/g" "$spawn_sh"
-  sudo sed -i "s/__DISCORD_CHANNEL_ID__/${DISCORD_CHANNEL_ID}/g" "$spawn_sh"
-  sudo sed -i "s/__DISCORD_HUMAN_ID__/${DISCORD_HUMAN_ID}/g" "$spawn_sh"
-  sudo chmod 755 "$spawn_sh"
+  render_template "$TEMPLATE_DIR/operator-bridge/kiwi-spawn-agent.sh.tmpl" "$HOME/.openclaw/kiwi-spawn-agent.sh"
+  sudo install -m 755 "$HOME/.openclaw/kiwi-spawn-agent.sh" "$spawn_sh"
 
   mkdir -p "$bridge_dir"
-  cat > "$bridge_py" <<'PY'
-#!/usr/bin/env python3
-import json, os, re, time, uuid
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from subprocess import run
-
-TOKEN=os.environ.get("OPERATOR_BRIDGE_TOKEN","")
-PORT=int(os.environ.get("OPERATOR_BRIDGE_PORT","8787"))
-LOG=os.path.expanduser("~/.openclaw/logs/operator-bridge.log")
-AGENT_RE=re.compile(r"^[a-z0-9][a-z0-9-]{1,30}$")
-
-
-def log(event, **kw):
-  os.makedirs(os.path.dirname(LOG), exist_ok=True)
-  rec={"ts":time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),"event":event,**kw}
-  with open(LOG,"a",encoding="utf-8") as f:
-    f.write(json.dumps(rec, ensure_ascii=False)+"\n")
-
-
-def normalize_payload(body):
-  agent_id = body.get("agent_id") or body.get("agentId") or body.get("name")
-  role = body.get("role")
-  description = body.get("description") or body.get("personality")
-  discord_token = body.get("discord_token") or body.get("discordBotToken") or body.get("discord_bot_token")
-  port = body.get("port")
-
-  missing=[]
-  if not agent_id: missing.append("agent_id")
-  if not role: missing.append("role")
-  if not description: missing.append("description")
-  if not discord_token: missing.append("discord_token")
-  if missing:
-    return None, {"error":"bad_request","detail":"missing required fields","missing":missing}
-
-  agent_id=str(agent_id).strip().lower()
-  if not AGENT_RE.match(agent_id):
-    return None, {"error":"bad_request","detail":"invalid agent_id; use lowercase letters, numbers, hyphen (2-31 chars)"}
-
-  role=str(role).strip()
-  description=str(description).strip()
-  discord_token=str(discord_token).strip()
-  port="" if port is None else str(port).strip()
-  if port and not port.isdigit():
-    return None, {"error":"bad_request","detail":"port must be numeric when provided"}
-
-  return {"agent_id":agent_id,"role":role,"description":description,"discord_token":discord_token,"port":port}, None
-
-
-class H(BaseHTTPRequestHandler):
-  def log_message(self, fmt, *args):
-    return
-
-  def _send(self, code, obj):
-    b=json.dumps(obj).encode()
-    self.send_response(code)
-    self.send_header('Content-Type','application/json')
-    self.send_header('Content-Length',str(len(b)))
-    self.end_headers(); self.wfile.write(b)
-
-  def _auth(self):
-    return self.headers.get('Authorization','')==f'Bearer {TOKEN}'
-
-  def do_GET(self):
-    if self.path=="/health":
-      return self._send(200,{"ok":True})
-
-    if self.path=="/agents":
-      if not self._auth():
-        return self._send(401,{"error":"unauthorized"})
-      reg=os.path.expanduser('~/.openclaw/workspace/agents/registry.json')
-      data={}
-      if os.path.exists(reg):
-        try:
-          data=json.load(open(reg, 'r', encoding='utf-8'))
-        except Exception:
-          data={}
-      return self._send(200,{"ok":True,"agents":data})
-
-    self._send(404,{"error":"not_found"})
-
-  def do_POST(self):
-    req_id=str(uuid.uuid4())[:8]
-    if not self._auth():
-      log("unauthorized", req_id=req_id, path=self.path)
-      return self._send(401,{"error":"unauthorized"})
-    if self.path!="/spawn-agent":
-      return self._send(404,{"error":"not_found"})
-
-    try:
-      n=int(self.headers.get('Content-Length','0'))
-      body=json.loads(self.rfile.read(n) or b"{}")
-    except Exception as e:
-      return self._send(400,{"error":"bad_request","detail":f"invalid JSON: {e}"})
-
-    payload, err = normalize_payload(body)
-    if err:
-      log("spawn_rejected", req_id=req_id, error=err)
-      return self._send(400, err)
-
-    full_role = f"{payload['role']} — {payload['description']}"
-    cmd=["/usr/local/bin/kiwi-spawn-agent", payload["agent_id"], full_role, payload["discord_token"]]
-    if payload["port"]:
-      cmd.append(payload["port"])
-
-    log("spawn_start", req_id=req_id, agent_id=payload["agent_id"], role=payload["role"], description=payload["description"], port=payload["port"], token="***redacted***")
-    t0=time.time()
-    r=run(cmd, capture_output=True, text=True)
-    dur_ms=int((time.time()-t0)*1000)
-
-    spawn_meta={}
-    try:
-      spawn_meta=json.loads((r.stdout or '').strip().splitlines()[-1]) if (r.stdout or '').strip() else {}
-    except Exception:
-      spawn_meta={}
-
-    out={
-      "ok": r.returncode==0,
-      "exit_code": r.returncode,
-      "stdout": r.stdout[-4000:],
-      "stderr": r.stderr[-4000:],
-      "request_id": req_id,
-      "duration_ms": dur_ms,
-      "spawn": spawn_meta,
-      "guild_configured": bool(spawn_meta.get("guild_configured", False)),
-      "guild_id": spawn_meta.get("guild_id"),
-      "channel_id": spawn_meta.get("channel_id"),
-    }
-    log("spawn_done", req_id=req_id, ok=(r.returncode==0), exit_code=r.returncode, duration_ms=dur_ms, guild_configured=out["guild_configured"], stderr_tail=r.stderr[-300:])
-    return self._send(200 if r.returncode==0 else 500, out)
-
-if __name__=="__main__":
-  HTTPServer(("127.0.0.1", PORT), H).serve_forever()
-PY
+  mkdir -p "$bridge_dir"
+  render_template "$TEMPLATE_DIR/operator-bridge/server.py" "$bridge_py"
   chmod 700 "$bridge_py"
 
   pkill -f "operator-bridge/server.py" >/dev/null 2>&1 || true
@@ -954,146 +542,12 @@ setup_frontend_workspace() {
   local project_dir="$HOME/.openclaw/workspace/project"
   mkdir -p "$project_dir"
 
-  cat >"$project_dir/index.html" <<'EOF'
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>OpenClaw Dashboard</title>
-  <link rel="stylesheet" href="./styles.css" />
-</head>
-<body>
-  <main class="wrap">
-    <section class="card">
-      <h1>🚀 OpenClaw Dashboard</h1>
-      <p class="muted">Workspace: <code>~/.openclaw/workspace/project</code></p>
-      <p><a href="/admin">Go to Admin</a> to monitor existing agents and add a new one.</p>
-      <pre id="out"></pre>
-    </section>
-  </main>
-  <script src="./app.js"></script>
-</body>
-</html>
-EOF
-
-  cat >"$project_dir/admin.html" <<'EOF'
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Admin · OpenClaw</title>
-  <link rel="stylesheet" href="./styles.css" />
-</head>
-<body>
-  <main class="wrap">
-    <section class="card">
-      <h1>🛠️ Admin</h1>
-      <p class="muted">Manage dedicated agents for this droplet.</p>
-      <button id="refreshAgents">Refresh agents</button>
-      <pre id="agentsOut">Loading...</pre>
-    </section>
-
-    <section class="card" style="margin-top:16px;">
-      <h2>Add agent</h2>
-      <form id="spawnForm">
-        <label>Name (slug)<br /><input name="agent_id" required pattern="[a-z0-9][a-z0-9-]{1,30}" /></label><br /><br />
-        <label>Role<br /><input name="role" required /></label><br /><br />
-        <label>Brief description / personality<br /><textarea name="description" rows="3" required></textarea></label><br /><br />
-        <label>Discord bot token<br /><input name="discord_token" required autocomplete="off" /></label><br /><br />
-        <button type="submit">Add agent</button>
-      </form>
-      <pre id="spawnOut"></pre>
-    </section>
-  </main>
-  <script src="./admin.js"></script>
-</body>
-</html>
-EOF
-
-  cat >"$project_dir/styles.css" <<'EOF'
-:root { color-scheme: dark; }
-body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background: #0b1020; color: #e7ecff; }
-.wrap { max-width: 860px; margin: 6vh auto; padding: 24px; }
-.card { background: #121a33; border: 1px solid #2a396e; border-radius: 16px; padding: 24px; }
-h1, h2 { margin-top: 0; }
-code, pre, input, textarea { background: #1f2a50; color: #e7ecff; border-radius: 6px; border: 1px solid #2a396e; }
-input, textarea { width: 100%; box-sizing: border-box; padding: 10px; }
-pre { padding: 12px; overflow: auto; }
-.muted { color: #9fb0e8; }
-button { background: #3f6fff; color: white; border: 0; border-radius: 10px; padding: 10px 14px; cursor: pointer; }
-a { color: #8bb2ff; }
-EOF
-
-  cat >"$project_dir/app.js" <<'EOF'
-const out = document.getElementById('out');
-out.textContent = `Frontend loaded at ${new Date().toISOString()}`;
-EOF
-
-  cat >"$project_dir/admin.js" <<'EOF'
-const agentsOut = document.getElementById('agentsOut');
-const spawnOut = document.getElementById('spawnOut');
-const refreshBtn = document.getElementById('refreshAgents');
-const form = document.getElementById('spawnForm');
-
-async function loadAgents() {
-  agentsOut.textContent = 'Loading...';
-  try {
-    const res = await fetch('/api/agents');
-    const data = await res.json();
-    agentsOut.textContent = JSON.stringify(data, null, 2);
-  } catch (err) {
-    agentsOut.textContent = `Failed to load agents: ${err}`;
-  }
-}
-
-refreshBtn?.addEventListener('click', loadAgents);
-
-form?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const fd = new FormData(form);
-  const payload = {
-    agent_id: String(fd.get('agent_id') || '').trim(),
-    role: String(fd.get('role') || '').trim(),
-    description: String(fd.get('description') || '').trim(),
-    discord_token: String(fd.get('discord_token') || '').trim(),
-  };
-
-  spawnOut.textContent = 'Spawning agent...';
-  try {
-    const res = await fetch('/api/spawn-agent', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    spawnOut.textContent = JSON.stringify(data, null, 2);
-    if (res.ok) {
-      form.reset();
-      loadAgents();
-    }
-  } catch (err) {
-    spawnOut.textContent = `Spawn failed: ${err}`;
-  }
-});
-
-loadAgents();
-EOF
-
-  cat >"$project_dir/README.md" <<'EOF'
-# Workspace Frontend Project
-
-This folder is served by nginx at the droplet public URL.
-
-- `/` dashboard
-- `/admin` admin panel to list and create dedicated agents
-- `/api/agents` and `/api/spawn-agent` are proxied to localhost operator bridge
-
-Security:
-- Frontend access is IP-allowlisted via `FRONTEND_ALLOWED_IP` in bootstrap.
-- Share bot tokens only through `/admin` (never in Discord).
-EOF
+  cp "$TEMPLATE_DIR/frontend/index.html" "$project_dir/index.html"
+  cp "$TEMPLATE_DIR/frontend/admin.html" "$project_dir/admin.html"
+  cp "$TEMPLATE_DIR/frontend/styles.css" "$project_dir/styles.css"
+  cp "$TEMPLATE_DIR/frontend/app.js" "$project_dir/app.js"
+  cp "$TEMPLATE_DIR/frontend/admin.js" "$project_dir/admin.js"
+  cp "$TEMPLATE_DIR/frontend/README.md" "$project_dir/README.md"
 
   # Project-level instruction docs removed intentionally.
   # Startup/system guidance now lives at workspace root: ~/.openclaw/workspace/*.md
@@ -1410,6 +864,7 @@ print_summary() {
 }
 
 main() {
+  assert_templates_exist
   require_discord_inputs
   configure_openclaw_runtime
 

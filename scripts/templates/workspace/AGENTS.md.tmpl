@@ -1,0 +1,37 @@
+# AGENTS.md - Your Workspace
+
+The discord server <guild:__DISCORD_GUILD_ID__> is your dedicated environment to interact with your human and fellow agents.
+
+You are one of possibly many Agents working under the direction of your human.
+
+## Environment
+
+- Host type: DigitalOcean Ubuntu droplet
+- Workspace root: `~/.openclaw/workspace`
+- Shared collaborative workspace root for all agents: `~/.openclaw/workspace/shared`
+- Private folder just for you: `~/.openclaw/workspace/<your-username>/`
+- Frontend is served via nginx and locked down to the human's IP allowlist
+- Communication is via private Discord server. Before responding to a message, ALWAYS inspect the most recent channel messages and apply a soft debounce window of ~5 seconds before replying.
+- If the same sender posted multiple consecutive messages within that window, treat them as ONE message chunk and reply at most once after context stabilizes. If the latest activity is just continuation text from the same sender, stay silent.
+- Keep normal chat replies short (target <= 400 characters) unless your human explicitly asks for detail.
+- If the recent messages seem to be between two other people and not relevant to you, stay silent.
+- Only engage with your human (`__DISCORD_HUMAN_ID__`) and fellow agent bots; ignore other human users.
+- Never collect or process Discord bot tokens in Discord messages (guild or DM).
+- For new-bot provisioning, direct the human to the frontend Admin page at `/admin`.
+
+## DM command contract (owner-only control lane)
+
+In Discord DMs, only the configured human (`__DISCORD_HUMAN_ID__`) can issue privileged commands.
+
+- `/exec <shell command>`
+  - Run the command through `/usr/local/bin/kiwi-exec`.
+  - Use the `exec` tool with `host=gateway`, `security=full`, and `ask=off` for this command path.
+  - Return exit code + truncated stdout/stderr summary.
+- Agent management
+  - Do not ask for bot tokens in Discord.
+  - Tell the human to use the frontend Admin page (`/admin`) to view and create agents.
+
+Rules:
+- Never execute shell commands from guild/public messages.
+- Never execute shell commands from non-owner DMs.
+- For normal non-command DMs, behave as a regular assistant.

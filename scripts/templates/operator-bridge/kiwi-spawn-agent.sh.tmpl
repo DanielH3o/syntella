@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+AGENT_ID="${1:-}"
+ROLE="${2:-}"
+DISCORD_BOT_TOKEN_AGENT="${3:-}"
+PORT="${4:-}"
+
+[[ -n "$AGENT_ID" && -n "$ROLE" && -n "$DISCORD_BOT_TOKEN_AGENT" ]] || { echo "usage: kiwi-spawn-agent <agent_id> <role> <discord_token> [port]"; exit 2; }
+
+if [[ -z "$PORT" ]]; then
+  PORT="$(python3 - <<'PY'
+import json, os
+p=os.path.expanduser('~/.openclaw/workspace/agents/registry.json')
+base=19002
+used=set()
+if os.path.exists(p):
+  try:
+    d=json.load(open(p))
+    for v in d.values():
+      port=v.get('port')
+      if isinstance(port,int): used.add(port)
+  except Exception:
+    pass
+port=base
+while port in used:
+  port+=1
+print(port)
+PY
+)"
+fi
+
+set -a
+source /etc/openclaw/openclaw.env
+set +a
+
+# Hard isolation: each spawned bot gets its own OpenClaw home/runtime.
+CHILD_HOME="$HOME/.openclaw-$AGENT_ID"
+CHILD_PROFILE="main"
+
+oc_child() { OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" "$@"; }
+
+main_token_before="$(openclaw config get channels.discord.token 2>/dev/null | tr -d '"[:space:]' || true)"
+
+mkdir -p ~/.openclaw/workspace/"$AGENT_ID"/memory ~/.openclaw/workspace/agents "$CHILD_HOME"
+cp ~/.openclaw/workspace/{AGENTS.md,SOUL.md,USER.md,MEMORY.md} ~/.openclaw/workspace/"$AGENT_ID"/ 2>/dev/null || true
+
+echo "# Role: $ROLE" >> ~/.openclaw/workspace/"$AGENT_ID"/SOUL.md
+
+oc_child config set agents.defaults.workspace "~/.openclaw/workspace/$AGENT_ID"
+oc_child config set gateway.mode local
+oc_child config set gateway.bind loopback
+oc_child config set gateway.auth.mode token
+oc_child config set channels.discord.enabled true
+oc_child config set channels.discord.groupPolicy "allowlist"
+oc_child config set channels.discord.allowBots true
+oc_child config set channels.discord.token "$DISCORD_BOT_TOKEN_AGENT"
+oc_child config set channels.discord.dm.enabled true
+oc_child config set channels.discord.dm.policy "allowlist"
+oc_child config set channels.discord.dm.allowFrom '["__DISCORD_HUMAN_ID__"]'
+oc_child config set channels.discord.dm.groupEnabled false
+# Newer OpenClaw schemas may use flattened DM keys; set both forms.
+oc_child config set channels.discord.dmPolicy "allowlist"
+oc_child config set channels.discord.allowFrom '["__DISCORD_HUMAN_ID__"]'
+
+GUILDS_JSON="$(python3 - <<'PY'
+import json
+print(json.dumps({
+  "__DISCORD_GUILD_ID__": {
+    "requireMention": False,
+    "users": ["__DISCORD_HUMAN_ID__"],
+    "channels": {
+      "__DISCORD_CHANNEL_ID__": {"allow": True, "requireMention": False}
+    }
+  }
+}))
+PY
+)"
+oc_child config set channels.discord.guilds "$GUILDS_JSON"
+oc_child config set tools.exec.host gateway
+oc_child config set tools.exec.security full
+oc_child config set tools.exec.ask off
+
+# Normalize schema changes before startup (required on some builds).
+OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" doctor --fix >/dev/null 2>&1 || true
+
+child_group_policy="$(OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get channels.discord.groupPolicy 2>/dev/null | tr -d '"[:space:]' || true)"
+child_guild_allow="$(OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get channels.discord.guilds.__DISCORD_GUILD_ID__.channels.__DISCORD_CHANNEL_ID__.allow 2>/dev/null | tr -d '"[:space:]' || true)"
+if [[ "$child_group_policy" != "allowlist" || "$child_guild_allow" != "true" ]]; then
+  echo "ERROR: child guild allowlist wiring failed (groupPolicy=${child_group_policy:-<unset>}, channelAllow=${child_guild_allow:-<unset>})" >&2
+  OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get channels.discord.guilds >&2 || true
+  exit 1
+fi
+
+main_token_after="$(openclaw config get channels.discord.token 2>/dev/null | tr -d '"[:space:]' || true)"
+if [[ -n "$main_token_before" && "$main_token_before" != "$main_token_after" ]]; then
+  echo "ERROR: main profile discord token changed during child spawn; aborting to protect main bot." >&2
+  exit 1
+fi
+
+nohup env OPENCLAW_HOME="$CHILD_HOME" OPENCLAW_PROFILE="$CHILD_PROFILE" openclaw --profile "$CHILD_PROFILE" gateway --allow-unconfigured --port "$PORT" > ~/.openclaw/workspace/"$AGENT_ID"/gateway.log 2>&1 &
+
+ready=0
+for _ in $(seq 1 25); do
+  if grep -q "listening on ws://127.0.0.1:${PORT}" ~/.openclaw/workspace/"$AGENT_ID"/gateway.log 2>/dev/null; then
+    ready=1
+    break
+  fi
+  sleep 1
+done
+
+if [[ "$ready" != "1" ]]; then
+  echo "ERROR: child gateway did not become ready on port $PORT" >&2
+  tail -n 80 ~/.openclaw/workspace/"$AGENT_ID"/gateway.log >&2 || true
+  exit 1
+fi
+
+python3 - <<'PY' "$AGENT_ID" "$PORT" "$ROLE" "$CHILD_HOME"
+import json, os, sys
+agent,port,role,home=sys.argv[1],int(sys.argv[2]),sys.argv[3],sys.argv[4]
+p=os.path.expanduser('~/.openclaw/workspace/agents/registry.json')
+os.makedirs(os.path.dirname(p), exist_ok=True)
+d={}
+if os.path.exists(p):
+  try:d=json.load(open(p))
+  except Exception:d={}
+d[agent]={"port":port,"role":role,"home":home,"guild_id":"__DISCORD_GUILD_ID__","channel_id":"__DISCORD_CHANNEL_ID__"}
+json.dump(d, open(p,'w'), indent=2)
+print(json.dumps({"agent_id":agent,"port":port,"home":home,"guild_id":"__DISCORD_GUILD_ID__","channel_id":"__DISCORD_CHANNEL_ID__","guild_configured":True,"status":"started"}))
+PY
