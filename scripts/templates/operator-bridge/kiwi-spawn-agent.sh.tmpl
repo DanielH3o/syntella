@@ -46,6 +46,7 @@ mkdir -p ~/.openclaw/workspace/"$AGENT_ID"/memory ~/.openclaw/workspace/agents "
 cp ~/.openclaw/workspace/{AGENTS.md,SOUL.md,USER.md,MEMORY.md} ~/.openclaw/workspace/"$AGENT_ID"/ 2>/dev/null || true
 
 # Ensure child runtime has provider env fallback.
+mkdir -p "$CHILD_HOME/.openclaw-main"
 if [[ -f "$HOME/.openclaw/.env" ]]; then
   cp "$HOME/.openclaw/.env" "$CHILD_HOME/.env"
 elif [[ -n "${OPENAI_API_KEY:-}" || -n "${ANTHROPIC_API_KEY:-}" ]]; then
@@ -54,7 +55,9 @@ elif [[ -n "${OPENAI_API_KEY:-}" || -n "${ANTHROPIC_API_KEY:-}" ]]; then
     [[ -n "${ANTHROPIC_API_KEY:-}" ]] && echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}"
   } > "$CHILD_HOME/.env"
 fi
-chmod 600 "$CHILD_HOME/.env" 2>/dev/null || true
+# Some builds resolve runtime env fallback from profile-scoped state dir.
+cp "$CHILD_HOME/.env" "$CHILD_HOME/.openclaw-main/.env" 2>/dev/null || true
+chmod 600 "$CHILD_HOME/.env" "$CHILD_HOME/.openclaw-main/.env" 2>/dev/null || true
 
 # Mirror auth profiles from main runtime when present (avoids missing-provider-key failures).
 MAIN_AUTH_PATH="$(find "$HOME/.openclaw" -type f -path '*/agents/main/agent/auth-profiles.json' 2>/dev/null | head -n1 || true)"
@@ -70,6 +73,7 @@ echo "# Role: $ROLE" >> ~/.openclaw/workspace/"$AGENT_ID"/SOUL.md
 
 oc_child config set agents.defaults.workspace "~/.openclaw/workspace/$AGENT_ID"
 oc_child config set agents.defaults.model.primary "openai/gpt-5.2"
+oc_child config set agents.defaults.model.fallbacks '[]' || true
 oc_child config set agents.main.model.primary "openai/gpt-5.2" || true
 oc_child config set gateway.mode local
 oc_child config set gateway.bind loopback
@@ -129,9 +133,18 @@ OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" doctor --fix >/d
 
 child_group_policy="$(OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get channels.discord.groupPolicy 2>/dev/null | tr -d '"[:space:]' || true)"
 child_guild_allow="$(OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get channels.discord.guilds.__DISCORD_GUILD_ID__.channels.__DISCORD_CHANNEL_ID__.allow 2>/dev/null | tr -d '"[:space:]' || true)"
+child_model_primary="$(OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get agents.defaults.model.primary 2>/dev/null | tr -d '"[:space:]' || true)"
 if [[ "$child_group_policy" != "allowlist" || "$child_guild_allow" != "true" ]]; then
   echo "ERROR: child guild allowlist wiring failed (groupPolicy=${child_group_policy:-<unset>}, channelAllow=${child_guild_allow:-<unset>})" >&2
   OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get channels.discord.guilds >&2 || true
+  exit 1
+fi
+if [[ "$child_model_primary" != openai/* && "$child_model_primary" != "openai/gpt-5.2" ]]; then
+  echo "ERROR: child model wiring failed (agents.defaults.model.primary=${child_model_primary:-<unset>})" >&2
+  exit 1
+fi
+if ! grep -q '^OPENAI_API_KEY=' "$CHILD_HOME/.openclaw-main/.env" 2>/dev/null; then
+  echo "ERROR: child OpenAI key missing in $CHILD_HOME/.openclaw-main/.env" >&2
   exit 1
 fi
 
