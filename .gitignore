@@ -1,0 +1,29 @@
+.env
+# Environment overrides or user secrets
+.env.*
+# Local Python/cache/tools
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+# OS generated files
+.DS_Store
+Thumbs.db
+# Editor/project files
+.vscode/
+.idea/
+*.code-workspace
+# Node/npm/yarn
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+# OpenClaw runtime/workspace
+.openclaw/
+*.log
+logs/
+# Miscellaneous
+*.swp
+*.swo
+# Systemd service files
+*.service
