@@ -85,7 +85,7 @@ if [[ -n "$MAIN_AUTH_PATH" && -f "$MAIN_AUTH_PATH" ]]; then
   chmod 600 "$CHILD_AUTH_PATH" 2>/dev/null || true
 fi
 
-echo "# Role: $ROLE" >> ~/.openclaw/workspace/"$AGENT_ID"/SOUL.md
+# SOUL.md and TEAM.md are updated in the final registry write step.
 
 oc_child config set agents.defaults.workspace "~/.openclaw/workspace/$AGENT_ID"
 oc_child config set agents.defaults.model.primary "openai/gpt-5.2"
@@ -190,14 +190,69 @@ fi
 
 python3 - <<'PY' "$AGENT_ID" "$PORT" "$ROLE" "$CHILD_HOME"
 import json, os, sys
-agent,port,role,home=sys.argv[1],int(sys.argv[2]),sys.argv[3],sys.argv[4]
+agent,port,role_raw,home=sys.argv[1],int(sys.argv[2]),sys.argv[3],sys.argv[4]
+if ' — ' in role_raw:
+  role, personality = role_raw.split(' — ', 1)
+else:
+  role, personality = role_raw, ''
+
+# 1) Update registry
 p=os.path.expanduser('~/.openclaw/workspace/agents/registry.json')
 os.makedirs(os.path.dirname(p), exist_ok=True)
 d={}
 if os.path.exists(p):
   try:d=json.load(open(p))
   except Exception:d={}
-d[agent]={"port":port,"role":role,"home":home,"guild_id":"__DISCORD_GUILD_ID__","channel_id":"__DISCORD_CHANNEL_ID__"}
+d[agent]={
+  "port":port,
+  "role":role.strip(),
+  "personality":personality.strip(),
+  "home":home,
+  "guild_id":"__DISCORD_GUILD_ID__",
+  "channel_id":"__DISCORD_CHANNEL_ID__"
+}
 json.dump(d, open(p,'w'), indent=2)
+
+# 2) Write agent SOUL.md identity section
+agent_ws=os.path.expanduser(f'~/.openclaw/workspace/{agent}')
+os.makedirs(agent_ws, exist_ok=True)
+soul_path=os.path.join(agent_ws, 'SOUL.md')
+base="" 
+if os.path.exists(soul_path):
+  base=open(soul_path, 'r', encoding='utf-8').read().rstrip()+"\n\n"
+identity_block=(
+  "## Identity\n\n"
+  f"- Name: {agent}\n"
+  f"- Role: {role.strip()}\n"
+  f"- Personality: {(personality or role_raw).strip()}\n"
+)
+open(soul_path, 'w', encoding='utf-8').write(base + identity_block)
+
+# 3) Add/update shared TEAM.md roster
+shared_dir=os.path.expanduser('~/.openclaw/workspace/shared')
+os.makedirs(shared_dir, exist_ok=True)
+team_path=os.path.join(shared_dir, 'TEAM.md')
+entry=(
+  f"- **{agent}**\n"
+  f"  - role: {role.strip()}\n"
+  f"  - personality: {(personality or role_raw).strip()}\n"
+  f"  - port: {port}\n"
+)
+start=f"<!-- AGENT:{agent}:START -->"
+end=f"<!-- AGENT:{agent}:END -->"
+block=f"{start}\n{entry}{end}\n"
+if os.path.exists(team_path):
+  t=open(team_path, 'r', encoding='utf-8').read()
+else:
+  t="# TEAM.md\n\n## Agents\n\n"
+if start in t and end in t:
+  import re
+  t=re.sub(re.escape(start)+r".*?"+re.escape(end)+r"\\n?", block, t, flags=re.S)
+else:
+  if "## Agents" not in t:
+    t=t.rstrip()+"\n\n## Agents\n\n"
+  t=t.rstrip()+"\n\n"+block
+open(team_path, 'w', encoding='utf-8').write(t)
+
 print(json.dumps({"agent_id":agent,"port":port,"home":home,"guild_id":"__DISCORD_GUILD_ID__","channel_id":"__DISCORD_CHANNEL_ID__","guild_configured":True,"status":"started"}))
 PY
