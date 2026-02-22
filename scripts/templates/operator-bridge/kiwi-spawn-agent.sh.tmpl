@@ -74,7 +74,6 @@ echo "# Role: $ROLE" >> ~/.openclaw/workspace/"$AGENT_ID"/SOUL.md
 oc_child config set agents.defaults.workspace "~/.openclaw/workspace/$AGENT_ID"
 oc_child config set agents.defaults.model.primary "openai/gpt-5.2"
 oc_child config set agents.defaults.model.fallbacks '[]' || true
-oc_child config set agents.main.model.primary "openai/gpt-5.2" || true
 oc_child config set gateway.mode local
 oc_child config set gateway.bind loopback
 oc_child config set gateway.auth.mode token
@@ -123,8 +122,10 @@ if os.path.exists(cfg_path):
 agents=cfg.setdefault('agents', {})
 defs=agents.setdefault('defaults', {})
 defs.setdefault('model', {})['primary']='openai/gpt-5.2'
-main=agents.setdefault('main', {})
-main.setdefault('model', {})['primary']='openai/gpt-5.2'
+defs.setdefault('model', {})['fallbacks']=[]
+# Remove invalid key for older/newer schemas that reject agents.main.
+if isinstance(agents, dict) and 'main' in agents:
+    agents.pop('main', None)
 json.dump(cfg, open(cfg_path, 'w', encoding='utf-8'), indent=2)
 PY
 
