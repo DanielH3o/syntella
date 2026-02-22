@@ -43,6 +43,22 @@ oc_child() { OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" "$@
 main_token_before="$(openclaw config get channels.discord.token 2>/dev/null | tr -d '"[:space:]' || true)"
 
 mkdir -p ~/.openclaw/workspace/"$AGENT_ID"/memory ~/.openclaw/workspace/agents "$CHILD_HOME"
+
+# Pre-clean stale/invalid keys before any `openclaw config set` calls.
+python3 - <<'PY' "$CHILD_HOME"
+import json, os, sys
+home=sys.argv[1]
+cfg_path=os.path.join(home, '.openclaw-main', 'openclaw.json')
+if os.path.exists(cfg_path):
+    try:
+        cfg=json.load(open(cfg_path, 'r', encoding='utf-8'))
+    except Exception:
+        cfg={}
+    agents=cfg.get('agents')
+    if isinstance(agents, dict) and 'main' in agents:
+        agents.pop('main', None)
+        json.dump(cfg, open(cfg_path, 'w', encoding='utf-8'), indent=2)
+PY
 cp ~/.openclaw/workspace/{AGENTS.md,SOUL.md,USER.md,MEMORY.md} ~/.openclaw/workspace/"$AGENT_ID"/ 2>/dev/null || true
 
 # Ensure child runtime has provider env fallback.
