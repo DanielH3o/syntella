@@ -247,8 +247,6 @@ with open(config_path, "w", encoding="utf-8") as f:
 PY
 }
 
-require_discord_inputs
-
 seed_workspace_context_files() {
   local ws_root="$HOME/.openclaw/workspace"
   mkdir -p "$ws_root/memory"
@@ -452,16 +450,6 @@ EOF
     [[ -f "$ws_root/memory/${yesterday}.md" ]] || echo "# ${yesterday}" >"$ws_root/memory/${yesterday}.md"
   fi
 }
-
-say "Writing workspace root context files (overwrite mode)"
-seed_workspace_context_files
-
-say "Ensuring OpenClaw gateway baseline config"
-oc config set gateway.mode local
-oc config set gateway.bind loopback
-oc config set gateway.auth.mode token
-oc config set gateway.trustedProxies '["127.0.0.1"]'
-ensure_gateway_token
 
 setup_openclaw_env_file() {
   local env_dir="/etc/openclaw"
@@ -915,24 +903,36 @@ verify_discord_dm_allowlist() {
   echo "Verified Discord DM allowlist (owner=${DISCORD_HUMAN_ID})."
 }
 
-say "Configuring model provider (shared env file + defaults)"
-setup_openclaw_env_file
-setup_openclaw_global_dotenv
-install_kiwi_exec_wrapper
-install_operator_bridge
-oc config set agents.defaults.model.primary "openai/gpt-5.2"
-# Force canonical shared workspace path for the main gateway.
-oc config set agents.defaults.workspace "~/.openclaw/workspace"
-# Force non-interactive host exec defaults for Kiwi operator workflows.
-oc config set tools.exec.host "gateway"
-oc config set tools.exec.security "full"
-oc config set tools.exec.ask "off"
-configure_exec_approvals_for_autonomous_spawning
-verify_exec_approvals
+configure_openclaw_runtime() {
+  say "Writing workspace root context files (overwrite mode)"
+  seed_workspace_context_files
 
-say "Configuring Discord channel allowlist"
-configure_discord_channel
-verify_discord_dm_allowlist
+  say "Ensuring OpenClaw gateway baseline config"
+  oc config set gateway.mode local
+  oc config set gateway.bind loopback
+  oc config set gateway.auth.mode token
+  oc config set gateway.trustedProxies '["127.0.0.1"]'
+  ensure_gateway_token
+
+  say "Configuring model provider (shared env file + defaults)"
+  setup_openclaw_env_file
+  setup_openclaw_global_dotenv
+  install_kiwi_exec_wrapper
+  install_operator_bridge
+
+  oc config set agents.defaults.model.primary "openai/gpt-5.2"
+  oc config set agents.defaults.workspace "~/.openclaw/workspace"
+  oc config set tools.exec.host "gateway"
+  oc config set tools.exec.security "full"
+  oc config set tools.exec.ask "off"
+
+  configure_exec_approvals_for_autonomous_spawning
+  verify_exec_approvals
+
+  say "Configuring Discord channel allowlist"
+  configure_discord_channel
+  verify_discord_dm_allowlist
+}
 
 detect_public_ip() {
   # Prefer cloud metadata (most reliable on DigitalOcean).
@@ -1387,39 +1387,50 @@ start_gateway_with_fallback() {
   return 1
 }
 
-say "Starting/restarting gateway service"
-if ! start_gateway_with_fallback; then
-  echo "Warning: gateway startup reported failure; continuing with frontend setup + diagnostics."
-fi
+print_summary() {
+  echo
+  echo "----------------------------------------"
+  echo "Bootstrap complete."
+  echo
+  echo "Discord mode configured."
+  echo "- Guild ID:   ${DISCORD_GUILD_ID}"
+  echo "- Channel ID: ${DISCORD_CHANNEL_ID}"
+  echo "- DM policy:  allowlist (human only: ${DISCORD_HUMAN_ID})"
+  echo "- Group mode: allowlist (configured guild/channel; non-bot humans restricted to configured human)"
+  echo "- Operator bridge API (localhost): http://127.0.0.1:${OPERATOR_BRIDGE_PORT}"
+  if [[ -n "$FRONTEND_URL" ]]; then
+    echo "- Frontend: ${FRONTEND_URL}"
+    echo "- Admin page: ${FRONTEND_URL}/admin"
+    echo "- Frontend allowlist: ${FRONTEND_ALLOWED_IP}"
+  fi
+  echo
+  echo "Gateway is loopback-only (no public OpenClaw dashboard access configured)."
+  echo "Use Discord as your primary interface."
+  echo "----------------------------------------"
+}
 
-setup_frontend_workspace
+main() {
+  require_discord_inputs
+  configure_openclaw_runtime
 
-say "Checking gateway health"
-if is_gateway_listening; then
-  echo "Gateway is listening on port 18789"
-  say "Sending Discord startup ping"
-  send_discord_boot_ping || true
-else
-  echo "Gateway not listening on port 18789"
-  echo "You can still access/edit frontend while gateway troubleshooting continues."
-fi
+  say "Starting/restarting gateway service"
+  if ! start_gateway_with_fallback; then
+    echo "Warning: gateway startup reported failure; continuing with frontend setup + diagnostics."
+  fi
 
-echo
-echo "----------------------------------------"
-echo "Bootstrap complete."
-echo
-echo "Discord mode configured."
-echo "- Guild ID:   ${DISCORD_GUILD_ID}"
-echo "- Channel ID: ${DISCORD_CHANNEL_ID}"
-echo "- DM policy:  allowlist (human only: ${DISCORD_HUMAN_ID})"
-echo "- Group mode: allowlist (configured guild/channel; non-bot humans restricted to configured human)"
-echo "- Operator bridge API (localhost): http://127.0.0.1:${OPERATOR_BRIDGE_PORT}"
-if [[ -n "$FRONTEND_URL" ]]; then
-  echo "- Frontend: ${FRONTEND_URL}"
-  echo "- Admin page: ${FRONTEND_URL}/admin"
-  echo "- Frontend allowlist: ${FRONTEND_ALLOWED_IP}"
-fi
-echo
-echo "Gateway is loopback-only (no public OpenClaw dashboard access configured)."
-echo "Use Discord as your primary interface."
-echo "----------------------------------------"
+  setup_frontend_workspace
+
+  say "Checking gateway health"
+  if is_gateway_listening; then
+    echo "Gateway is listening on port 18789"
+    say "Sending Discord startup ping"
+    send_discord_boot_ping || true
+  else
+    echo "Gateway not listening on port 18789"
+    echo "You can still access/edit frontend while gateway troubleshooting continues."
+  fi
+
+  print_summary
+}
+
+main "$@"
