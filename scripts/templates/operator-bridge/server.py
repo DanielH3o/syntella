@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import json, os, re, time, uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from subprocess import run
+from subprocess import run, TimeoutExpired
 
 TOKEN=os.environ.get("OPERATOR_BRIDGE_TOKEN","")
 PORT=int(os.environ.get("OPERATOR_BRIDGE_PORT","8787"))
@@ -103,7 +103,19 @@ class H(BaseHTTPRequestHandler):
 
     log("spawn_start", req_id=req_id, agent_id=payload["agent_id"], role=payload["role"], description=payload["description"], port=payload["port"], token="***redacted***")
     t0=time.time()
-    r=run(cmd, capture_output=True, text=True)
+    try:
+      r=run(cmd, capture_output=True, text=True, timeout=240)
+    except TimeoutExpired as e:
+      dur_ms=int((time.time()-t0)*1000)
+      log("spawn_timeout", req_id=req_id, duration_ms=dur_ms)
+      return self._send(504, {
+        "ok": False,
+        "error": "spawn_timeout",
+        "request_id": req_id,
+        "duration_ms": dur_ms,
+        "stdout": (e.stdout or "")[-4000:],
+        "stderr": (e.stderr or "")[-4000:],
+      })
     dur_ms=int((time.time()-t0)*1000)
 
     spawn_meta={}
