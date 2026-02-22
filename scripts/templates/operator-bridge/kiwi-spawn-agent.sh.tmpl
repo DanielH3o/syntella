@@ -37,12 +37,14 @@ set +a
 # Hard isolation: each spawned bot gets its own OpenClaw home/runtime.
 CHILD_HOME="$HOME/.openclaw-$AGENT_ID"
 CHILD_PROFILE="main"
+SHARED_WS_ROOT="$HOME/.openclaw/workspace"
+AGENT_WS="$SHARED_WS_ROOT/$AGENT_ID"
 
 oc_child() { OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" "$@"; }
 
 main_token_before="$(openclaw config get channels.discord.token 2>/dev/null | tr -d '"[:space:]' || true)"
 
-mkdir -p ~/.openclaw/workspace/"$AGENT_ID"/memory ~/.openclaw/workspace/agents "$CHILD_HOME"
+mkdir -p "$AGENT_WS/memory" "$SHARED_WS_ROOT/agents" "$CHILD_HOME"
 
 # Pre-clean stale/invalid keys before any `openclaw config set` calls.
 python3 - <<'PY' "$CHILD_HOME"
@@ -59,7 +61,7 @@ if os.path.exists(cfg_path):
         agents.pop('main', None)
         json.dump(cfg, open(cfg_path, 'w', encoding='utf-8'), indent=2)
 PY
-cp ~/.openclaw/workspace/{AGENTS.md,SOUL.md,USER.md,MEMORY.md} ~/.openclaw/workspace/"$AGENT_ID"/ 2>/dev/null || true
+cp "$SHARED_WS_ROOT"/{AGENTS.md,SOUL.md,USER.md,MEMORY.md} "$AGENT_WS"/ 2>/dev/null || true
 
 # Ensure child runtime has provider env fallback.
 mkdir -p "$CHILD_HOME/.openclaw-main"
@@ -87,7 +89,7 @@ fi
 
 # SOUL.md and TEAM.md are updated in the final registry write step.
 
-oc_child config set agents.defaults.workspace "~/.openclaw/workspace/$AGENT_ID"
+oc_child config set agents.defaults.workspace "$AGENT_WS"
 oc_child config set agents.defaults.model.primary "openai/gpt-5.2"
 oc_child config set agents.defaults.model.fallbacks '[]' || true
 oc_child config set gateway.mode local
@@ -171,11 +173,11 @@ if [[ -n "$main_token_before" && "$main_token_before" != "$main_token_after" ]];
   exit 1
 fi
 
-nohup env OPENCLAW_HOME="$CHILD_HOME" OPENCLAW_PROFILE="$CHILD_PROFILE" OPENAI_API_KEY="${OPENAI_API_KEY:-}" ANTHROPIC_API_KEY="" openclaw --profile "$CHILD_PROFILE" gateway --allow-unconfigured --port "$PORT" > ~/.openclaw/workspace/"$AGENT_ID"/gateway.log 2>&1 &
+nohup env OPENCLAW_HOME="$CHILD_HOME" OPENCLAW_PROFILE="$CHILD_PROFILE" OPENAI_API_KEY="${OPENAI_API_KEY:-}" ANTHROPIC_API_KEY="" openclaw --profile "$CHILD_PROFILE" gateway --allow-unconfigured --port "$PORT" > "$AGENT_WS/gateway.log" 2>&1 &
 
 ready=0
 for _ in $(seq 1 25); do
-  if grep -q "listening on ws://127.0.0.1:${PORT}" ~/.openclaw/workspace/"$AGENT_ID"/gateway.log 2>/dev/null; then
+  if grep -q "listening on ws://127.0.0.1:${PORT}" "$AGENT_WS/gateway.log" 2>/dev/null; then
     ready=1
     break
   fi
@@ -184,7 +186,7 @@ done
 
 if [[ "$ready" != "1" ]]; then
   echo "ERROR: child gateway did not become ready on port $PORT" >&2
-  tail -n 80 ~/.openclaw/workspace/"$AGENT_ID"/gateway.log >&2 || true
+  tail -n 80 "$AGENT_WS/gateway.log" >&2 || true
   exit 1
 fi
 
