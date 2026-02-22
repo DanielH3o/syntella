@@ -23,13 +23,14 @@ FRONTEND_ENABLED="${FRONTEND_ENABLED:-1}"
 FRONTEND_URL=""
 # Lock frontend to this source IP/CIDR (required when FRONTEND_ENABLED=1), e.g. "203.0.113.10" or "203.0.113.0/24".
 FRONTEND_ALLOWED_IP="${FRONTEND_ALLOWED_IP:-}"
-# Exec approval posture for autonomous Discord provisioning:
+# Exec approval posture for runtime command execution:
 # - full: no interactive exec approvals (default for this droplet kit)
 # - strict: leave host approval posture unchanged
 EXEC_APPROVAL_MODE="${EXEC_APPROVAL_MODE:-full}"
 KIWI_EXEC_TIMEOUT_SECONDS="${KIWI_EXEC_TIMEOUT_SECONDS:-60}"
 KIWI_EXEC_MAX_OUTPUT_BYTES="${KIWI_EXEC_MAX_OUTPUT_BYTES:-16384}"
 OPERATOR_BRIDGE_PORT="${OPERATOR_BRIDGE_PORT:-8787}"
+OPERATOR_BRIDGE_TOKEN=""
 
 # OPENCLAW_HOME should point to the user home base (e.g. /home/openclaw), not ~/.openclaw.
 # If inherited incorrectly from the environment, normalize it before any `openclaw config` calls.
@@ -551,9 +552,8 @@ install_operator_bridge() {
   local spawn_sh="/usr/local/bin/kiwi-spawn-agent"
   local env_dir="/etc/openclaw"
   local env_file="$env_dir/operator-bridge.env"
-  local token
 
-  token="$(python3 - <<'PY'
+  OPERATOR_BRIDGE_TOKEN="$(python3 - <<'PY'
 import secrets
 print(secrets.token_hex(24))
 PY
@@ -561,7 +561,7 @@ PY
 
   sudo install -d -m 750 -o root -g openclaw "$env_dir"
   sudo tee "$env_file" >/dev/null <<EOF
-OPERATOR_BRIDGE_TOKEN="${token}"
+OPERATOR_BRIDGE_TOKEN="${OPERATOR_BRIDGE_TOKEN}"
 OPERATOR_BRIDGE_PORT="${OPERATOR_BRIDGE_PORT}"
 EOF
   sudo chown root:openclaw "$env_file"
@@ -764,11 +764,16 @@ class H(BaseHTTPRequestHandler):
     self.send_header('Content-Length',str(len(b)))
     self.end_headers(); self.wfile.write(b)
 
+  def _auth(self):
+    return self.headers.get('Authorization','')==f'Bearer {TOKEN}'
+
   def do_GET(self):
     if self.path=="/health":
       return self._send(200,{"ok":True})
 
     if self.path=="/agents":
+      if not self._auth():
+        return self._send(401,{"error":"unauthorized"})
       reg=os.path.expanduser('~/.openclaw/workspace/agents/registry.json')
       data={}
       if os.path.exists(reg):
@@ -782,6 +787,9 @@ class H(BaseHTTPRequestHandler):
 
   def do_POST(self):
     req_id=str(uuid.uuid4())[:8]
+    if not self._auth():
+      log("unauthorized", req_id=req_id, path=self.path)
+      return self._send(401,{"error":"unauthorized"})
     if self.path!="/spawn-agent":
       return self._send(404,{"error":"not_found"})
 
@@ -1133,6 +1141,7 @@ http {
 
     location /api/ {
       proxy_pass http://127.0.0.1:${OPERATOR_BRIDGE_PORT}/;
+      proxy_set_header Authorization "Bearer ${OPERATOR_BRIDGE_TOKEN}";
       proxy_set_header Host \$host;
       proxy_set_header X-Real-IP \$remote_addr;
       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
