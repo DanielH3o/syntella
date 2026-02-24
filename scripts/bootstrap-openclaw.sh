@@ -363,9 +363,9 @@ seed_workspace_context_files() {
   today="$(date +%F)"
   yesterday="$(date -d 'yesterday' +%F 2>/dev/null || date -v-1d +%F 2>/dev/null || true)"
 
-  [[ -f "$ws_root/memory/${today}.md" ]] || echo "# ${today}" >"$ws_root/memory/${today}.md"
+  [[ -f "$kiwi_ws/memory/${today}.md" ]] || echo "# ${today}" >"$kiwi_ws/memory/${today}.md"
   if [[ -n "$yesterday" ]]; then
-    [[ -f "$ws_root/memory/${yesterday}.md" ]] || echo "# ${yesterday}" >"$ws_root/memory/${yesterday}.md"
+    [[ -f "$kiwi_ws/memory/${yesterday}.md" ]] || echo "# ${yesterday}" >"$kiwi_ws/memory/${yesterday}.md"
   fi
 }
 setup_openclaw_env_file() {
