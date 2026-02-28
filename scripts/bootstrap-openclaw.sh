@@ -612,6 +612,7 @@ configure_openclaw_runtime() {
 
   oc config set agents.defaults.model.primary "moonshot/kimi-k2.5"
   oc config set agents.defaults.workspace "~/.openclaw/workspace/syntella"
+  oc config set agents.defaults.sandbox.workspaceAccess "rw"
   oc config set agents.defaults.heartbeat.every "15m"
   oc config set agents.defaults.heartbeat.target "discord"
   # Ensure channel ID is stored as string (not number) in JSON

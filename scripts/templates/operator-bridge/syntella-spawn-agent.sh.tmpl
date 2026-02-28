@@ -104,6 +104,7 @@ fi
 
 # Set basic config (ignore errors - we'll set arrays properly via Python)
 oc_child config set agents.defaults.workspace "$AGENT_WS" || true
+oc_child config set agents.defaults.sandbox.workspaceAccess "rw" || true
 oc_child config set agents.defaults.model.primary "moonshot/kimi-k2.5" || true
 oc_child config set agents.defaults.model.fallbacks '[]' || true
 oc_child config set gateway.mode local || true
