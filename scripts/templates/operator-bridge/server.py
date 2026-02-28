@@ -97,7 +97,7 @@ class H(BaseHTTPRequestHandler):
       return self._send(400, err)
 
     full_role = f"{payload['role']} — {payload['description']}"
-    cmd=["/usr/local/bin/kiwi-spawn-agent", payload["agent_id"], full_role, payload["discord_token"]]
+    cmd=["/usr/local/bin/syntella-spawn-agent", payload["agent_id"], full_role, payload["discord_token"]]
     if payload["port"]:
       cmd.append(payload["port"])
 

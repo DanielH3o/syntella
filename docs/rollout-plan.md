@@ -14,7 +14,7 @@
 
 ## Phase 3: Productized onboarding
 
-- [ ] Setup wizard (`./bin/new-openclaw-droplet`)
+- [ ] Setup wizard (`./bin/new-syntella`)
 - [ ] Prompt for do token, ssh key, hostname, region
 - [ ] Create droplet + wait for health checks
 - [ ] Print dashboard URL + initial login/token instructions

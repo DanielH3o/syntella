@@ -6,7 +6,7 @@ ROLE="${2:-}"
 DISCORD_BOT_TOKEN_AGENT="${3:-}"
 PORT="${4:-}"
 
-[[ -n "$AGENT_ID" && -n "$ROLE" && -n "$DISCORD_BOT_TOKEN_AGENT" ]] || { echo "usage: kiwi-spawn-agent <agent_id> <role> <discord_token> [port]"; exit 2; }
+[[ -n "$AGENT_ID" && -n "$ROLE" && -n "$DISCORD_BOT_TOKEN_AGENT" ]] || { echo "usage: syntella-spawn-agent <agent_id> <role> <discord_token> [port]"; exit 2; }
 
 if [[ -z "$PORT" ]]; then
   PORT="$(python3 - <<'PY'
@@ -69,16 +69,15 @@ print(' '.join(w.capitalize() for w in s.split()) or sys.argv[1])
 PY
 )"
 sed -i "s|__AGENT_NAME__|${DISPLAY_NAME}|g" "$AGENT_WS/AGENTS.md" 2>/dev/null || true
-cp "$SHARED_WS_ROOT/kiwi"/{SOUL.md,USER.md,MEMORY.md} "$AGENT_WS"/ 2>/dev/null || true
+cp "$SHARED_WS_ROOT/syntella"/{SOUL.md,USER.md,MEMORY.md} "$AGENT_WS"/ 2>/dev/null || true
 
 # Ensure child runtime has provider env fallback.
 mkdir -p "$CHILD_HOME/.openclaw-main"
 if [[ -f "$HOME/.openclaw/.env" ]]; then
   cp "$HOME/.openclaw/.env" "$CHILD_HOME/.env"
-elif [[ -n "${OPENAI_API_KEY:-}" || -n "${ANTHROPIC_API_KEY:-}" ]]; then
+elif [[ -n "${MOONSHOT_API_KEY:-}" ]]; then
   {
-    [[ -n "${OPENAI_API_KEY:-}" ]] && echo "OPENAI_API_KEY=${OPENAI_API_KEY}"
-    [[ -n "${ANTHROPIC_API_KEY:-}" ]] && echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}"
+    [[ -n "${MOONSHOT_API_KEY:-}" ]] && echo "MOONSHOT_API_KEY=${MOONSHOT_API_KEY}"
   } > "$CHILD_HOME/.env"
 fi
 # Some builds resolve runtime env fallback from profile-scoped state dir.
@@ -98,7 +97,7 @@ fi
 # SOUL.md and TEAM.md are updated in the final registry write step.
 
 oc_child config set agents.defaults.workspace "$AGENT_WS"
-oc_child config set agents.defaults.model.primary "openai/gpt-5.2"
+oc_child config set agents.defaults.model.primary "moonshot/kimi-k2.5"
 oc_child config set agents.defaults.model.fallbacks '[]' || true
 oc_child config set gateway.mode local
 oc_child config set gateway.bind loopback
@@ -147,7 +146,7 @@ if os.path.exists(cfg_path):
         cfg={}
 agents=cfg.setdefault('agents', {})
 defs=agents.setdefault('defaults', {})
-defs.setdefault('model', {})['primary']='openai/gpt-5.2'
+defs.setdefault('model', {})['primary']='moonshot/kimi-k2.5'
 defs.setdefault('model', {})['fallbacks']=[]
 # Remove invalid key for older/newer schemas that reject agents.main.
 if isinstance(agents, dict) and 'main' in agents:
@@ -166,12 +165,12 @@ if [[ "$child_group_policy" != "allowlist" || "$child_guild_allow" != "true" ]];
   OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get channels.discord.guilds >&2 || true
   exit 1
 fi
-if [[ "$child_model_primary" != openai/* && "$child_model_primary" != "openai/gpt-5.2" ]]; then
+if [[ "$child_model_primary" != moonshot/* && "$child_model_primary" != "moonshot/kimi-k2.5" ]]; then
   echo "ERROR: child model wiring failed (agents.defaults.model.primary=${child_model_primary:-<unset>})" >&2
   exit 1
 fi
-if ! grep -q '^OPENAI_API_KEY=' "$CHILD_HOME/.openclaw-main/.env" 2>/dev/null; then
-  echo "ERROR: child OpenAI key missing in $CHILD_HOME/.openclaw-main/.env" >&2
+if ! grep -q '^MOONSHOT_API_KEY=' "$CHILD_HOME/.openclaw-main/.env" 2>/dev/null; then
+  echo "ERROR: child Moonshot key missing in $CHILD_HOME/.openclaw-main/.env" >&2
   exit 1
 fi
 
@@ -181,7 +180,7 @@ if [[ -n "$main_token_before" && "$main_token_before" != "$main_token_after" ]];
   exit 1
 fi
 
-nohup env OPENCLAW_HOME="$CHILD_HOME" OPENCLAW_PROFILE="$CHILD_PROFILE" OPENAI_API_KEY="${OPENAI_API_KEY:-}" ANTHROPIC_API_KEY="" openclaw --profile "$CHILD_PROFILE" gateway --allow-unconfigured --port "$PORT" > "$AGENT_WS/gateway.log" 2>&1 &
+nohup env OPENCLAW_HOME="$CHILD_HOME" OPENCLAW_PROFILE="$CHILD_PROFILE" MOONSHOT_API_KEY="${MOONSHOT_API_KEY:-}" openclaw --profile "$CHILD_PROFILE" gateway --allow-unconfigured --port "$PORT" > "$AGENT_WS/gateway.log" 2>&1 &
 
 ready=0
 for _ in $(seq 1 25); do

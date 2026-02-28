@@ -1,4 +1,4 @@
-# openclaw-droplet-kit
+# syntella-kit
 
 Opinionated bootstrap for running OpenClaw on a DigitalOcean Ubuntu droplet with **Discord as the primary interface**.
 
@@ -9,7 +9,7 @@ Opinionated bootstrap for running OpenClaw on a DigitalOcean Ubuntu droplet with
 - Configures Discord bot token
 - Restricts Discord ingress to a single guild/channel allowlist
 - Enables Discord DMs only for the configured human allowlist
-- Installs `/usr/local/bin/kiwi-exec` for owner-DM `/exec` shell command execution (timeout + output cap + audit log)
+- Installs `/usr/local/bin/syntella-exec` for owner-DM `/exec` shell command execution (timeout + output cap + audit log)
 - Sets `tools.exec` defaults to `host=gateway security=full ask=off` for non-interactive operator execution
 - Installs a local Operator Bridge (`127.0.0.1:8787`) with `/spawn-agent` endpoint for dedicated-agent provisioning
 - Spawn path now uses per-agent OpenClaw homes (`~/.openclaw-<agent_id>`) to prevent main-token/config collisions
@@ -48,7 +48,7 @@ export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 # export FRONTEND_ENABLED=0
 
 # 3) Run bootstrap
-curl -fsSL https://raw.githubusercontent.com/DanielH3o/openclaw-droplet/main/scripts/bootstrap-root.sh | bash
+curl -fsSL https://raw.githubusercontent.com/DanielH3o/syntella/main/scripts/bootstrap-root.sh | bash
 ```
 
 ## Optional: deterministic SSH key install for `openclaw` user
@@ -59,7 +59,7 @@ export DISCORD_BOT_TOKEN="YOUR_DISCORD_BOT_TOKEN"
 export DISCORD_TARGET="YOUR_GUILD_ID/YOUR_CHANNEL_ID"
 export DISCORD_HUMAN_ID="YOUR_DISCORD_USER_ID"
 export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
-curl -fsSL https://raw.githubusercontent.com/DanielH3o/openclaw-droplet/main/scripts/bootstrap-root.sh | bash
+curl -fsSL https://raw.githubusercontent.com/DanielH3o/syntella/main/scripts/bootstrap-root.sh | bash
 ```
 
 After bootstrap, frontend files are in:
@@ -85,8 +85,8 @@ adduser openclaw
 usermod -aG sudo openclaw
 su - openclaw
 
-git clone https://github.com/DanielH3o/openclaw-droplet.git
-cd openclaw-droplet
+git clone https://github.com/DanielH3o/syntella.git
+cd syntella
 export DISCORD_BOT_TOKEN="YOUR_DISCORD_BOT_TOKEN"
 export DISCORD_TARGET="YOUR_GUILD_ID/YOUR_CHANNEL_ID"
 export DISCORD_HUMAN_ID="YOUR_DISCORD_USER_ID"
@@ -99,7 +99,7 @@ bash scripts/bootstrap-openclaw.sh
 After bootstrap, run:
 
 ```bash
-sudo -u openclaw -H bash /home/openclaw/openclaw-droplet/scripts/smoke-test.sh
+sudo -u openclaw -H bash /home/openclaw/syntella/scripts/smoke-test.sh
 ```
 
 This checks gateway listener, Discord config, project files, and local/public frontend responses.

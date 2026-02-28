@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# openclaw-droplet-kit bootstrap
+# syntella bootstrap
 # Target: Ubuntu 22.04/24.04 on DigitalOcean
 
 if [[ "${EUID}" -eq 0 ]]; then
@@ -19,7 +19,7 @@ DISCORD_BOT_TOKEN="${DISCORD_BOT_TOKEN:-}"
 DISCORD_TARGET="${DISCORD_TARGET:-}"
 # Accept common aliases to reduce bootstrap env mistakes.
 DISCORD_HUMAN_ID="${DISCORD_HUMAN_ID:-${DISCORD_USER_ID:-${DISCORD_HUMAN:-}}}"
-OPENAI_API_KEY="${OPENAI_API_KEY:-}"
+MOONSHOT_API_KEY="${MOONSHOT_API_KEY:-}"
 DISCORD_GUILD_ID=""
 DISCORD_CHANNEL_ID=""
 FRONTEND_ENABLED="${FRONTEND_ENABLED:-1}"
@@ -30,8 +30,8 @@ FRONTEND_ALLOWED_IP="${FRONTEND_ALLOWED_IP:-}"
 # - full: no interactive exec approvals (default for this droplet kit)
 # - strict: leave host approval posture unchanged
 EXEC_APPROVAL_MODE="${EXEC_APPROVAL_MODE:-full}"
-KIWI_EXEC_TIMEOUT_SECONDS="${KIWI_EXEC_TIMEOUT_SECONDS:-60}"
-KIWI_EXEC_MAX_OUTPUT_BYTES="${KIWI_EXEC_MAX_OUTPUT_BYTES:-16384}"
+SYNTELLA_EXEC_TIMEOUT_SECONDS="${SYNTELLA_EXEC_TIMEOUT_SECONDS:-60}"
+SYNTELLA_EXEC_MAX_OUTPUT_BYTES="${SYNTELLA_EXEC_MAX_OUTPUT_BYTES:-16384}"
 OPERATOR_BRIDGE_PORT="${OPERATOR_BRIDGE_PORT:-8787}"
 OPERATOR_BRIDGE_TOKEN=""
 
@@ -107,8 +107,8 @@ render_template() {
 }
 
 assert_templates_exist() {
-  local required=(
-    "$TEMPLATE_DIR/workspace/AGENTS.KIWI.md.tmpl"
+  local required=(  
+    "$TEMPLATE_DIR/workspace/AGENTS.SYNTELLA.md.tmpl"
     "$TEMPLATE_DIR/workspace/AGENTS.SPAWNED.md.tmpl"
     "$TEMPLATE_DIR/workspace/SOUL.md"
     "$TEMPLATE_DIR/workspace/USER.md"
@@ -120,7 +120,7 @@ assert_templates_exist() {
     "$TEMPLATE_DIR/frontend/app.js"
     "$TEMPLATE_DIR/frontend/admin.js"
     "$TEMPLATE_DIR/frontend/README.md"
-    "$TEMPLATE_DIR/operator-bridge/kiwi-spawn-agent.sh.tmpl"
+    "$TEMPLATE_DIR/operator-bridge/syntella-spawn-agent.sh.tmpl"
     "$TEMPLATE_DIR/operator-bridge/server.py"
   )
   local f
@@ -261,9 +261,9 @@ require_discord_inputs() {
     exit 1
   fi
 
-  if [[ -z "$OPENAI_API_KEY" ]]; then
-    echo "Missing OPENAI_API_KEY."
-    echo "Export OPENAI_API_KEY before running this script."
+  if [[ -z "$MOONSHOT_API_KEY" ]]; then
+    echo "Missing MOONSHOT_API_KEY."
+    echo "Export MOONSHOT_API_KEY before running this script."
     exit 1
   fi
 
@@ -348,24 +348,26 @@ PY
 seed_workspace_context_files() {
   local ws_root="$HOME/.openclaw/workspace"
   local ws_tmpl="$TEMPLATE_DIR/workspace"
-  local kiwi_ws="$ws_root/kiwi"
+  local syntella_ws="$ws_root/syntella"
   local shared_ws="$ws_root/shared"
-  mkdir -p "$kiwi_ws" "$kiwi_ws/memory" "$shared_ws"
+  mkdir -p "$syntella_ws" "$syntella_ws/memory" "$shared_ws"
 
-  render_template "$ws_tmpl/AGENTS.KIWI.md.tmpl" "$kiwi_ws/AGENTS.md"
+  render_template "$ws_tmpl/AGENTS.SYNTELLA.md.tmpl" "$syntella_ws/AGENTS.md"
   render_template "$ws_tmpl/AGENTS.SPAWNED.md.tmpl" "$ws_root/AGENTS.SPAWNED.md"
-  cp "$ws_tmpl/SOUL.md" "$kiwi_ws/SOUL.md"
+  render_template "$ws_tmpl/HEARTBEAT.MAIN.md.tmpl" "$syntella_ws/HEARTBEAT.md"
+  cp "$ws_tmpl/SOUL.md" "$syntella_ws/SOUL.md"
   cp "$ws_tmpl/USER.md" "$shared_ws/USER.md"                                                 
-  cp "$ws_tmpl/MEMORY.md" "$kiwi_ws/MEMORY.md"
+  cp "$ws_tmpl/MEMORY.md" "$syntella_ws/MEMORY.md"
   cp "$ws_tmpl/TEAM.md" "$shared_ws/TEAM.md"
+  cp "$ws_tmpl/TASKS.md" "$shared_ws/TASKS.md"
 
   local today yesterday
   today="$(date +%F)"
   yesterday="$(date -d 'yesterday' +%F 2>/dev/null || date -v-1d +%F 2>/dev/null || true)"
 
-  [[ -f "$kiwi_ws/memory/${today}.md" ]] || echo "# ${today}" >"$kiwi_ws/memory/${today}.md"
+  [[ -f "$syntella_ws/memory/${today}.md" ]] || echo "# ${today}" >"$syntella_ws/memory/${today}.md"
   if [[ -n "$yesterday" ]]; then
-    [[ -f "$kiwi_ws/memory/${yesterday}.md" ]] || echo "# ${yesterday}" >"$kiwi_ws/memory/${yesterday}.md"
+    [[ -f "$syntella_ws/memory/${yesterday}.md" ]] || echo "# ${yesterday}" >"$syntella_ws/memory/${yesterday}.md"
   fi
 }
 setup_openclaw_env_file() {
@@ -379,7 +381,7 @@ setup_openclaw_env_file() {
   sudo tee "$env_file" >/dev/null <<EOF
 # Shared OpenClaw runtime environment
 # Source this file before starting OpenClaw-related processes.
-OPENAI_API_KEY="${OPENAI_API_KEY}"
+MOONSHOT_API_KEY="${MOONSHOT_API_KEY}"
 OPENCLAW_HOME="${HOME}"
 EOF
   sudo chown root:openclaw "$env_file"
@@ -403,14 +405,14 @@ setup_openclaw_global_dotenv() {
   cat >"$dotenv_file" <<EOF
 # OpenClaw daemon-level environment fallback.
 # Gateway reads this even when it does not inherit shell env.
-OPENAI_API_KEY="${OPENAI_API_KEY}"
+MOONSHOT_API_KEY="${MOONSHOT_API_KEY}"
 EOF
   chmod 600 "$dotenv_file"
 }
 
-install_kiwi_exec_wrapper() {
-  local wrapper_path="/usr/local/bin/kiwi-exec"
-  local log_file="$HOME/.openclaw/logs/kiwi-exec.log"
+install_syntella_exec_wrapper() {
+  local wrapper_path="/usr/local/bin/syntella-exec"
+  local log_file="$HOME/.openclaw/logs/syntella-exec.log"
 
   sudo install -d -m 755 -o root -g root /usr/local/bin
   mkdir -p "$HOME/.openclaw/logs"
@@ -419,12 +421,12 @@ install_kiwi_exec_wrapper() {
 #!/usr/bin/env bash
 set -euo pipefail
 
-TIMEOUT_SECONDS="${KIWI_EXEC_TIMEOUT_SECONDS}"
-MAX_OUTPUT_BYTES="${KIWI_EXEC_MAX_OUTPUT_BYTES}"
+TIMEOUT_SECONDS="${SYNTELLA_EXEC_TIMEOUT_SECONDS}"
+MAX_OUTPUT_BYTES="${SYNTELLA_EXEC_MAX_OUTPUT_BYTES}"
 LOG_FILE="${log_file}"
 
 if [[ "\$#" -lt 1 ]]; then
-  echo "usage: kiwi-exec '<command>'" >&2
+  echo "usage: syntella-exec '<command>'" >&2
   exit 2
 fi
 
@@ -454,7 +456,7 @@ EOF
 install_operator_bridge() {
   local bridge_dir="$HOME/.openclaw/operator-bridge"
   local bridge_py="$bridge_dir/server.py"
-  local spawn_sh="/usr/local/bin/kiwi-spawn-agent"
+  local spawn_sh="/usr/local/bin/syntella-spawn-agent"
   local env_dir="/etc/openclaw"
   local env_file="$env_dir/operator-bridge.env"
 
@@ -472,8 +474,8 @@ EOF
   sudo chown root:openclaw "$env_file"
   sudo chmod 640 "$env_file"
 
-  render_template "$TEMPLATE_DIR/operator-bridge/kiwi-spawn-agent.sh.tmpl" "$HOME/.openclaw/kiwi-spawn-agent.sh"
-  sudo install -m 755 "$HOME/.openclaw/kiwi-spawn-agent.sh" "$spawn_sh"
+  render_template "$TEMPLATE_DIR/operator-bridge/syntella-spawn-agent.sh.tmpl" "$HOME/.openclaw/syntella-spawn-agent.sh"
+  sudo install -m 755 "$HOME/.openclaw/syntella-spawn-agent.sh" "$spawn_sh"
 
   mkdir -p "$bridge_dir"
   mkdir -p "$bridge_dir"
@@ -569,11 +571,14 @@ configure_openclaw_runtime() {
   say "Configuring model provider (shared env file + defaults)"
   setup_openclaw_env_file
   setup_openclaw_global_dotenv
-  install_kiwi_exec_wrapper
+  install_syntella_exec_wrapper
   install_operator_bridge
 
-  oc config set agents.defaults.model.primary "openai/gpt-5.2"
-  oc config set agents.defaults.workspace "~/.openclaw/workspace/kiwi"
+  oc config set agents.defaults.model.primary "moonshot/kimi-k2.5"
+  oc config set agents.defaults.workspace "~/.openclaw/workspace/syntella"
+  oc config set agents.defaults.heartbeat.every "15m"
+  oc config set agents.defaults.heartbeat.target "discord"
+  oc config set agents.defaults.heartbeat.to "${DISCORD_CHANNEL_ID}"
   oc config set tools.exec.host "gateway"
   oc config set tools.exec.security "full"
   oc config set tools.exec.ask "off"

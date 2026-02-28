@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Smoke test for openclaw-droplet bootstrap output.
+# Smoke test for syntella bootstrap output.
 # Run as openclaw user on the droplet after bootstrap.
 
 say() { echo -e "\n==> $*"; }
@@ -53,17 +53,17 @@ else
   fail "Discord DM allowlist misconfigured (enabled=${DM_ENABLED}, policy=${DM_POLICY}, owner=${DM_OWNER})"
 fi
 
-say "Checking Kiwi exec wrapper"
-if [[ -x "/usr/local/bin/kiwi-exec" ]]; then
-  pass "kiwi-exec installed"
+say "Checking Syntella exec wrapper"
+if [[ -x "/usr/local/bin/syntella-exec" ]]; then
+  pass "syntella-exec installed"
 else
-  fail "Missing /usr/local/bin/kiwi-exec"
+  fail "Missing /usr/local/bin/syntella-exec"
 fi
 
-if /usr/local/bin/kiwi-exec "echo kiwi-smoke" | grep -q "kiwi-smoke"; then
-  pass "kiwi-exec runs commands"
+if /usr/local/bin/syntella-exec "echo syntella-smoke" | grep -q "syntella-smoke"; then
+  pass "syntella-exec runs commands"
 else
-  fail "kiwi-exec command execution check failed"
+  fail "syntella-exec command execution check failed"
 fi
 
 say "Checking exec runtime defaults"

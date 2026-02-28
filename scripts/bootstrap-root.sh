@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Root-level non-interactive bootstrap for fresh Ubuntu droplets.
 # Usage (as root):
-#   curl -fsSL https://raw.githubusercontent.com/DanielH3o/openclaw-droplet/main/scripts/bootstrap-root.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/DanielH3o/syntella/main/scripts/bootstrap-root.sh | bash
 # Required env vars:
 #   export DISCORD_BOT_TOKEN="..."
 #   export DISCORD_TARGET="<guildId>/<channelId>"
@@ -14,11 +14,11 @@ set -euo pipefail
 #   export EXEC_APPROVAL_MODE=strict   # keep interactive exec approvals (default is full)
 # Optional explicit key injection:
 #   OPENCLAW_AUTHORIZED_KEY="$(cat ~/.ssh/id_ed25519.pub)" \
-#   curl -fsSL https://raw.githubusercontent.com/DanielH3o/openclaw-droplet/main/scripts/bootstrap-root.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/DanielH3o/syntella/main/scripts/bootstrap-root.sh | bash
 
 OPENCLAW_USER="${OPENCLAW_USER:-openclaw}"
-REPO_URL="${REPO_URL:-https://github.com/DanielH3o/openclaw-droplet.git}"
-REPO_DIR="${REPO_DIR:-/home/${OPENCLAW_USER}/openclaw-droplet}"
+REPO_URL="${REPO_URL:-https://github.com/DanielH3o/syntella.git}"
+REPO_DIR="${REPO_DIR:-/home/${OPENCLAW_USER}/syntella}"
 
 if [[ "$EUID" -ne 0 ]]; then
   echo "Please run as root."
@@ -109,7 +109,7 @@ chmod 440 /etc/sudoers.d/90-openclaw-bootstrap
 say "Configuring SSH authorized_keys for '$OPENCLAW_USER'"
 install_authorized_keys_for_user "$OPENCLAW_USER"
 
-say "Cloning/updating openclaw-droplet repo"
+say "Cloning/updating syntella repo"
 sudo -u "$OPENCLAW_USER" -H bash -lc "git config --global --add safe.directory '$REPO_DIR'"
 if [[ -d "$REPO_DIR/.git" ]]; then
   sudo -u "$OPENCLAW_USER" -H bash -lc "cd '$REPO_DIR' && git pull --ff-only"
@@ -118,7 +118,7 @@ else
 fi
 
 say "Running user bootstrap script"
-sudo --preserve-env=DISCORD_BOT_TOKEN,DISCORD_TARGET,DISCORD_HUMAN_ID,DISCORD_USER_ID,DISCORD_HUMAN,OPENAI_API_KEY,ANTHROPIC_API_KEY,FRONTEND_ENABLED,FRONTEND_ALLOWED_IP,EXEC_APPROVAL_MODE,OPERATOR_BRIDGE_PORT,KIWI_EXEC_TIMEOUT_SECONDS,KIWI_EXEC_MAX_OUTPUT_BYTES -u "$OPENCLAW_USER" -H bash -lc "cd '$REPO_DIR' && bash scripts/bootstrap-openclaw.sh"
+sudo --preserve-env=DISCORD_BOT_TOKEN,DISCORD_TARGET,DISCORD_HUMAN_ID,DISCORD_USER_ID,DISCORD_HUMAN,OPENAI_API_KEY,ANTHROPIC_API_KEY,FRONTEND_ENABLED,FRONTEND_ALLOWED_IP,EXEC_APPROVAL_MODE,OPERATOR_BRIDGE_PORT,SYNTELLA_EXEC_TIMEOUT_SECONDS,SYNTELLA_EXEC_MAX_OUTPUT_BYTES -u "$OPENCLAW_USER" -H bash -lc "cd '$REPO_DIR' && bash scripts/bootstrap-openclaw.sh"
 
 say "Installing global shim: /usr/local/bin/openclaw (runs as $OPENCLAW_USER)"
 cat >/usr/local/bin/openclaw <<EOF
