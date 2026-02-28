@@ -45,6 +45,8 @@ CHILD_PROFILE="main"
 SHARED_WS_ROOT="$HOME/.openclaw/workspace"
 AGENT_WS="$SHARED_WS_ROOT/$AGENT_ID"
 
+echo "$(date -Iseconds) VARS: CHILD_HOME='${CHILD_HOME}', AGENT_WS='${AGENT_WS}'" >> "$DEBUG_LOG"
+
 oc_child() { OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" "$@"; }
 
 main_token_before="$(openclaw config get channels.discord.token 2>/dev/null | tr -d '"[:space:]' || true)"
@@ -145,6 +147,8 @@ PY
 # Skip doctor --fix as it may remove allowFrom arrays - set config directly via Python instead
 # OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" doctor --fix >/dev/null 2>&1 || true
 
+echo "$(date -Iseconds) BEFORE_PYTHON_CONFIG" >> "$DEBUG_LOG"
+
 # Set array values via Python
 PY_LOG="$AGENT_WS/python-config.log"
 echo "$(date -Iseconds) DEBUG: Starting Python config script..." >> "$PY_LOG"
@@ -215,6 +219,8 @@ with open(log_path, 'a') as log:
 VERIFY
 fi
 
+echo "$(date -Iseconds) AFTER_PYTHON_CONFIG" >> "$DEBUG_LOG"
+
 child_group_policy="$(OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get channels.discord.groupPolicy 2>/dev/null | tr -d '"[:space:]' || true)"
 child_guild_allow="$(OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get channels.discord.guilds.__DISCORD_GUILD_ID__.channels.__DISCORD_CHANNEL_ID__.allow 2>/dev/null | tr -d '"[:space:]' || true)"
 child_model_primary="$(OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get agents.defaults.model.primary 2>/dev/null | tr -d '"[:space:]' || true)"
@@ -237,6 +243,8 @@ if [[ -n "$main_token_before" && "$main_token_before" != "$main_token_after" ]];
   echo "ERROR: main profile discord token changed during child spawn; aborting to protect main bot." >&2
   exit 1
 fi
+
+echo "$(date -Iseconds) BEFORE_GATEWAY_START" >> "$DEBUG_LOG"
 
 nohup env OPENCLAW_HOME="$CHILD_HOME" OPENCLAW_PROFILE="$CHILD_PROFILE" MOONSHOT_API_KEY="${MOONSHOT_API_KEY:-}" openclaw --profile "$CHILD_PROFILE" gateway --allow-unconfigured --port "$PORT" > "$AGENT_WS/gateway.log" 2>&1 &
 
