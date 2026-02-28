@@ -111,45 +111,12 @@ oc_child config set channels.discord.dm.groupEnabled false
 # Newer OpenClaw schemas may use flattened DM keys; set both forms.
 oc_child config set channels.discord.dmPolicy "allowlist"
 
-# Set array values via Python (oc config set doesn't handle JSON arrays properly)
-python3 - <<'PY' "$CHILD_HOME" "__DISCORD_HUMAN_ID__" "__DISCORD_GUILD_ID__" "__DISCORD_CHANNEL_ID__"
-import json, os, sys
-home, human_id, guild_id, channel_id = sys.argv[1:5]
-cfg_path = os.path.join(home, '.openclaw-main', 'openclaw.json')
-if os.path.exists(cfg_path):
-    with open(cfg_path, 'r', encoding='utf-8') as f:
-        cfg = json.load(f)
-else:
-    cfg = {}
-
-channels = cfg.setdefault('channels', {})
-discord = channels.setdefault('discord', {})
-
-# Set allowFrom arrays properly
-discord['allowFrom'] = [human_id]
-dm = discord.setdefault('dm', {})
-dm['allowFrom'] = [human_id]
-
-# Set guilds with proper structure
-discord['guilds'] = {
-    guild_id: {
-        "requireMention": False,
-        "users": [human_id],
-        "channels": {
-            channel_id: {"allow": True, "requireMention": False}
-        }
-    }
-}
-
-with open(cfg_path, 'w', encoding='utf-8') as f:
-    json.dump(cfg, f, indent=2)
-PY
 oc_child config set tools.exec.host gateway
 oc_child config set tools.exec.security full
 oc_child config set tools.exec.ask off
 
 # Hard-pin model keys directly in JSON for schema/version drift tolerance.
-python3 - <<'PY' "$CHILD_HOME"
+python3 - "$CHILD_HOME" <<PY
 import json, os, sys
 home=sys.argv[1]
 cfg_path=os.path.join(home, '.openclaw-main', 'openclaw.json')
@@ -172,6 +139,40 @@ PY
 
 # Normalize schema changes before startup (required on some builds).
 OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" doctor --fix >/dev/null 2>&1 || true
+
+# Set array values via Python AFTER doctor --fix (so they don't get overwritten)
+python3 - "$CHILD_HOME" "__DISCORD_HUMAN_ID__" "__DISCORD_GUILD_ID__" "__DISCORD_CHANNEL_ID__" <<PY
+import json, os, sys
+home, human_id, guild_id, channel_id = sys.argv[1:5]
+cfg_path = os.path.join(home, '.openclaw-main', 'openclaw.json')
+if os.path.exists(cfg_path):
+    with open(cfg_path, 'r', encoding='utf-8') as f:
+        cfg = json.load(f)
+else:
+    cfg = {}
+
+channels = cfg.setdefault('channels', {})
+discord = channels.setdefault('discord', {})
+
+# Set allowFrom arrays properly (these MUST be arrays, not strings)
+discord['allowFrom'] = [human_id]
+dm = discord.setdefault('dm', {})
+dm['allowFrom'] = [human_id]
+
+# Set guilds with proper structure
+discord['guilds'] = {
+    guild_id: {
+        "requireMention": False,
+        "users": [human_id],
+        "channels": {
+            channel_id: {"allow": True, "requireMention": False}
+        }
+    }
+}
+
+with open(cfg_path, 'w', encoding='utf-8') as f:
+    json.dump(cfg, f, indent=2)
+PY
 
 child_group_policy="$(OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get channels.discord.groupPolicy 2>/dev/null | tr -d '"[:space:]' || true)"
 child_guild_allow="$(OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get channels.discord.guilds.__DISCORD_GUILD_ID__.channels.__DISCORD_CHANNEL_ID__.allow 2>/dev/null | tr -d '"[:space:]' || true)"
