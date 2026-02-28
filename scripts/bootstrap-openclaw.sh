@@ -10,6 +10,11 @@ if [[ "${EUID}" -eq 0 ]]; then
   exit 1
 fi
 
+say() { echo -e "\n==> $*"; }
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TEMPLATE_DIR="$SCRIPT_DIR/templates"
+
 # Auto-source local .env file if present (for curl|bash runs where exports don't carry over)
 if [[ -f "$SCRIPT_DIR/.env" ]]; then
   set -a
@@ -17,11 +22,6 @@ if [[ -f "$SCRIPT_DIR/.env" ]]; then
   source "$SCRIPT_DIR/.env"
   set +a
 fi
-
-say() { echo -e "\n==> $*"; }
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TEMPLATE_DIR="$SCRIPT_DIR/templates"
 
 DISCORD_BOT_TOKEN="${DISCORD_BOT_TOKEN:-}"
 DISCORD_TARGET="${DISCORD_TARGET:-}"
