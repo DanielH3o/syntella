@@ -482,6 +482,12 @@ EOF
   sudo chown root:openclaw "$env_file"
   sudo chmod 640 "$env_file"
 
+  # Debug: Show Discord vars before rendering
+  echo "DEBUG: Rendering spawn template with:"
+  echo "  DISCORD_HUMAN_ID='${DISCORD_HUMAN_ID:-}'"
+  echo "  DISCORD_GUILD_ID='${DISCORD_GUILD_ID:-}'"
+  echo "  DISCORD_CHANNEL_ID='${DISCORD_CHANNEL_ID:-}'"
+
   # Validate Discord vars are set before rendering spawn template
   if [[ -z "${DISCORD_HUMAN_ID:-}" || -z "${DISCORD_GUILD_ID:-}" || -z "${DISCORD_CHANNEL_ID:-}" ]]; then
     echo "ERROR: Discord variables not set for spawn template rendering."
@@ -491,10 +497,17 @@ EOF
 
   render_template "$TEMPLATE_DIR/operator-bridge/syntella-spawn-agent.sh.tmpl" "$HOME/.openclaw/syntella-spawn-agent.sh"
 
-  # Verify placeholders were actually substituted
+  # Verify placeholders were actually substituted (check for remaining __ patterns or empty values)
   if grep -q '__DISCORD_' "$HOME/.openclaw/syntella-spawn-agent.sh"; then
-    echo "ERROR: Spawn script still contains unsubsted placeholders:"
+    echo "ERROR: Spawn script still contains unsubstituted placeholders:"
     grep '__DISCORD_' "$HOME/.openclaw/syntella-spawn-agent.sh" | head -5
+    exit 1
+  fi
+
+  # Also check for empty allowFrom arrays which indicate substitution with empty string
+  if grep -q 'allowFrom.*\[\]' "$HOME/.openclaw/syntella-spawn-agent.sh"; then
+    echo "ERROR: Spawn script has empty allowFrom arrays (Discord ID substitution failed):"
+    grep 'allowFrom.*\[\]' "$HOME/.openclaw/syntella-spawn-agent.sh" | head -5
     exit 1
   fi
 

@@ -107,26 +107,43 @@ oc_child config set channels.discord.allowBots true
 oc_child config set channels.discord.token "$DISCORD_BOT_TOKEN_AGENT"
 oc_child config set channels.discord.dm.enabled true
 oc_child config set channels.discord.dm.policy "allowlist"
-oc_child config set channels.discord.dm.allowFrom '["__DISCORD_HUMAN_ID__"]'
 oc_child config set channels.discord.dm.groupEnabled false
 # Newer OpenClaw schemas may use flattened DM keys; set both forms.
 oc_child config set channels.discord.dmPolicy "allowlist"
-oc_child config set channels.discord.allowFrom '["__DISCORD_HUMAN_ID__"]'
 
-GUILDS_JSON="$(python3 - <<'PY'
-import json
-print(json.dumps({
-  "__DISCORD_GUILD_ID__": {
-    "requireMention": False,
-    "users": ["__DISCORD_HUMAN_ID__"],
-    "channels": {
-      "__DISCORD_CHANNEL_ID__": {"allow": True, "requireMention": False}
+# Set array values via Python (oc config set doesn't handle JSON arrays properly)
+python3 - <<'PY' "$CHILD_HOME" "__DISCORD_HUMAN_ID__" "__DISCORD_GUILD_ID__" "__DISCORD_CHANNEL_ID__"
+import json, os, sys
+home, human_id, guild_id, channel_id = sys.argv[1:5]
+cfg_path = os.path.join(home, '.openclaw-main', 'openclaw.json')
+if os.path.exists(cfg_path):
+    with open(cfg_path, 'r', encoding='utf-8') as f:
+        cfg = json.load(f)
+else:
+    cfg = {}
+
+channels = cfg.setdefault('channels', {})
+discord = channels.setdefault('discord', {})
+
+# Set allowFrom arrays properly
+discord['allowFrom'] = [human_id]
+dm = discord.setdefault('dm', {})
+dm['allowFrom'] = [human_id]
+
+# Set guilds with proper structure
+discord['guilds'] = {
+    guild_id: {
+        "requireMention": False,
+        "users": [human_id],
+        "channels": {
+            channel_id: {"allow": True, "requireMention": False}
+        }
     }
-  }
-}))
+}
+
+with open(cfg_path, 'w', encoding='utf-8') as f:
+    json.dump(cfg, f, indent=2)
 PY
-)"
-oc_child config set channels.discord.guilds "$GUILDS_JSON"
 oc_child config set tools.exec.host gateway
 oc_child config set tools.exec.security full
 oc_child config set tools.exec.ask off
