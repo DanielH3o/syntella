@@ -586,7 +586,24 @@ configure_openclaw_runtime() {
   oc config set agents.defaults.workspace "~/.openclaw/workspace/syntella"
   oc config set agents.defaults.heartbeat.every "15m"
   oc config set agents.defaults.heartbeat.target "discord"
-  oc config set agents.defaults.heartbeat.to "${DISCORD_CHANNEL_ID}"
+  # Ensure channel ID is stored as string (not number) in JSON
+  python3 - "$HOME/.openclaw/openclaw.json" "$DISCORD_CHANNEL_ID" <<'PY'
+import json, os, sys
+config_path, channel_id = sys.argv[1:3]
+cfg = {}
+if os.path.exists(config_path):
+    try:
+        with open(config_path, 'r') as f:
+            cfg = json.load(f)
+    except Exception:
+        cfg = {}
+agents = cfg.setdefault('agents', {})
+defs = agents.setdefault('defaults', {})
+hb = defs.setdefault('heartbeat', {})
+hb['to'] = channel_id  # Explicitly set as string
+with open(config_path, 'w') as f:
+    json.dump(cfg, f, indent=2)
+PY
   oc config set tools.exec.host "gateway"
   oc config set tools.exec.security "full"
   oc config set tools.exec.ask "off"
