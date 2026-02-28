@@ -69,7 +69,6 @@ print(' '.join(w.capitalize() for w in s.split()) or sys.argv[1])
 PY
 )"
 sed -i "s|__AGENT_NAME__|${DISPLAY_NAME}|g" "$AGENT_WS/AGENTS.md" 2>/dev/null || true
-cp "$SHARED_WS_ROOT/syntella"/{SOUL.md,USER.md,MEMORY.md} "$AGENT_WS"/ 2>/dev/null || true
 
 # Ensure child runtime has provider env fallback.
 mkdir -p "$CHILD_HOME/.openclaw-main"

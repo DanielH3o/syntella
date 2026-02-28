@@ -1,7 +1,7 @@
 # Task Ledger
 
 ## Active
-- [IN_PROGRESS (P1)] Syntella - And we're off: Introduce yourself to your human, ask them what they want to achieve and set a first task from it.
+- [IN_PROGRESS (P1)] Syntella - And we're off: Send a message in the server confirming the first HEARTBEAT has triggered and move this task to completed.
 
 ## Todo
 - (none)

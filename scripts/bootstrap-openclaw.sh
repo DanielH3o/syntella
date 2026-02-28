@@ -364,7 +364,7 @@ seed_workspace_context_files() {
   render_template "$ws_tmpl/AGENTS.SPAWNED.md.tmpl" "$ws_root/AGENTS.SPAWNED.md"
   render_template "$ws_tmpl/HEARTBEAT.MAIN.md.tmpl" "$syntella_ws/HEARTBEAT.md"
   cp "$ws_tmpl/SOUL.md" "$syntella_ws/SOUL.md"
-  cp "$ws_tmpl/USER.md" "$shared_ws/USER.md"                                                 
+  cp "$ws_tmpl/USER.md" "$shared_ws/USER.md"
   cp "$ws_tmpl/MEMORY.md" "$syntella_ws/MEMORY.md"
   cp "$ws_tmpl/TEAM.md" "$shared_ws/TEAM.md"
   cp "$ws_tmpl/TASKS.md" "$shared_ws/TASKS.md"
@@ -482,7 +482,22 @@ EOF
   sudo chown root:openclaw "$env_file"
   sudo chmod 640 "$env_file"
 
+  # Validate Discord vars are set before rendering spawn template
+  if [[ -z "${DISCORD_HUMAN_ID:-}" || -z "${DISCORD_GUILD_ID:-}" || -z "${DISCORD_CHANNEL_ID:-}" ]]; then
+    echo "ERROR: Discord variables not set for spawn template rendering."
+    echo "HUMAN_ID='${DISCORD_HUMAN_ID:-}' GUILD_ID='${DISCORD_GUILD_ID:-}' CHANNEL_ID='${DISCORD_CHANNEL_ID:-}'"
+    exit 1
+  fi
+
   render_template "$TEMPLATE_DIR/operator-bridge/syntella-spawn-agent.sh.tmpl" "$HOME/.openclaw/syntella-spawn-agent.sh"
+
+  # Verify placeholders were actually substituted
+  if grep -q '__DISCORD_' "$HOME/.openclaw/syntella-spawn-agent.sh"; then
+    echo "ERROR: Spawn script still contains unsubsted placeholders:"
+    grep '__DISCORD_' "$HOME/.openclaw/syntella-spawn-agent.sh" | head -5
+    exit 1
+  fi
+
   sudo install -m 755 "$HOME/.openclaw/syntella-spawn-agent.sh" "$spawn_sh"
 
   mkdir -p "$bridge_dir"
@@ -787,149 +802,45 @@ is_gateway_listening() {
   pgrep -f "openclaw gateway" >/dev/null 2>&1
 }
 
-start_gateway_with_fallback() {
+start_gateway() {
   local log_file="$HOME/.openclaw/logs/gateway.log"
   mkdir -p "$HOME/.openclaw/logs"
 
-  clear_gateway_processes() {
-    oc gateway stop >/dev/null 2>&1 || true
-
-    # Kill common gateway process patterns (current + legacy names).
-    pkill -f "openclaw gateway" >/dev/null 2>&1 || true
-    pkill -f "openclaw.mjs gateway" >/dev/null 2>&1 || true
-    pkill -f "openclaw-gateway" >/dev/null 2>&1 || true
-    pkill -f "node .*openclaw.*gateway" >/dev/null 2>&1 || true
-
-    sudo pkill -f "openclaw gateway" >/dev/null 2>&1 || true
-    sudo pkill -f "openclaw.mjs gateway" >/dev/null 2>&1 || true
-    sudo pkill -f "openclaw-gateway" >/dev/null 2>&1 || true
-    sudo pkill -f "node .*openclaw.*gateway" >/dev/null 2>&1 || true
-
-    # If logs mention a stuck lock PID, kill it explicitly (with sudo fallback).
-    local hinted_pid
-    hinted_pid="$(grep -Eo 'pid [0-9]+' "$log_file" 2>/dev/null | tail -n1 | awk '{print $2}' || true)"
-    if [[ -n "$hinted_pid" ]] && ps -p "$hinted_pid" >/dev/null 2>&1; then
-      kill "$hinted_pid" >/dev/null 2>&1 || sudo kill "$hinted_pid" >/dev/null 2>&1 || true
-      sleep 1
-      ps -p "$hinted_pid" >/dev/null 2>&1 && (kill -9 "$hinted_pid" >/dev/null 2>&1 || sudo kill -9 "$hinted_pid" >/dev/null 2>&1 || true)
-    fi
-
-    # Remove stale gateway lock files (after stopping/killing processes).
-    # OpenClaw lock naming pattern: gateway.<hash>.lock
-    local lock_root
-    for lock_root in "$HOME/.openclaw" "${XDG_RUNTIME_DIR:-}" "/tmp" "/tmp/openclaw-$(id -u)"; do
-      [[ -n "$lock_root" && -d "$lock_root" ]] || continue
-      find "$lock_root" -type f -name 'gateway.*.lock' -print -delete 2>/dev/null || true
-      sudo find "$lock_root" -type f -name 'gateway.*.lock' -print -delete 2>/dev/null || true
-    done
-
-    sleep 1
-  }
-
+  # Check if already running
   if is_gateway_listening; then
     echo "Gateway already listening on port 18789."
     return 0
   fi
 
-  if oc gateway restart >/dev/null 2>&1 || oc gateway start >/dev/null 2>&1; then
-    if is_gateway_listening; then
-      echo "Gateway started via service manager."
-      return 0
-    fi
-  fi
+  # Clear any stale locks/processes first
+  pkill -f "openclaw gateway" >/dev/null 2>&1 || true
+  sleep 1
 
-  # Handle stale lock/process state (common on fresh droplets during first bootstrap).
-  clear_gateway_processes
+  # Remove stale lock files
+  find "$HOME/.openclaw" "/tmp" -name 'gateway.*.lock' -delete 2>/dev/null || true
 
-  echo "systemd user service unavailable; falling back to foreground gateway via nohup"
+  echo "Starting gateway..."
 
   if [[ -n "$NODE_BIN" && -x "$NODE_BIN" ]]; then
     nohup "$NODE_BIN" "$OPENCLAW_MJS" gateway --port 18789 >"$log_file" 2>&1 &
   else
-    nohup bash -lc 'source "$HOME/.bashrc" >/dev/null 2>&1 || true; export PATH="$HOME/.npm-global/bin:$PATH"; exec openclaw gateway --port 18789' >"$log_file" 2>&1 &
+    nohup bash -lc 'export PATH="$HOME/.npm-global/bin:$PATH"; exec openclaw gateway --port 18789' >"$log_file" 2>&1 &
   fi
 
-  # Wait up to 25s for gateway to bind (cold starts can be slow on fresh droplets)
+  # Wait up to 30s for gateway to bind
   local waited=0
-  while (( waited < 25 )); do
+  while (( waited < 30 )); do
     if is_gateway_listening; then
-      echo "Gateway started in fallback mode (nohup). Logs: $log_file"
+      echo "Gateway started successfully."
       return 0
     fi
     sleep 1
     waited=$((waited + 1))
   done
 
-  # Final guard against false negatives.
-  if is_gateway_listening; then
-    echo "Gateway is listening despite startup warnings; continuing."
-    return 0
-  fi
-
-  echo "No listener detected after nohup; running foreground diagnostic (10s timeout)..."
-  if [[ -n "$NODE_BIN" && -x "$NODE_BIN" ]]; then
-    if command -v timeout >/dev/null 2>&1; then
-      timeout 10s "$NODE_BIN" "$OPENCLAW_MJS" gateway --port 18789 >>"$log_file" 2>&1 || true
-    else
-      "$NODE_BIN" "$OPENCLAW_MJS" gateway --port 18789 >>"$log_file" 2>&1 &
-      sleep 10
-      pkill -f "openclaw gateway" >/dev/null 2>&1 || true
-    fi
-  else
-    if command -v timeout >/dev/null 2>&1; then
-      timeout 10s "$OPENCLAW_BIN" gateway --port 18789 >>"$log_file" 2>&1 || true
-    else
-      "$OPENCLAW_BIN" gateway --port 18789 >>"$log_file" 2>&1 &
-      sleep 10
-      pkill -f "openclaw gateway" >/dev/null 2>&1 || true
-    fi
-  fi
-
-  if is_gateway_listening; then
-    echo "Gateway came up after diagnostic start; continuing."
-    return 0
-  fi
-
-  # If lock says "already running (pid X)", clear once more and retry a clean foreground start.
-  if grep -q "gateway already running (pid" "$log_file" 2>/dev/null; then
-    echo "Detected gateway lock conflict; clearing processes/locks and retrying once..."
-    clear_gateway_processes
-
-    if [[ -n "$NODE_BIN" && -x "$NODE_BIN" ]]; then
-      nohup "$NODE_BIN" "$OPENCLAW_MJS" gateway --port 18789 >>"$log_file" 2>&1 &
-    else
-      nohup "$OPENCLAW_BIN" gateway --port 18789 >>"$log_file" 2>&1 &
-    fi
-
-    local retry_waited=0
-    while (( retry_waited < 35 )); do
-      if is_gateway_listening; then
-        echo "Gateway started after lock-conflict retry."
-        return 0
-      fi
-      sleep 1
-      retry_waited=$((retry_waited + 1))
-    done
-
-    # Final race guard: if a gateway process exists, give it a few seconds to bind.
-    if pgrep -f "openclaw-gateway|openclaw gateway|openclaw.mjs gateway" >/dev/null 2>&1; then
-      sleep 4
-      if is_gateway_listening; then
-        echo "Gateway process was already launching; listener detected after grace period."
-        return 0
-      fi
-    fi
-  fi
-
-  # Absolute final guard against race conditions before failing.
-  if is_gateway_listening; then
-    echo "Gateway listener detected at final guard; continuing."
-    return 0
-  fi
-
-  echo "Failed to start gateway in both service and fallback modes."
-  echo "Check logs: $log_file"
-  echo "Resolved openclaw binary: $OPENCLAW_BIN"
+  echo "Gateway failed to start within 30s. Check logs: $log_file"
+  return 1
+}
   echo "Resolved openclaw entrypoint: $OPENCLAW_MJS"
   echo "Resolved node binary: ${NODE_BIN:-<not-found>}"
   ls -l "$OPENCLAW_BIN" || true
@@ -967,7 +878,7 @@ main() {
   configure_openclaw_runtime
 
   say "Starting/restarting gateway service"
-  if ! start_gateway_with_fallback; then
+  if ! start_gateway; then
     echo "Warning: gateway startup reported failure; continuing with frontend setup + diagnostics."
   fi
 
