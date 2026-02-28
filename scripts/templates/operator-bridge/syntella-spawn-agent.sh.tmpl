@@ -281,9 +281,11 @@ if [[ "$ready" != "1" ]]; then
   exit 1
 fi
 
-python3 - <<'PY' "$AGENT_ID" "$PORT" "$ROLE" "$CHILD_HOME"
+echo "$(date -Iseconds) GATEWAY_READY, updating registry..." >> "$DEBUG_LOG"
+
+python3 - "$AGENT_ID" "$PORT" "$ROLE" "$CHILD_HOME" "__DISCORD_GUILD_ID__" "__DISCORD_CHANNEL_ID__" <<PY
 import json, os, sys
-agent,port,role_raw,home=sys.argv[1],int(sys.argv[2]),sys.argv[3],sys.argv[4]
+agent,port,role_raw,home,guild_id,channel_id=sys.argv[1],int(sys.argv[2]),sys.argv[3],sys.argv[4],sys.argv[5],sys.argv[6]
 if ' — ' in role_raw:
   role, personality = role_raw.split(' — ', 1)
 else:
@@ -301,8 +303,8 @@ d[agent]={
   "role":role.strip(),
   "personality":personality.strip(),
   "home":home,
-  "guild_id":"__DISCORD_GUILD_ID__",
-  "channel_id":"__DISCORD_CHANNEL_ID__"
+  "guild_id":guild_id,
+  "channel_id":channel_id
 }
 json.dump(d, open(p,'w'), indent=2)
 
@@ -347,5 +349,14 @@ else:
   t=t.rstrip()+"\n\n"+block
 open(team_path, 'w', encoding='utf-8').write(t)
 
-print(json.dumps({"agent_id":agent,"port":port,"home":home,"guild_id":"__DISCORD_GUILD_ID__","channel_id":"__DISCORD_CHANNEL_ID__","guild_configured":True,"status":"started"}))
+print(json.dumps({"agent_id":agent,"port":port,"home":home,"guild_id":guild_id,"channel_id":channel_id,"guild_configured":True,"status":"started"}))
 PY
+PY_EXIT=$?
+echo "$(date -Iseconds) REGISTRY_UPDATE_EXIT=$PY_EXIT" >> "$DEBUG_LOG"
+
+if [[ $PY_EXIT -ne 0 ]]; then
+  echo "ERROR: Registry/TEAM.md update failed with exit code $PY_EXIT" >&2
+  exit 1
+fi
+
+echo "$(date -Iseconds) SPAWN_COMPLETE" >> "$DEBUG_LOG"
