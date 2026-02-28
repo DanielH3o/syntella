@@ -146,38 +146,17 @@ ensure_node_and_npm() {
   sudo apt-get install -y nodejs
 }
 
-ensure_swap() {
-  # Ensure at least 2GB swap to prevent OOM during npm installs on small droplets
-  local existing_swap=$(free -m 2>/dev/null | awk '/^Swap:/ {print $2}' || echo 0)
-  if [[ "$existing_swap" -lt 2048 ]]; then
-    say "Creating 2GB swap file to prevent OOM during install..."
-    sudo fallocate -l 2G /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048
-    sudo chmod 600 /swapfile
-    sudo mkswap /swapfile
-    sudo swapon /swapfile
-    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab >/dev/null
-  fi
-}
-
 install_openclaw_cli() {
   if command -v openclaw >/dev/null 2>&1; then
     return 0
   fi
 
   say "Installing OpenClaw CLI via npm (without optional native deps)"
-  ensure_swap
   mkdir -p "$HOME/.npm-global"
   npm config set prefix "$HOME/.npm-global"
 
-  # Limit Node memory to prevent OOM kills on 1GB droplets
-  export NODE_OPTIONS="--max-old-space-size=512"
-
   # Skip optional deps (e.g. @discordjs/opus) to avoid native build failures on fresh droplets.
-  # Use --prefer-offline and retry on failure.
-  if ! npm install -g --omit=optional --prefer-offline openclaw@latest 2>&1; then
-    say "Retrying npm install with reduced concurrency..."
-    npm install -g --omit=optional --maxsockets=1 openclaw@latest
-  fi
+  npm install -g --omit=optional openclaw@latest
 
   ensure_openclaw_on_path || true
 }

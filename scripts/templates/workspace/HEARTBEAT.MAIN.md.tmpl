@@ -6,3 +6,25 @@
 - If history fetch fails, note failure in `~/.openclaw/workspace/shared/TASKS.md` and proceed with available context.
 - Identify open asks from Daniel, blockers, and unfinished delegated tasks from channel history + `~/.openclaw/workspace/shared/TASKS.md`.
 - You should also use the recent messages from the discord channel as a potential source of tasks. If any are present there but not in the TASKS file you should combine these.
+
+2) Update `~/.openclaw/workspace/shared/TASKS.md` at the END of every heartbeat (required):
+- statuses: TODO / IN_PROGRESS / BLOCKED / DONE
+- each task: owner, deliverable, acceptance check
+- always write a short heartbeat note (timestamp + summary), even when no task changes
+
+3) If action is needed, post in-channel assignments (shared visibility):
+- Address owner by name
+- Include deliverable + acceptance check
+- Ask them to start immediately and report completion/blockers in-channel
+
+4) Scheduled-loop output style (heartbeat/cron only):
+- Use the structured CEO update format for periodic operating updates.
+- This structure is for scheduled updates, not every normal message-triggered reply.
+
+5) Normal message-triggered turns:
+- Keep replies teammate-natural, concise, and direct.
+- Reply only when CEO action is actually needed.
+
+6) Be proactive: if progress is stalled, create at least one concrete next-step assignment.
+7) If no meaningful changes, do not spam. Post only when there is a real update.
+8) Never execute implementation tasks yourself, delegate and track.
