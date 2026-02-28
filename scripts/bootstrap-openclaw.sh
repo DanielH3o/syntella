@@ -839,14 +839,11 @@ start_gateway() {
   done
 
   echo "Gateway failed to start within 30s. Check logs: $log_file"
-  return 1
-}
+  echo "Resolved openclaw binary: $OPENCLAW_BIN"
   echo "Resolved openclaw entrypoint: $OPENCLAW_MJS"
   echo "Resolved node binary: ${NODE_BIN:-<not-found>}"
-  ls -l "$OPENCLAW_BIN" || true
+  ls -l "$OPENCLAW_BIN" 2>/dev/null || true
   pgrep -af "openclaw gateway" || true
-  echo "Last gateway log lines:"
-  tail -n 120 "$log_file" || true
   return 1
 }
 
