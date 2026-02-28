@@ -8,7 +8,7 @@ set -euo pipefail
 #   export DISCORD_BOT_TOKEN="..."
 #   export DISCORD_TARGET="<guildId>/<channelId>"
 #   export DISCORD_HUMAN_ID="<your-discord-user-id>"   # also accepts DISCORD_USER_ID or DISCORD_HUMAN
-#   export OPENAI_API_KEY="..."
+#   export MOONSHOT_API_KEY="..."
 # Optional:
 #   export FRONTEND_ENABLED=0   # skip nginx placeholder frontend
 #   export EXEC_APPROVAL_MODE=strict   # keep interactive exec approvals (default is full)
@@ -118,7 +118,7 @@ else
 fi
 
 say "Running user bootstrap script"
-sudo --preserve-env=DISCORD_BOT_TOKEN,DISCORD_TARGET,DISCORD_HUMAN_ID,DISCORD_USER_ID,DISCORD_HUMAN,OPENAI_API_KEY,ANTHROPIC_API_KEY,FRONTEND_ENABLED,FRONTEND_ALLOWED_IP,EXEC_APPROVAL_MODE,OPERATOR_BRIDGE_PORT,SYNTELLA_EXEC_TIMEOUT_SECONDS,SYNTELLA_EXEC_MAX_OUTPUT_BYTES -u "$OPENCLAW_USER" -H bash -lc "cd '$REPO_DIR' && bash scripts/bootstrap-openclaw.sh"
+sudo --preserve-env=DISCORD_BOT_TOKEN,DISCORD_TARGET,DISCORD_HUMAN_ID,DISCORD_USER_ID,DISCORD_HUMAN,MOONSHOT_API_KEY,FRONTEND_ENABLED,FRONTEND_ALLOWED_IP,EXEC_APPROVAL_MODE,OPERATOR_BRIDGE_PORT,SYNTELLA_EXEC_TIMEOUT_SECONDS,SYNTELLA_EXEC_MAX_OUTPUT_BYTES -u "$OPENCLAW_USER" -H bash -lc "cd '$REPO_DIR' && bash scripts/bootstrap-openclaw.sh"
 
 say "Installing global shim: /usr/local/bin/openclaw (runs as $OPENCLAW_USER)"
 cat >/usr/local/bin/openclaw <<EOF

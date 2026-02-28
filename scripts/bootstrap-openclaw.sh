@@ -10,6 +10,14 @@ if [[ "${EUID}" -eq 0 ]]; then
   exit 1
 fi
 
+# Auto-source local .env file if present (for curl|bash runs where exports don't carry over)
+if [[ -f "$SCRIPT_DIR/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR/.env"
+  set +a
+fi
+
 say() { echo -e "\n==> $*"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
