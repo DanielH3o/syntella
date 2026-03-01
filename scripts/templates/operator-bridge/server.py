@@ -11,8 +11,8 @@ Improvements over original:
 - Better error reporting
 """
 import json, os, re, signal, sys, time, uuid, fcntl
-from http.server import BaseHTTPRequestHandler
-from socketserver import ThreadingMixIn, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
 from subprocess import run, TimeoutExpired
 from pathlib import Path
 
