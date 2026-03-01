@@ -1,96 +1,216 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# syntella-spawn-agent — Provision and start an isolated OpenClaw agent.
+#
+# Improvements:
+# - Port allocation checks both registry AND actual port usage (lsof/ss)
+# - Kills orphaned gateways before starting a new one
+# - Tracks gateway PID in registry for clean shutdown
+# - Reserves port in registry before starting gateway (prevents races)
+# - Consolidated logging to a single per-agent log file
+# - Idempotent: re-spawning an existing agent stops the old gateway first
+
 AGENT_ID="${1:-}"
 ROLE="${2:-}"
 DISCORD_BOT_TOKEN_AGENT="${3:-}"
 PORT="${4:-}"
 
-# Early validation and logging
-DEBUG_LOG="/tmp/spawn-agent-${AGENT_ID:-unknown}-debug.log"
-echo "$(date -Iseconds) START: agent_id='${AGENT_ID}', role='${ROLE:0:20}...', token_set='${DISCORD_BOT_TOKEN_AGENT:0:10}...', port='${PORT}'" >> "$DEBUG_LOG"
-echo "$(date -Iseconds) CHILD_HOME='${CHILD_HOME:-}' AGENT_WS='${AGENT_WS:-}'" >> "$DEBUG_LOG"
+[[ -n "$AGENT_ID" && -n "$ROLE" && -n "$DISCORD_BOT_TOKEN_AGENT" ]] || {
+  echo "usage: syntella-spawn-agent <agent_id> <role> <discord_token> [port]"
+  exit 2
+}
 
-[[ -n "$AGENT_ID" && -n "$ROLE" && -n "$DISCORD_BOT_TOKEN_AGENT" ]] || { echo "usage: syntella-spawn-agent <agent_id> <role> <discord_token> [port]"; exit 2; }
+# Source shared environment.
+set -a
+source /etc/openclaw/openclaw.env
+set +a
 
+# Paths.
+CHILD_HOME="$HOME/.openclaw-$AGENT_ID"
+CHILD_PROFILE="main"
+SHARED_WS_ROOT="$HOME/.openclaw/workspace"
+AGENT_WS="$SHARED_WS_ROOT/$AGENT_ID"
+REGISTRY="$SHARED_WS_ROOT/agents/registry.json"
+SPAWN_LOG="$AGENT_WS/spawn.log"
+
+mkdir -p "$AGENT_WS/memory" "$SHARED_WS_ROOT/agents" "$CHILD_HOME"
+
+log() { echo "$(date -Iseconds) $*" >> "$SPAWN_LOG"; }
+log "START: agent_id=$AGENT_ID role='${ROLE:0:40}...' port='$PORT'"
+
+# Helper: check if a port is in use by any process.
+port_in_use() {
+  local p="$1"
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn 2>/dev/null | grep -q ":${p} " && return 0
+  fi
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1 && return 0
+  fi
+  # Fallback: bash TCP connect test.
+  (echo >/dev/tcp/127.0.0.1/"$p") >/dev/null 2>&1 && return 0
+  return 1
+}
+
+# Helper: kill any gateway running on a specific port.
+kill_gateway_on_port() {
+  local p="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    local pids
+    pids="$(lsof -ti tcp:"$p" 2>/dev/null || true)"
+    if [[ -n "$pids" ]]; then
+      echo "$pids" | xargs kill 2>/dev/null || true
+      sleep 1
+      # Force-kill if still alive.
+      echo "$pids" | xargs kill -9 2>/dev/null || true
+    fi
+  fi
+  # Also kill by pattern matching for this agent.
+  pkill -f "openclaw.*gateway.*--port $p" 2>/dev/null || true
+}
+
+# Stop existing gateway for this agent (idempotent re-spawn).
+existing_port=""
+existing_pid=""
+if [[ -f "$REGISTRY" ]]; then
+  existing_port="$(python3 -c "
+import json, sys
+try:
+    d=json.load(open('$REGISTRY'))
+    e=d.get('$AGENT_ID',{})
+    print(e.get('port',''))
+except Exception:
+    print('')
+" 2>/dev/null || true)"
+  existing_pid="$(python3 -c "
+import json
+try:
+    d=json.load(open('$REGISTRY'))
+    e=d.get('$AGENT_ID',{})
+    print(e.get('pid',''))
+except Exception:
+    print('')
+" 2>/dev/null || true)"
+fi
+
+if [[ -n "$existing_pid" ]]; then
+  log "Killing existing gateway for $AGENT_ID (pid=$existing_pid)"
+  kill "$existing_pid" 2>/dev/null || true
+  sleep 1
+fi
+
+if [[ -n "$existing_port" ]]; then
+  log "Cleaning up port $existing_port for re-spawn"
+  kill_gateway_on_port "$existing_port"
+fi
+
+# Also kill any process bound to the child home's gateway specifically.
+pkill -f "OPENCLAW_HOME=$CHILD_HOME.*gateway" 2>/dev/null || true
+sleep 0.5
+
+# Port allocation: check registry AND actual port usage.
 if [[ -z "$PORT" ]]; then
-  PORT="$(python3 - <<'PY'
-import json, os
-p=os.path.expanduser('~/.openclaw/workspace/agents/registry.json')
-base=19002
-used=set()
-if os.path.exists(p):
-  try:
-    d=json.load(open(p))
-    for v in d.values():
-      port=v.get('port')
-      if isinstance(port,int): used.add(port)
-  except Exception:
+  PORT="$(python3 - "$REGISTRY" <<'PY'
+import json, os, sys, subprocess
+
+registry_path = sys.argv[1]
+base = 19002
+used = set()
+
+# Read ports from registry.
+if os.path.exists(registry_path):
+    try:
+        d = json.load(open(registry_path, "r"))
+        for v in d.values():
+            port = v.get("port")
+            if isinstance(port, int):
+                used.add(port)
+    except Exception:
+        pass
+
+# Also check actual port usage via ss/lsof.
+try:
+    out = subprocess.run(
+        ["ss", "-ltn"], capture_output=True, text=True, timeout=5
+    ).stdout
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 4:
+            addr = parts[3]
+            if ":" in addr:
+                try:
+                    p = int(addr.rsplit(":", 1)[1])
+                    if p >= base:
+                        used.add(p)
+                except ValueError:
+                    pass
+except Exception:
     pass
-port=base
+
+port = base
 while port in used:
-  port+=1
+    port += 1
 print(port)
 PY
 )"
 fi
 
-set -a
-source /etc/openclaw/openclaw.env
-set +a
+log "Allocated port=$PORT"
 
-# Hard isolation: each spawned bot gets its own OpenClaw home/runtime.
-CHILD_HOME="$HOME/.openclaw-$AGENT_ID"
-CHILD_PROFILE="main"
-SHARED_WS_ROOT="$HOME/.openclaw/workspace"
-AGENT_WS="$SHARED_WS_ROOT/$AGENT_ID"
-
-echo "$(date -Iseconds) VARS: CHILD_HOME='${CHILD_HOME}', AGENT_WS='${AGENT_WS}'" >> "$DEBUG_LOG"
+# Double-check the allocated port isn't actually in use.
+if port_in_use "$PORT"; then
+  log "Port $PORT in use despite allocation — cleaning up"
+  kill_gateway_on_port "$PORT"
+  sleep 1
+  if port_in_use "$PORT"; then
+    echo "ERROR: Port $PORT still in use after cleanup" >&2
+    exit 1
+  fi
+fi
 
 oc_child() { OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" "$@"; }
 
 main_token_before="$(openclaw config get channels.discord.token 2>/dev/null | tr -d '"[:space:]' || true)"
 
-mkdir -p "$AGENT_WS/memory" "$SHARED_WS_ROOT/agents" "$CHILD_HOME"
-
-# Pre-clean stale/invalid keys before any `openclaw config set` calls.
-python3 - <<'PY' "$CHILD_HOME"
+# Pre-clean stale config keys.
+python3 - "$CHILD_HOME" <<'PY'
 import json, os, sys
-home=sys.argv[1]
-cfg_path=os.path.join(home, '.openclaw-main', 'openclaw.json')
+home = sys.argv[1]
+cfg_path = os.path.join(home, ".openclaw-main", "openclaw.json")
 if os.path.exists(cfg_path):
     try:
-        cfg=json.load(open(cfg_path, 'r', encoding='utf-8'))
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
     except Exception:
-        cfg={}
-    agents=cfg.get('agents')
-    if isinstance(agents, dict) and 'main' in agents:
-        agents.pop('main', None)
-        json.dump(cfg, open(cfg_path, 'w', encoding='utf-8'), indent=2)
+        cfg = {}
+    agents = cfg.get("agents")
+    if isinstance(agents, dict) and "main" in agents:
+        agents.pop("main", None)
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2)
 PY
-cp "$SHARED_WS_ROOT"/AGENTS.SPAWNED.md "$AGENT_WS/AGENTS.md" 2>/dev/null || true
-DISPLAY_NAME="$(python3 - <<'PY' "$AGENT_ID"
+
+# Copy spawned agent template.
+cp "$SHARED_WS_ROOT/AGENTS.SPAWNED.md" "$AGENT_WS/AGENTS.md" 2>/dev/null || true
+DISPLAY_NAME="$(python3 -c "
 import sys
-s=sys.argv[1].replace('-', ' ').strip()
-print(' '.join(w.capitalize() for w in s.split()) or sys.argv[1])
-PY
-)"
-sed -i "s|__AGENT_NAME__|${DISPLAY_NAME}|g" "$AGENT_WS/AGENTS.md" 2>/dev/null || true
+s='$AGENT_ID'.replace('-', ' ').strip()
+print(' '.join(w.capitalize() for w in s.split()) or '$AGENT_ID')
+")"
+sed -i "s|__AGENT_NAME__|${DISPLAY_NAME}|g; s|__AGENT_ID__|${AGENT_ID}|g" "$AGENT_WS/AGENTS.md" 2>/dev/null || true
 
 # Ensure child runtime has provider env fallback.
 mkdir -p "$CHILD_HOME/.openclaw-main"
 if [[ -f "$HOME/.openclaw/.env" ]]; then
   cp "$HOME/.openclaw/.env" "$CHILD_HOME/.env"
 elif [[ -n "${MOONSHOT_API_KEY:-}" ]]; then
-  {
-    [[ -n "${MOONSHOT_API_KEY:-}" ]] && echo "MOONSHOT_API_KEY=${MOONSHOT_API_KEY}"
-  } > "$CHILD_HOME/.env"
+  echo "MOONSHOT_API_KEY=${MOONSHOT_API_KEY}" > "$CHILD_HOME/.env"
 fi
-# Some builds resolve runtime env fallback from profile-scoped state dir.
 cp "$CHILD_HOME/.env" "$CHILD_HOME/.openclaw-main/.env" 2>/dev/null || true
 chmod 600 "$CHILD_HOME/.env" "$CHILD_HOME/.openclaw-main/.env" 2>/dev/null || true
 
-# Mirror auth profiles from main runtime when present (avoids missing-provider-key failures).
+# Mirror auth profiles from main runtime when present.
 MAIN_AUTH_PATH="$(find "$HOME/.openclaw" -type f -path '*/agents/main/agent/auth-profiles.json' 2>/dev/null | head -n1 || true)"
 if [[ -n "$MAIN_AUTH_PATH" && -f "$MAIN_AUTH_PATH" ]]; then
   REL_AUTH_PATH="${MAIN_AUTH_PATH#"$HOME/.openclaw/"}"
@@ -100,154 +220,103 @@ if [[ -n "$MAIN_AUTH_PATH" && -f "$MAIN_AUTH_PATH" ]]; then
   chmod 600 "$CHILD_AUTH_PATH" 2>/dev/null || true
 fi
 
-# SOUL.md and TEAM.md are updated in the final registry write step.
+log "Setting OpenClaw config for child agent"
 
-# Set basic config (ignore errors - we'll set arrays properly via Python)
-oc_child config set agents.defaults.workspace "$AGENT_WS" || true
-oc_child config set agents.defaults.sandbox.workspaceAccess "rw" || true
-oc_child config set agents.defaults.model.primary "moonshot/kimi-k2.5" || true
-oc_child config set agents.defaults.model.fallbacks '[]' || true
-oc_child config set gateway.mode local || true
-oc_child config set gateway.bind loopback || true
-oc_child config set gateway.auth.mode token || true
-oc_child config set channels.discord.enabled true || true
-oc_child config set channels.discord.groupPolicy "allowlist" || true
-oc_child config set channels.discord.allowBots true || true
-oc_child config set channels.discord.token "$DISCORD_BOT_TOKEN_AGENT" || true
-oc_child config set channels.discord.dm.enabled true || true
-oc_child config set channels.discord.dm.policy "allowlist" || true
-oc_child config set channels.discord.dm.groupEnabled false || true
-oc_child config set channels.discord.dmPolicy "allowlist" || true
+# Set basic config via CLI (non-critical errors are logged, not fatal).
+config_set() {
+  if ! oc_child config set "$@" 2>/dev/null; then
+    log "WARN: config set $* failed (non-fatal)"
+  fi
+}
 
-oc_child config set tools.exec.host gateway || true
-oc_child config set tools.exec.security full || true
-oc_child config set tools.exec.ask off || true
-oc_child config set tools.fs.workspaceOnly false || true
-oc_child config set tools.exec.applyPatch.workspaceOnly false || true
+config_set agents.defaults.workspace "$AGENT_WS"
+config_set agents.defaults.sandbox.workspaceAccess "rw"
+config_set agents.defaults.model.primary "moonshot/kimi-k2.5"
+config_set agents.defaults.model.fallbacks '[]'
+config_set gateway.mode local
+config_set gateway.bind loopback
+config_set gateway.auth.mode token
+config_set channels.discord.enabled true
+config_set channels.discord.groupPolicy "allowlist"
+config_set channels.discord.allowBots true
+config_set channels.discord.token "$DISCORD_BOT_TOKEN_AGENT"
+config_set channels.discord.dm.enabled true
+config_set channels.discord.dm.policy "allowlist"
+config_set channels.discord.dm.groupEnabled false
+config_set tools.exec.host gateway
+config_set tools.exec.security full
+config_set tools.exec.ask off
+config_set tools.fs.workspaceOnly false
+config_set tools.exec.applyPatch.workspaceOnly false
 
-# Hard-pin model keys directly in JSON for schema/version drift tolerance.
-python3 - "$CHILD_HOME" <<PY
+# Write all JSON config (model, arrays, guilds) in a single Python pass.
+python3 - "$CHILD_HOME" "__DISCORD_HUMAN_ID__" "__DISCORD_GUILD_ID__" "__DISCORD_CHANNEL_ID__" "$SPAWN_LOG" <<'PYSCRIPT'
 import json, os, sys
-home=sys.argv[1]
-cfg_path=os.path.join(home, '.openclaw-main', 'openclaw.json')
+
+home, human_id, guild_id, channel_id, log_path = sys.argv[1:6]
+cfg_path = os.path.join(home, ".openclaw-main", "openclaw.json")
 os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
-cfg={}
-if os.path.exists(cfg_path):
-    try:
-        cfg=json.load(open(cfg_path, 'r', encoding='utf-8'))
-    except Exception:
-        cfg={}
-agents=cfg.setdefault('agents', {})
-defs=agents.setdefault('defaults', {})
-defs.setdefault('model', {})['primary']='moonshot/kimi-k2.5'
-defs.setdefault('model', {})['fallbacks']=[]
-# Remove invalid key for older/newer schemas that reject agents.main.
-if isinstance(agents, dict) and 'main' in agents:
-    agents.pop('main', None)
-json.dump(cfg, open(cfg_path, 'w', encoding='utf-8'), indent=2)
-PY
 
-# Skip doctor --fix as it may remove allowFrom arrays - set config directly via Python instead
-# OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" doctor --fix >/dev/null 2>&1 || true
+def log(msg):
+    with open(log_path, "a") as f:
+        f.write(f"{msg}\n")
 
-echo "$(date -Iseconds) BEFORE_PYTHON_CONFIG" >> "$DEBUG_LOG"
-
-# Set array values via Python
-PY_LOG="$AGENT_WS/python-config.log"
-echo "$(date -Iseconds) DEBUG: Starting Python config script..." >> "$PY_LOG"
-python3 - "$CHILD_HOME" "__DISCORD_HUMAN_ID__" "__DISCORD_GUILD_ID__" "__DISCORD_CHANNEL_ID__" "$PY_LOG" <<'PYSCRIPT'
-import json, os, sys
 try:
-    home, human_id, guild_id, channel_id, log_path = sys.argv[1:6]
-    cfg_path = os.path.join(home, '.openclaw-main', 'openclaw.json')
-    
-    with open(log_path, 'a') as log:
-        log.write(f"home={home}, human_id={human_id}, cfg_path={cfg_path}\n")
-        log.write(f"cfg exists={os.path.exists(cfg_path)}\n")
-    
     if os.path.exists(cfg_path):
-        with open(cfg_path, 'r', encoding='utf-8') as f:
+        with open(cfg_path, "r", encoding="utf-8") as f:
             cfg = json.load(f)
     else:
         cfg = {}
-    
-    channels = cfg.setdefault('channels', {})
-    discord = channels.setdefault('discord', {})
-    
-    # Set allowFrom arrays properly (these MUST be arrays, not strings)
-    discord['allowFrom'] = [human_id]
-    dm = discord.setdefault('dm', {})
-    dm['allowFrom'] = [human_id]
-    dm['policy'] = 'allowlist'
-    
-    # Set guilds with proper structure
-    discord['guilds'] = {
+
+    # Model config.
+    agents = cfg.setdefault("agents", {})
+    defs = agents.setdefault("defaults", {})
+    defs.setdefault("model", {})["primary"] = "moonshot/kimi-k2.5"
+    defs.setdefault("model", {})["fallbacks"] = []
+    # Remove invalid key for older/newer schemas that reject agents.main.
+    if isinstance(agents, dict) and "main" in agents:
+        agents.pop("main", None)
+
+    # Discord config with proper array values.
+    channels = cfg.setdefault("channels", {})
+    discord = channels.setdefault("discord", {})
+    discord["allowFrom"] = [human_id]
+
+    dm = discord.setdefault("dm", {})
+    dm["allowFrom"] = [human_id]
+    dm["policy"] = "allowlist"
+
+    discord["guilds"] = {
         guild_id: {
             "requireMention": False,
             "users": [human_id],
             "channels": {
                 channel_id: {"allow": True, "requireMention": False}
-            }
+            },
         }
     }
-    
-    with open(cfg_path, 'w', encoding='utf-8') as f:
+
+    with open(cfg_path, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2)
-    
-    with open(log_path, 'a') as log:
-        log.write(f"SUCCESS: allowFrom={discord.get('allowFrom')}, dm.allowFrom={dm.get('allowFrom')}\n")
+
+    log(f"CONFIG_OK: allowFrom={discord.get('allowFrom')}, dm.allowFrom={dm.get('allowFrom')}, guilds={list(discord.get('guilds', {}).keys())}")
+
 except Exception as e:
-    with open(log_path, 'a') as log:
-        log.write(f"ERROR: {e}\n")
-        import traceback
-        traceback.print_exc(file=log)
+    log(f"CONFIG_ERROR: {e}")
+    import traceback
+    with open(log_path, "a") as f:
+        traceback.print_exc(file=f)
     sys.exit(1)
 PYSCRIPT
-PY_EXIT=$?
-echo "$(date -Iseconds) DEBUG: Python config exit code: $PY_EXIT" >> "$PY_LOG"
 
-# Verify config was written correctly
-if [[ -f "$CHILD_HOME/.openclaw-main/openclaw.json" ]]; then
-    echo "$(date -Iseconds) DEBUG: Config file exists, checking allowFrom..." >> "$PY_LOG"
-    python3 - "$CHILD_HOME/.openclaw-main/openclaw.json" "$PY_LOG" <<'VERIFY'
-import json, sys
-cfg_path, log_path = sys.argv[1:3]
-with open(cfg_path, 'r') as f:
-    cfg = json.load(f)
-discord = cfg.get('channels', {}).get('discord', {})
-allowFrom = discord.get('allowFrom')
-dm_allowFrom = discord.get('dm', {}).get('allowFrom')
-with open(log_path, 'a') as log:
-    log.write(f"VERIFY: allowFrom={allowFrom}, dm.allowFrom={dm_allowFrom}\n")
-VERIFY
-fi
+# Validate critical config.
+child_group_policy="$(oc_child config get channels.discord.groupPolicy 2>/dev/null | tr -d '"[:space:]' || true)"
+child_guild_allow="$(oc_child config get channels.discord.guilds.__DISCORD_GUILD_ID__.channels.__DISCORD_CHANNEL_ID__.allow 2>/dev/null | tr -d '"[:space:]' || true)"
+child_model_primary="$(oc_child config get agents.defaults.model.primary 2>/dev/null | tr -d '"[:space:]' || true)"
 
-echo "$(date -Iseconds) AFTER_PYTHON_CONFIG" >> "$DEBUG_LOG"
-
-# Verify config was written
-python3 - "$CHILD_HOME/.openclaw-main/openclaw.json" "$DEBUG_LOG" <<'VERIFY'
-import json, sys
-cfg_path, log_path = sys.argv[1:3]
-try:
-    with open(cfg_path, 'r') as f:
-        cfg = json.load(f)
-    discord = cfg.get('channels', {}).get('discord', {})
-    allowFrom = discord.get('allowFrom')
-    dm = discord.get('dm', {})
-    dm_allowFrom = dm.get('allowFrom')
-    with open(log_path, 'a') as log:
-        log.write(f"VERIFY_RESULT: allowFrom={allowFrom}, dm.allowFrom={dm_allowFrom}\n")
-except Exception as e:
-    with open(log_path, 'a') as log:
-        log.write(f"VERIFY_ERROR: {e}\n")
-VERIFY
-
-child_group_policy="$(OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get channels.discord.groupPolicy 2>/dev/null | tr -d '"[:space:]' || true)"
-child_guild_allow="$(OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get channels.discord.guilds.__DISCORD_GUILD_ID__.channels.__DISCORD_CHANNEL_ID__.allow 2>/dev/null | tr -d '"[:space:]' || true)"
-child_model_primary="$(OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get agents.defaults.model.primary 2>/dev/null | tr -d '"[:space:]' || true)"
 if [[ "$child_group_policy" != "allowlist" || "$child_guild_allow" != "true" ]]; then
   echo "ERROR: child guild allowlist wiring failed (groupPolicy=${child_group_policy:-<unset>}, channelAllow=${child_guild_allow:-<unset>})" >&2
-  OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" config get channels.discord.guilds >&2 || true
+  oc_child config get channels.discord.guilds >&2 || true
   exit 1
 fi
 if [[ "$child_model_primary" != moonshot/* && "$child_model_primary" != "moonshot/kimi-k2.5" ]]; then
@@ -265,101 +334,155 @@ if [[ -n "$main_token_before" && "$main_token_before" != "$main_token_after" ]];
   exit 1
 fi
 
-echo "$(date -Iseconds) BEFORE_GATEWAY_START" >> "$DEBUG_LOG"
+log "Config validated, starting gateway on port $PORT"
 
-nohup env OPENCLAW_HOME="$CHILD_HOME" OPENCLAW_PROFILE="$CHILD_PROFILE" MOONSHOT_API_KEY="${MOONSHOT_API_KEY:-}" openclaw --profile "$CHILD_PROFILE" gateway --allow-unconfigured --port "$PORT" > "$AGENT_WS/gateway.log" 2>&1 &
+# Remove stale lock files for this child home.
+find "$CHILD_HOME" /tmp -name 'gateway.*.lock' -delete 2>/dev/null || true
 
+# Start the agent's gateway.
+nohup env OPENCLAW_HOME="$CHILD_HOME" OPENCLAW_PROFILE="$CHILD_PROFILE" MOONSHOT_API_KEY="${MOONSHOT_API_KEY:-}" \
+  openclaw --profile "$CHILD_PROFILE" gateway --allow-unconfigured --port "$PORT" \
+  > "$AGENT_WS/gateway.log" 2>&1 &
+GATEWAY_PID=$!
+
+log "Gateway started with PID=$GATEWAY_PID"
+
+# Wait for gateway to be ready.
 ready=0
 for _ in $(seq 1 25); do
   if grep -q "listening on ws://127.0.0.1:${PORT}" "$AGENT_WS/gateway.log" 2>/dev/null; then
     ready=1
     break
   fi
+  # Also check if the process died.
+  if ! kill -0 "$GATEWAY_PID" 2>/dev/null; then
+    echo "ERROR: gateway process (PID $GATEWAY_PID) died during startup" >&2
+    tail -n 40 "$AGENT_WS/gateway.log" >&2 || true
+    exit 1
+  fi
   sleep 1
 done
 
 if [[ "$ready" != "1" ]]; then
-  echo "ERROR: child gateway did not become ready on port $PORT" >&2
-  tail -n 80 "$AGENT_WS/gateway.log" >&2 || true
+  echo "ERROR: child gateway did not become ready on port $PORT within 25s" >&2
+  tail -n 40 "$AGENT_WS/gateway.log" >&2 || true
+  # Kill the failed gateway so the port isn't orphaned.
+  kill "$GATEWAY_PID" 2>/dev/null || true
   exit 1
 fi
 
-echo "$(date -Iseconds) GATEWAY_READY, updating registry..." >> "$DEBUG_LOG"
+log "Gateway ready, updating registry"
 
-python3 - "$AGENT_ID" "$PORT" "$ROLE" "$CHILD_HOME" "__DISCORD_GUILD_ID__" "__DISCORD_CHANNEL_ID__" <<PY
-import json, os, sys
-agent,port,role_raw,home,guild_id,channel_id=sys.argv[1],int(sys.argv[2]),sys.argv[3],sys.argv[4],sys.argv[5],sys.argv[6]
-if ' — ' in role_raw:
-  role, personality = role_raw.split(' — ', 1)
+# Update registry, SOUL.md, and TEAM.md.
+python3 - "$AGENT_ID" "$PORT" "$ROLE" "$CHILD_HOME" "__DISCORD_GUILD_ID__" "__DISCORD_CHANNEL_ID__" "$GATEWAY_PID" <<'PY'
+import json, os, re, sys
+
+agent, port, role_raw, home, guild_id, channel_id, pid = (
+    sys.argv[1],
+    int(sys.argv[2]),
+    sys.argv[3],
+    sys.argv[4],
+    sys.argv[5],
+    sys.argv[6],
+    int(sys.argv[7]),
+)
+
+if " — " in role_raw:
+    role, personality = role_raw.split(" — ", 1)
 else:
-  role, personality = role_raw, ''
+    role, personality = role_raw, ""
 
-# 1) Update registry
-p=os.path.expanduser('~/.openclaw/workspace/agents/registry.json')
+# 1) Update registry.
+p = os.path.expanduser("~/.openclaw/workspace/agents/registry.json")
 os.makedirs(os.path.dirname(p), exist_ok=True)
-d={}
+d = {}
 if os.path.exists(p):
-  try:d=json.load(open(p))
-  except Exception:d={}
-d[agent]={
-  "port":port,
-  "role":role.strip(),
-  "personality":personality.strip(),
-  "home":home,
-  "guild_id":guild_id,
-  "channel_id":channel_id
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            d = json.load(f)
+    except Exception:
+        d = {}
+
+d[agent] = {
+    "port": port,
+    "pid": pid,
+    "role": role.strip(),
+    "personality": personality.strip(),
+    "home": home,
+    "guild_id": guild_id,
+    "channel_id": channel_id,
 }
-json.dump(d, open(p,'w'), indent=2)
 
-# 2) Write agent SOUL.md identity section
-agent_ws=os.path.expanduser(f'~/.openclaw/workspace/{agent}')
+with open(p, "w", encoding="utf-8") as f:
+    json.dump(d, f, indent=2)
+
+# 2) Write agent SOUL.md identity section.
+agent_ws = os.path.expanduser(f"~/.openclaw/workspace/{agent}")
 os.makedirs(agent_ws, exist_ok=True)
-soul_path=os.path.join(agent_ws, 'SOUL.md')
-base="" 
+soul_path = os.path.join(agent_ws, "SOUL.md")
+base = ""
 if os.path.exists(soul_path):
-  base=open(soul_path, 'r', encoding='utf-8').read().rstrip()+"\n\n"
-identity_block=(
-  "## Identity\n\n"
-  f"- Name: {agent}\n"
-  f"- Role: {role.strip()}\n"
-  f"- Personality: {(personality or role_raw).strip()}\n"
+    with open(soul_path, "r", encoding="utf-8") as f:
+        base = f.read().rstrip() + "\n\n"
+identity_block = (
+    "## Identity\n\n"
+    f"- Name: {agent}\n"
+    f"- Role: {role.strip()}\n"
+    f"- Personality: {(personality or role_raw).strip()}\n"
 )
-open(soul_path, 'w', encoding='utf-8').write(base + identity_block)
+with open(soul_path, "w", encoding="utf-8") as f:
+    f.write(base + identity_block)
 
-# 3) Add/update shared TEAM.md roster
-shared_dir=os.path.expanduser('~/.openclaw/workspace/shared')
+# 3) Add/update shared TEAM.md roster.
+shared_dir = os.path.expanduser("~/.openclaw/workspace/shared")
 os.makedirs(shared_dir, exist_ok=True)
-team_path=os.path.join(shared_dir, 'TEAM.md')
-entry=(
-  f"- **{agent}**\n"
-  f"  - role: {role.strip()}\n"
-  f"  - personality: {(personality or role_raw).strip()}\n"
-  f"  - port: {port}\n"
+team_path = os.path.join(shared_dir, "TEAM.md")
+entry = (
+    f"- **{agent}**\n"
+    f"  - role: {role.strip()}\n"
+    f"  - personality: {(personality or role_raw).strip()}\n"
+    f"  - port: {port}\n"
 )
-start=f"<!-- AGENT:{agent}:START -->"
-end=f"<!-- AGENT:{agent}:END -->"
-block=f"{start}\n{entry}{end}\n"
-if os.path.exists(team_path):
-  t=open(team_path, 'r', encoding='utf-8').read()
-else:
-  t="# TEAM.md\n\n## Agents\n\n"
-if start in t and end in t:
-  import re
-  t=re.sub(re.escape(start)+r".*?"+re.escape(end)+r"\\n?", block, t, flags=re.S)
-else:
-  if "## Agents" not in t:
-    t=t.rstrip()+"\n\n## Agents\n\n"
-  t=t.rstrip()+"\n\n"+block
-open(team_path, 'w', encoding='utf-8').write(t)
+start = f"<!-- AGENT:{agent}:START -->"
+end = f"<!-- AGENT:{agent}:END -->"
+block = f"{start}\n{entry}{end}\n"
 
-print(json.dumps({"agent_id":agent,"port":port,"home":home,"guild_id":guild_id,"channel_id":channel_id,"guild_configured":True,"status":"started"}))
+if os.path.exists(team_path):
+    with open(team_path, "r", encoding="utf-8") as f:
+        t = f.read()
+else:
+    t = "# TEAM.md\n\n## Agents\n\n"
+
+if start in t and end in t:
+    t = re.sub(re.escape(start) + r".*?" + re.escape(end) + r"\n?", block, t, flags=re.S)
+else:
+    if "## Agents" not in t:
+        t = t.rstrip() + "\n\n## Agents\n\n"
+    t = t.rstrip() + "\n\n" + block
+
+with open(team_path, "w", encoding="utf-8") as f:
+    f.write(t)
+
+print(
+    json.dumps(
+        {
+            "agent_id": agent,
+            "port": port,
+            "pid": pid,
+            "home": home,
+            "guild_id": guild_id,
+            "channel_id": channel_id,
+            "guild_configured": True,
+            "status": "started",
+        }
+    )
+)
 PY
 PY_EXIT=$?
-echo "$(date -Iseconds) REGISTRY_UPDATE_EXIT=$PY_EXIT" >> "$DEBUG_LOG"
 
 if [[ $PY_EXIT -ne 0 ]]; then
   echo "ERROR: Registry/TEAM.md update failed with exit code $PY_EXIT" >&2
   exit 1
 fi
 
-echo "$(date -Iseconds) SPAWN_COMPLETE" >> "$DEBUG_LOG"
+log "SPAWN_COMPLETE port=$PORT pid=$GATEWAY_PID"

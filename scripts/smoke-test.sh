@@ -95,8 +95,10 @@ say "Checking operator bridge"
 if [[ -f /etc/openclaw/operator-bridge.env ]]; then
   # shellcheck disable=SC1091
   source /etc/openclaw/operator-bridge.env
-  if curl -fsS --max-time 3 http://127.0.0.1:${OPERATOR_BRIDGE_PORT:-8787}/health >/dev/null 2>&1; then
-    pass "Operator bridge healthy on 127.0.0.1:${OPERATOR_BRIDGE_PORT:-8787}"
+  BRIDGE_HEALTH="$(curl -fsS --max-time 3 http://127.0.0.1:${OPERATOR_BRIDGE_PORT:-8787}/health 2>/dev/null || true)"
+  if echo "$BRIDGE_HEALTH" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d.get('ok')==True" 2>/dev/null; then
+    BRIDGE_UPTIME="$(echo "$BRIDGE_HEALTH" | python3 -c "import json,sys; print(json.load(sys.stdin).get('uptime_seconds','?'))" 2>/dev/null || echo '?')"
+    pass "Operator bridge healthy on 127.0.0.1:${OPERATOR_BRIDGE_PORT:-8787} (uptime: ${BRIDGE_UPTIME}s)"
   else
     warn "Operator bridge health check failed"
   fi

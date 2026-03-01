@@ -7,5 +7,7 @@ code, pre, input, textarea { background: #1f2a50; color: #e7ecff; border-radius:
 input, textarea { width: 100%; box-sizing: border-box; padding: 10px; }
 pre { padding: 12px; overflow: auto; }
 .muted { color: #9fb0e8; }
-button { background: #3f6fff; color: white; border: 0; border-radius: 10px; padding: 10px 14px; cursor: pointer; }
+button { background: #3f6fff; color: white; border: 0; border-radius: 10px; padding: 10px 14px; cursor: pointer; transition: opacity 0.2s; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+input:disabled, textarea:disabled { opacity: 0.6; }
 a { color: #8bb2ff; }
