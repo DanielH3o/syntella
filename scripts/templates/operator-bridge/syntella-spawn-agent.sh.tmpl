@@ -231,7 +231,7 @@ config_set() {
 
 config_set agents.defaults.workspace "$AGENT_WS"
 config_set agents.defaults.sandbox.workspaceAccess "rw"
-config_set agents.defaults.model.primary "anthropic/claude-3-5-sonnet-20241022"
+config_set agents.defaults.model.primary "anthropic/claude-sonnet-4-6"
 config_set agents.defaults.model.fallbacks '[]'
 config_set gateway.mode local
 config_set gateway.bind loopback
@@ -271,7 +271,7 @@ try:
     # Model config.
     agents = cfg.setdefault("agents", {})
     defs = agents.setdefault("defaults", {})
-    defs.setdefault("model", {})["primary"] = "anthropic/claude-3-5-sonnet-20241022"
+    defs.setdefault("model", {})["primary"] = "anthropic/claude-sonnet-4-6"
     defs.setdefault("model", {})["fallbacks"] = []
     # Remove invalid key for older/newer schemas that reject agents.main.
     if isinstance(agents, dict) and "main" in agents:
@@ -318,7 +318,7 @@ if [[ "$child_group_policy" != "allowlist" || "$child_guild_allow" != "true" ]];
   oc_child config get channels.discord.guilds >&2 || true
   exit 1
 fi
-if [[ "$child_model_primary" != anthropic/* && "$child_model_primary" != "anthropic/claude-3-5-sonnet-20241022" ]]; then
+if [[ "$child_model_primary" != anthropic/* && "$child_model_primary" != "anthropic/claude-sonnet-4-6" ]]; then
   echo "ERROR: child model wiring failed (agents.defaults.model.primary=${child_model_primary:-<unset>})" >&2
   exit 1
 fi

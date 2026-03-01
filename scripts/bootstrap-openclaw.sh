@@ -624,7 +624,7 @@ configure_openclaw_runtime() {
   install_syntella_exec_wrapper
   install_operator_bridge
 
-  oc config set agents.defaults.model.primary "anthropic/claude-3-5-sonnet-20241022"
+  oc config set agents.defaults.model.primary "anthropic/claude-sonnet-4-6"
   oc config set agents.defaults.workspace "~/.openclaw/workspace/syntella"
   oc config set agents.defaults.sandbox.mode "off"
   oc config set agents.defaults.sandbox.workspaceAccess "rw"
