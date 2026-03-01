@@ -4,29 +4,115 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Admin - Syntella</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <main class="wrap">
-    <section class="card">
-      <h1>Admin</h1>
-      <p class="muted">Manage dedicated agents for this droplet.</p>
-      <button id="refreshAgents">Refresh agents</button>
-      <pre id="agentsOut">Loading...</pre>
-    </section>
+  <div class="admin-wrap">
 
-    <section class="card" style="margin-top:16px;">
-      <h2>Add agent</h2>
+    <!-- Header -->
+    <header class="admin-header">
+      <div class="admin-header__brand">
+        <span class="admin-header__logo">Syntella</span>
+        <span class="admin-header__badge">Admin</span>
+      </div>
+      <div class="admin-header__status">
+        <span class="admin-header__status-item">
+          <span class="status-dot status-dot--offline" id="bridgeDot"></span>
+          <span id="bridgeLabel">Connecting...</span>
+        </span>
+        <span class="mono text-muted" id="uptimeLabel" style="font-size:0.75rem"></span>
+      </div>
+    </header>
+
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-card__label">Total Agents</div>
+        <div class="stat-card__value" id="statTotal">--</div>
+        <div class="stat-card__detail">Registered in bridge</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card__label">Active</div>
+        <div class="stat-card__value" id="statActive">--</div>
+        <div class="stat-card__detail">
+          <span class="status-dot status-dot--online" style="width:6px;height:6px"></span>
+          Running with gateway
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card__label">Bridge Uptime</div>
+        <div class="stat-card__value" id="statUptime">--</div>
+        <div class="stat-card__detail">Operator bridge</div>
+      </div>
+    </div>
+
+    <!-- Agents -->
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">Agents</h2>
+        <p class="section-subtitle">Dedicated agent instances on this droplet</p>
+      </div>
+      <button class="btn btn-ghost" id="refreshAgents">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+        Refresh
+      </button>
+    </div>
+    <div id="agentGrid" class="agent-grid"></div>
+
+    <!-- Spawn -->
+    <div class="spawn-section">
+      <div class="section-header" style="margin-bottom:18px">
+        <div>
+          <h2 class="section-title">Spawn New Agent</h2>
+          <p class="section-subtitle">Create a new dedicated agent with its own Discord identity</p>
+        </div>
+      </div>
       <form id="spawnForm">
-        <label>Name (slug)<br /><input name="agent_id" required pattern="[a-z0-9][a-z0-9-]{1,30}" placeholder="e.g. nova, research-bot" /></label><br /><br />
-        <label>Role<br /><input name="role" required placeholder="e.g. research helper" /></label><br /><br />
-        <label>Brief description / personality<br /><textarea name="description" rows="3" required placeholder="e.g. Helps with research tasks, thorough and methodical"></textarea></label><br /><br />
-        <label>Discord bot token<br /><input name="discord_token" required autocomplete="off" placeholder="Bot token for this agent's Discord account" /></label><br /><br />
-        <button type="submit">Add agent</button>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="inp-id">Agent ID</label>
+            <input id="inp-id" name="agent_id" required pattern="[a-z0-9][a-z0-9-]{1,30}" placeholder="e.g. nova" />
+            <span class="form-hint">Lowercase, numbers, hyphens. 2-31 chars.</span>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="inp-role">Role</label>
+            <input id="inp-role" name="role" required placeholder="e.g. research helper" />
+          </div>
+          <div class="form-group form-group--full">
+            <label class="form-label" for="inp-desc">Description / Personality</label>
+            <textarea id="inp-desc" name="description" rows="2" required placeholder="Describe what this agent does and how it behaves"></textarea>
+          </div>
+          <div class="form-group form-group--full">
+            <label class="form-label" for="inp-token">Discord Bot Token</label>
+            <input id="inp-token" name="discord_token" type="password" required autocomplete="off" placeholder="Paste the bot token for this agent" />
+          </div>
+        </div>
+        <div class="form-footer">
+          <button type="submit" class="btn btn-primary" id="spawnBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            Spawn Agent
+          </button>
+          <span id="spawnBtnLabel" class="text-muted" style="font-size:0.8125rem"></span>
+        </div>
+        <div class="progress-container" id="spawnProgress">
+          <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="progressFill" style="width:0%"></div>
+          </div>
+          <div class="progress-label">
+            <span id="progressText">Preparing...</span>
+            <span id="progressTime">0s</span>
+          </div>
+        </div>
       </form>
-      <pre id="spawnOut"></pre>
-    </section>
-  </main>
+    </div>
+
+    <footer class="admin-footer">Powered by OpenClaw</footer>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
   <script src="./admin.js"></script>
 </body>
 </html>
