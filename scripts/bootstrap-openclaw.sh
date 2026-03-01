@@ -468,11 +468,14 @@ install_operator_bridge() {
   local env_dir="/etc/openclaw"
   local env_file="$env_dir/operator-bridge.env"
 
-  OPERATOR_BRIDGE_TOKEN="$(python3 - <<'PY'
-import secrets
-print(secrets.token_hex(24))
-PY
-)"
+  # Reuse an existing token so the bridge identity is stable across re-runs.
+  OPERATOR_BRIDGE_TOKEN=""
+  if [[ -f "$env_file" ]]; then
+    OPERATOR_BRIDGE_TOKEN="$(grep '^OPERATOR_BRIDGE_TOKEN=' "$env_file" 2>/dev/null | cut -d= -f2- | tr -d '"[:space:]' || true)"
+  fi
+  if [[ -z "$OPERATOR_BRIDGE_TOKEN" ]]; then
+    OPERATOR_BRIDGE_TOKEN="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
+  fi
 
   sudo install -d -m 750 -o root -g openclaw "$env_dir"
   sudo tee "$env_file" >/dev/null <<EOF
@@ -481,12 +484,6 @@ OPERATOR_BRIDGE_PORT="${OPERATOR_BRIDGE_PORT}"
 EOF
   sudo chown root:openclaw "$env_file"
   sudo chmod 640 "$env_file"
-
-  # Debug: Show Discord vars before rendering
-  echo "DEBUG: Rendering spawn template with:"
-  echo "  DISCORD_HUMAN_ID='${DISCORD_HUMAN_ID:-}'"
-  echo "  DISCORD_GUILD_ID='${DISCORD_GUILD_ID:-}'"
-  echo "  DISCORD_CHANNEL_ID='${DISCORD_CHANNEL_ID:-}'"
 
   # Validate Discord vars are set before rendering spawn template
   if [[ -z "${DISCORD_HUMAN_ID:-}" || -z "${DISCORD_GUILD_ID:-}" || -z "${DISCORD_CHANNEL_ID:-}" ]]; then
@@ -514,11 +511,11 @@ EOF
   sudo install -m 755 "$HOME/.openclaw/syntella-spawn-agent.sh" "$spawn_sh"
 
   mkdir -p "$bridge_dir"
-  mkdir -p "$bridge_dir"
   render_template "$TEMPLATE_DIR/operator-bridge/server.py" "$bridge_py"
   chmod 700 "$bridge_py"
 
   pkill -f "operator-bridge/server.py" >/dev/null 2>&1 || true
+  sleep 1
   nohup bash -lc "set -a; source '$env_file'; set +a; exec python3 '$bridge_py'" > "$HOME/.openclaw/logs/operator-bridge.log" 2>&1 &
 }
 
@@ -640,9 +637,6 @@ PY
   oc config set tools.fs.workspaceOnly false
   oc config set tools.exec.applyPatch.workspaceOnly false
 
-  configure_exec_approvals_for_autonomous_spawning
-  verify_exec_approvals
-
   say "Configuring Discord channel allowlist"
   configure_discord_channel
   verify_discord_dm_allowlist
@@ -753,6 +747,8 @@ EOF
   # Validation: local loopback checks (public checks are expected to fail for non-allowlisted IPs).
   local marker local_ok api_ok
   marker="oc-bootstrap-marker-$(date +%s)-$RANDOM"
+  # Remove any markers left by previous runs before appending a fresh one.
+  sed -i '/<!-- oc-bootstrap-marker-/d' "$project_dir/index.html" 2>/dev/null || true
   echo "<!-- ${marker} -->" >> "$project_dir/index.html"
 
   local_ok=0
@@ -823,13 +819,7 @@ start_gateway() {
   local log_file="$HOME/.openclaw/logs/gateway.log"
   mkdir -p "$HOME/.openclaw/logs"
 
-  # Check if already running
-  if is_gateway_listening; then
-    echo "Gateway already listening on port 18789."
-    return 0
-  fi
-
-  # Clear any stale locks/processes first
+  # Always restart to pick up any config changes applied before this call.
   pkill -f "openclaw gateway" >/dev/null 2>&1 || true
   sleep 1
 
@@ -895,6 +885,9 @@ main() {
   if ! start_gateway; then
     echo "Warning: gateway startup reported failure; continuing with frontend setup + diagnostics."
   fi
+
+  configure_exec_approvals_for_autonomous_spawning
+  verify_exec_approvals
 
   setup_frontend_workspace
 

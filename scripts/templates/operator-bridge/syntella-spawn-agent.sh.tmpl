@@ -122,6 +122,8 @@ oc_child config set channels.discord.dmPolicy "allowlist" || true
 oc_child config set tools.exec.host gateway || true
 oc_child config set tools.exec.security full || true
 oc_child config set tools.exec.ask off || true
+oc_child config set tools.fs.workspaceOnly false || true
+oc_child config set tools.exec.applyPatch.workspaceOnly false || true
 
 # Hard-pin model keys directly in JSON for schema/version drift tolerance.
 python3 - "$CHILD_HOME" <<PY
