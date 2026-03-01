@@ -485,7 +485,7 @@ EOF
   sudo chown root:openclaw "$env_file"
   sudo chmod 640 "$env_file"
 
-  # Validate Discord vars are set before rendering spawn template
+  # Validate Discord vars are set before rendering spawn template.
   if [[ -z "${DISCORD_HUMAN_ID:-}" || -z "${DISCORD_GUILD_ID:-}" || -z "${DISCORD_CHANNEL_ID:-}" ]]; then
     echo "ERROR: Discord variables not set for spawn template rendering."
     echo "HUMAN_ID='${DISCORD_HUMAN_ID:-}' GUILD_ID='${DISCORD_GUILD_ID:-}' CHANNEL_ID='${DISCORD_CHANNEL_ID:-}'"
@@ -494,17 +494,10 @@ EOF
 
   render_template "$TEMPLATE_DIR/operator-bridge/syntella-spawn-agent.sh.tmpl" "$HOME/.openclaw/syntella-spawn-agent.sh"
 
-  # Verify placeholders were actually substituted (check for remaining __ patterns or empty values)
+  # Verify placeholders were actually substituted.
   if grep -q '__DISCORD_' "$HOME/.openclaw/syntella-spawn-agent.sh"; then
     echo "ERROR: Spawn script still contains unsubstituted placeholders:"
     grep '__DISCORD_' "$HOME/.openclaw/syntella-spawn-agent.sh" | head -5
-    exit 1
-  fi
-
-  # Also check for empty allowFrom arrays which indicate substitution with empty string
-  if grep -q 'allowFrom.*\[\]' "$HOME/.openclaw/syntella-spawn-agent.sh"; then
-    echo "ERROR: Spawn script has empty allowFrom arrays (Discord ID substitution failed):"
-    grep 'allowFrom.*\[\]' "$HOME/.openclaw/syntella-spawn-agent.sh" | head -5
     exit 1
   fi
 
@@ -514,9 +507,35 @@ EOF
   render_template "$TEMPLATE_DIR/operator-bridge/server.py" "$bridge_py"
   chmod 700 "$bridge_py"
 
+  # Gracefully stop existing bridge before restarting.
   pkill -f "operator-bridge/server.py" >/dev/null 2>&1 || true
   sleep 1
+  # Force-kill if still alive.
+  pkill -9 -f "operator-bridge/server.py" >/dev/null 2>&1 || true
+
+  mkdir -p "$HOME/.openclaw/logs"
   nohup bash -lc "set -a; source '$env_file'; set +a; exec python3 '$bridge_py'" > "$HOME/.openclaw/logs/operator-bridge.log" 2>&1 &
+  local bridge_pid=$!
+
+  # Wait for bridge to be healthy (up to 10 seconds).
+  local waited=0
+  while (( waited < 10 )); do
+    if curl -fsS --max-time 2 "http://127.0.0.1:${OPERATOR_BRIDGE_PORT}/health" >/dev/null 2>&1; then
+      echo "Operator bridge started (pid=$bridge_pid, port=${OPERATOR_BRIDGE_PORT})"
+      return 0
+    fi
+    # Check if process died.
+    if ! kill -0 "$bridge_pid" 2>/dev/null; then
+      echo "ERROR: Operator bridge process died during startup."
+      tail -n 20 "$HOME/.openclaw/logs/operator-bridge.log" 2>/dev/null || true
+      return 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+
+  echo "Warning: operator bridge did not respond to health check within 10s (pid=$bridge_pid)."
+  echo "It may still be starting. Check: curl http://127.0.0.1:${OPERATOR_BRIDGE_PORT}/health"
 }
 
 configure_exec_approvals_for_autonomous_spawning() {

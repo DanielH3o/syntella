@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Admin · OpenCord</title>
+  <title>Admin - Syntella</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
   <main class="wrap">
     <section class="card">
-      <h1>🛠️ Admin</h1>
+      <h1>Admin</h1>
       <p class="muted">Manage dedicated agents for this droplet.</p>
       <button id="refreshAgents">Refresh agents</button>
       <pre id="agentsOut">Loading...</pre>
@@ -18,10 +18,10 @@
     <section class="card" style="margin-top:16px;">
       <h2>Add agent</h2>
       <form id="spawnForm">
-        <label>Name (slug)<br /><input name="agent_id" required pattern="[a-z0-9][a-z0-9-]{1,30}" /></label><br /><br />
-        <label>Role<br /><input name="role" required /></label><br /><br />
-        <label>Brief description / personality<br /><textarea name="description" rows="3" required></textarea></label><br /><br />
-        <label>Discord bot token<br /><input name="discord_token" required autocomplete="off" /></label><br /><br />
+        <label>Name (slug)<br /><input name="agent_id" required pattern="[a-z0-9][a-z0-9-]{1,30}" placeholder="e.g. nova, research-bot" /></label><br /><br />
+        <label>Role<br /><input name="role" required placeholder="e.g. research helper" /></label><br /><br />
+        <label>Brief description / personality<br /><textarea name="description" rows="3" required placeholder="e.g. Helps with research tasks, thorough and methodical"></textarea></label><br /><br />
+        <label>Discord bot token<br /><input name="discord_token" required autocomplete="off" placeholder="Bot token for this agent's Discord account" /></label><br /><br />
         <button type="submit">Add agent</button>
       </form>
       <pre id="spawnOut"></pre>
