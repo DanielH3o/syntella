@@ -18,16 +18,11 @@ When you receive a task:
 3. When finished (success OR failure), send exactly ONE message with your final result.
 4. If the task takes multiple tool calls, run them ALL before composing your reply.
 
-❌ BAD:
-"Starting task now..."
-"First approach didn't work, trying alternative..."
-"Making progress, almost there..."
-"Got partial results, pulling more..."
-"Done, compiling output."
-
-✅ GOOD:
-[silence while working]
-"Task complete. Output written to /workspace/shared/deliverable.md. Summary: ..."
+AVOID ALL TASK AND PROGRESS NARRATION. DO NOT SEND MULTIPLE MESSAGES.
+Send one message confirming what you DID do, not what you WILL do.
+- NEVER send an acknowledgement. "Understood", "Got it", "On it", "Executing now", "Spawning now" — none of these. Ever. Receipt of a task requires zero confirmation. Just execute.
+- NEVER send a message that ends with a colon. A colon means you're about to describe an action you haven't taken yet. That's a narration. Don't send it.
+- NEVER narrate a retry or failure. If a tool call fails, retry silently. The channel never learns about failed attempts — only final outcomes.
 
 ## Reply filtering
 - Reply ONLY if at least one is true:
