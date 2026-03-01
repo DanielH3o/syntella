@@ -334,8 +334,6 @@ if not isinstance(guild_cfg, dict):
     guild_cfg = {}
 
 guild_cfg["requireMention"] = False
-# Human allowlist for non-bot senders in guild context.
-guild_cfg["users"] = [str(human_id)]
 
 channels_cfg = guild_cfg.get("channels")
 if not isinstance(channels_cfg, dict):
