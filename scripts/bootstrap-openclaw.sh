@@ -27,7 +27,7 @@ DISCORD_BOT_TOKEN="${DISCORD_BOT_TOKEN:-}"
 DISCORD_TARGET="${DISCORD_TARGET:-}"
 # Accept common aliases to reduce bootstrap env mistakes.
 DISCORD_HUMAN_ID="${DISCORD_HUMAN_ID:-${DISCORD_USER_ID:-${DISCORD_HUMAN:-}}}"
-ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
+MOONSHOT_API_KEY="${MOONSHOT_API_KEY:-}"
 DISCORD_GUILD_ID=""
 DISCORD_CHANNEL_ID=""
 FRONTEND_ENABLED="${FRONTEND_ENABLED:-1}"
@@ -269,9 +269,9 @@ require_discord_inputs() {
     exit 1
   fi
 
-  if [[ -z "$ANTHROPIC_API_KEY" ]]; then
-    echo "Missing ANTHROPIC_API_KEY."
-    echo "Export ANTHROPIC_API_KEY before running this script."
+  if [[ -z "$MOONSHOT_API_KEY" ]]; then
+    echo "Missing MOONSHOT_API_KEY."
+    echo "Export MOONSHOT_API_KEY before running this script."
     exit 1
   fi
 
@@ -387,7 +387,7 @@ setup_openclaw_env_file() {
   sudo tee "$env_file" >/dev/null <<EOF
 # Shared OpenClaw runtime environment
 # Source this file before starting OpenClaw-related processes.
-ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}"
+MOONSHOT_API_KEY="${MOONSHOT_API_KEY}"
 OPENCLAW_HOME="${HOME}"
 EOF
   sudo chown root:openclaw "$env_file"
@@ -411,7 +411,7 @@ setup_openclaw_global_dotenv() {
   cat >"$dotenv_file" <<EOF
 # OpenClaw daemon-level environment fallback.
 # Gateway reads this even when it does not inherit shell env.
-ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}"
+MOONSHOT_API_KEY="${MOONSHOT_API_KEY}"
 EOF
   chmod 600 "$dotenv_file"
 }
@@ -624,7 +624,7 @@ configure_openclaw_runtime() {
   install_syntella_exec_wrapper
   install_operator_bridge
 
-  oc config set agents.defaults.model.primary "anthropic/claude-sonnet-4-6"
+  oc config set agents.defaults.model.primary "moonshot/kimi-k2.5"
   oc config set agents.defaults.workspace "~/.openclaw/workspace/syntella"
   oc config set agents.defaults.sandbox.mode "off"
   oc config set agents.defaults.sandbox.workspaceAccess "rw"
