@@ -427,7 +427,7 @@ identity_block = (
     "## Identity\n\n"
     f"- Name: {agent}\n"
     f"- Role: {role.strip()}\n"
-    f"- Personality: {(personality or role_raw).strip()}\n"
+    f"- Responsibilities: {(personality or role_raw).strip()}\n"
 )
 with open(soul_path, "w", encoding="utf-8") as f:
     f.write(base + identity_block)
