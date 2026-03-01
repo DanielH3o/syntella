@@ -204,8 +204,8 @@ sed -i "s|__AGENT_NAME__|${DISPLAY_NAME}|g; s|__AGENT_ID__|${AGENT_ID}|g" "$AGEN
 mkdir -p "$CHILD_HOME/.openclaw-main"
 if [[ -f "$HOME/.openclaw/.env" ]]; then
   cp "$HOME/.openclaw/.env" "$CHILD_HOME/.env"
-elif [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
-  echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" > "$CHILD_HOME/.env"
+elif [[ -n "${MOONSHOT_API_KEY:-}" ]]; then
+  echo "MOONSHOT_API_KEY=${MOONSHOT_API_KEY}" > "$CHILD_HOME/.env"
 fi
 cp "$CHILD_HOME/.env" "$CHILD_HOME/.openclaw-main/.env" 2>/dev/null || true
 chmod 600 "$CHILD_HOME/.env" "$CHILD_HOME/.openclaw-main/.env" 2>/dev/null || true
@@ -231,7 +231,7 @@ config_set() {
 
 config_set agents.defaults.workspace "$AGENT_WS"
 config_set agents.defaults.sandbox.workspaceAccess "rw"
-config_set agents.defaults.model.primary "anthropic/claude-sonnet-4-6"
+config_set agents.defaults.model.primary "moonshot/kimi-k2.5"
 config_set agents.defaults.model.fallbacks '[]'
 config_set gateway.mode local
 config_set gateway.bind loopback
@@ -271,7 +271,7 @@ try:
     # Model config.
     agents = cfg.setdefault("agents", {})
     defs = agents.setdefault("defaults", {})
-    defs.setdefault("model", {})["primary"] = "anthropic/claude-sonnet-4-6"
+    defs.setdefault("model", {})["primary"] = "moonshot/kimi-k2.5"
     defs.setdefault("model", {})["fallbacks"] = []
     # Remove invalid key for older/newer schemas that reject agents.main.
     if isinstance(agents, dict) and "main" in agents:
@@ -318,12 +318,12 @@ if [[ "$child_group_policy" != "allowlist" || "$child_guild_allow" != "true" ]];
   oc_child config get channels.discord.guilds >&2 || true
   exit 1
 fi
-if [[ "$child_model_primary" != anthropic/* && "$child_model_primary" != "anthropic/claude-sonnet-4-6" ]]; then
+if [[ "$child_model_primary" != moonshot/* && "$child_model_primary" != "moonshot/kimi-k2.5" ]]; then
   echo "ERROR: child model wiring failed (agents.defaults.model.primary=${child_model_primary:-<unset>})" >&2
   exit 1
 fi
-if ! grep -q '^ANTHROPIC_API_KEY=' "$CHILD_HOME/.openclaw-main/.env" 2>/dev/null; then
-  echo "ERROR: child Anthropic key missing in $CHILD_HOME/.openclaw-main/.env" >&2
+if ! grep -q '^MOONSHOT_API_KEY=' "$CHILD_HOME/.openclaw-main/.env" 2>/dev/null; then
+  echo "ERROR: child Moonshot key missing in $CHILD_HOME/.openclaw-main/.env" >&2
   exit 1
 fi
 
@@ -339,7 +339,7 @@ log "Config validated, starting gateway on port $PORT"
 find "$CHILD_HOME" /tmp -name 'gateway.*.lock' -delete 2>/dev/null || true
 
 # Start the agent's gateway.
-nohup env OPENCLAW_HOME="$CHILD_HOME" OPENCLAW_PROFILE="$CHILD_PROFILE" ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
+nohup env OPENCLAW_HOME="$CHILD_HOME" OPENCLAW_PROFILE="$CHILD_PROFILE" MOONSHOT_API_KEY="${MOONSHOT_API_KEY:-}" \
   openclaw --profile "$CHILD_PROFILE" gateway --allow-unconfigured --port "$PORT" \
   > "$AGENT_WS/gateway.log" 2>&1 &
 GATEWAY_PID=$!
