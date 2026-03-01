@@ -164,7 +164,7 @@ install_openclaw_cli() {
   npm config set prefix "$HOME/.npm-global"
 
   # Skip optional deps (e.g. @discordjs/opus) to avoid native build failures on fresh droplets.
-  npm install -g --omit=optional openclaw@latest
+  npm install -g --omit=optional openclaw@2026.2.24
 
   ensure_openclaw_on_path || true
 }
