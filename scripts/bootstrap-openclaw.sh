@@ -637,6 +637,8 @@ PY
   oc config set tools.exec.host "gateway"
   oc config set tools.exec.security "full"
   oc config set tools.exec.ask "off"
+  oc config set tools.fs.workspaceOnly false
+  oc config set tools.exec.applyPatch.workspaceOnly false
 
   configure_exec_approvals_for_autonomous_spawning
   verify_exec_approvals

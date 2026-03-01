@@ -13,7 +13,7 @@
 │  │  ├── USER.md
 │  │  ├── TASKS.md
 │  │  └── TOOLS.md
-│  ├── main/                     # main agent private workspace
+│  ├── syntella/                     # syntella main agent private workspace
 │  │  ├── IDENTITY.md
 │  │  ├── MEMORY.md
 │  │  ├── HEARTBEAT.md
@@ -23,7 +23,7 @@
 │  │  ├── MEMORY.md
 │  │  ├── HEARTBEAT.md
 │  │  └── memory/
-│  └── aurora/                   # aurora private workspace
+│  └── spawned_agent_name/                   # workspace for spawned agents, copies template files
 │     ├── IDENTITY.md
 │     ├── MEMORY.md
 │     ├── HEARTBEAT.md
