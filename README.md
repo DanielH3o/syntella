@@ -94,6 +94,34 @@ export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 bash scripts/bootstrap-openclaw.sh
 ```
 
+## Local development
+
+You can work on the frontend and local dashboard logic without rebuilding a droplet.
+
+```bash
+bash scripts/dev-server.sh
+```
+
+That starts a single local server on `http://127.0.0.1:3000` which:
+
+- serves the frontend from this repo
+- reads agents from `~/.openclaw/workspace/agents/registry.json`
+- reads and writes tasks in `~/.openclaw/workspace/tasks.db`
+
+Useful routes:
+
+- `http://127.0.0.1:3000/`
+- `http://127.0.0.1:3000/admin`
+- `http://127.0.0.1:3000/api/departments`
+- `http://127.0.0.1:3000/api/tasks`
+
+Optional env vars:
+
+- `SYNTELLA_WORKSPACE=/path/to/workspace`
+- `SYNTELLA_DEV_PORT=3001`
+
+If your local OpenClaw processes are already writing to `~/.openclaw/workspace`, the dashboard will use that real data. If `registry.json` does not exist yet, the UI still runs but Departments will be empty until agents register.
+
 ## v1 Hardening / Verification
 
 After bootstrap, run:
