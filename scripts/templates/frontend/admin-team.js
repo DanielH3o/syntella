@@ -1,19 +1,26 @@
 (function () {
   window.SyntellaAdminRegister((app) => {
-    const { refs, utils, ui, actions } = app;
+    const { refs, state, utils, ui, actions } = app;
 
     const clearOrgPanel = () => {
+      state.selectedAgentId = null;
       utils.orgNodes().forEach((item) => item.classList.remove('is-selected'));
       refs.panelName.textContent = 'No agent selected';
-      refs.panelRole.textContent = 'Pick any node in the team chart';
+      refs.panelRole.textContent = 'Pick any agent card in the team view';
       refs.panelDesc.textContent = 'The drawer stays closed until you click an agent.';
       refs.panelStatus.textContent = 'Status: -';
       refs.panelFocus.textContent = 'Focus: -';
       refs.panelResponsibilities.innerHTML = '<li>Select an agent to inspect status, role, and responsibilities.</li>';
+      refs.panelBudgetInput.value = '';
+      refs.panelBudgetInput.disabled = true;
+      refs.panelBudgetSave.disabled = true;
+      refs.panelBudgetHelp.textContent = 'Select an agent to configure their budget cap.';
+      ui.setAgentPanelBudgetFeedback('');
       ui.setTeamPanelOpen(false);
     };
 
     const renderOrgPanel = (node) => {
+      state.selectedAgentId = node.dataset.agentId || null;
       utils.orgNodes().forEach((item) => item.classList.toggle('is-selected', item === node));
       refs.panelName.textContent = node.dataset.agentName || '';
       refs.panelRole.textContent = node.dataset.agentRole || '';
@@ -22,6 +29,13 @@
       refs.panelFocus.textContent = `Focus: ${node.dataset.agentFocus || 'N/A'}`;
       const responsibilities = (node.dataset.agentResponsibilities || '').split('|').filter(Boolean);
       refs.panelResponsibilities.innerHTML = responsibilities.map((item) => `<li>${utils.escapeHtml(item)}</li>`).join('');
+      refs.panelBudgetInput.disabled = false;
+      refs.panelBudgetSave.disabled = false;
+      refs.panelBudgetInput.value = node.dataset.agentBudget || '';
+      refs.panelBudgetHelp.textContent = node.dataset.agentBudget
+        ? `Current monthly budget cap: ${utils.formatCurrency(Number(node.dataset.agentBudget || 0))}.`
+        : 'No monthly budget cap is set for this agent yet.';
+      ui.setAgentPanelBudgetFeedback('');
       ui.setTeamPanelOpen(true);
     };
 
@@ -32,12 +46,14 @@
     };
 
     const applyNodeData = (node, data) => {
+      node.dataset.agentId = data.id;
       node.dataset.agentName = data.name;
       node.dataset.agentRole = data.role;
       node.dataset.agentStatus = data.status;
       node.dataset.agentFocus = data.focus;
       node.dataset.agentDesc = data.description;
       node.dataset.agentResponsibilities = data.responsibilities.join('|');
+      node.dataset.agentBudget = data.monthlyBudget == null ? '' : String(data.monthlyBudget);
       const eyebrowDot = data.status === 'Running' ? 'status-dot--online' : 'status-dot--offline';
       node.innerHTML = `
         <span class="org-node__eyebrow"><span class="status-dot ${eyebrowDot}"></span> ${utils.escapeHtml(data.eyebrow)}</span>
@@ -56,6 +72,7 @@
       const role = agent && agent.role ? agent.role : (isRoot ? 'Main Agent' : 'Team Member');
       const description = agent && agent.description ? agent.description : (isRoot ? 'Primary local OpenClaw profile.' : 'Discovered local agent.');
       return {
+        id: agentId,
         name: agentId,
         role,
         status,
@@ -66,9 +83,12 @@
           : ['Handles assigned work', 'Operates as an independent agent', agent && agent.channel_id ? `Listens only on inbox channel ${agent.channel_id}` : 'Should be assigned a dedicated inbox channel'],
         eyebrow: isRoot ? 'Root Agent' : 'Team Member',
         department: isRoot ? 'Primary profile' : role,
-        summary: isRoot ? role : description,
+        summary: role,
+        monthlyBudget: agent && agent.monthly_budget != null ? Number(agent.monthly_budget) : null,
         meta: [
           status === 'Running' ? 'Active now' : status,
+          agent && agent.specialty === 'seo' ? 'SEO specialist' : null,
+          agent && agent.monthly_budget != null ? `Budget ${utils.formatCurrency(Number(agent.monthly_budget || 0))}` : 'Budget unset',
           agent && agent.port ? `Port ${agent.port}` : null,
           agent && agent.channel_id ? `Inbox ${agent.channel_id}` : null,
           agent && agent.session_count ? `${agent.session_count} sessions` : null,
@@ -89,11 +109,13 @@
     };
 
     actions.loadDepartments = async () => {
+      const selectedAgentId = state.selectedAgentId;
       try {
         const response = await fetch('/api/departments', { signal: AbortSignal.timeout(5000) });
         if (!response.ok) return;
         const payload = await response.json();
         const agents = payload.agents || {};
+        state.agentsCatalog = agents;
         ui.populateAssignees(agents);
         const rootId = agents.main ? 'main' : (Object.keys(agents)[0] || 'main');
         const rootAgent = agents[rootId] || {};
@@ -109,7 +131,9 @@
         entries.sort(([left], [right]) => left.localeCompare(right)).forEach(([agentId, agent]) => {
           refs.orgBranches.appendChild(createBranchNode(agentId, agent));
         });
-        clearOrgPanel();
+        const selectedNode = utils.orgNodes().find((item) => item.dataset.agentId === selectedAgentId);
+        if (selectedNode) renderOrgPanel(selectedNode);
+        else clearOrgPanel();
       } catch {
         bindOrgNode(refs.orgRootNode);
         clearOrgPanel();
@@ -135,9 +159,11 @@
           role: refs.agentRoleInput.value.trim(),
           description: refs.agentDescriptionInput.value.trim(),
           model_primary: refs.agentModelSelect.value,
+          specialty: refs.agentSpecialtySelect.value,
           port: refs.agentPortInput.value.trim(),
           discord_token: refs.agentDiscordTokenInput.value.trim(),
           channel_id: refs.agentChannelIdInput.value.trim(),
+          monthly_budget: refs.agentMonthlyBudgetInput.value.trim(),
         };
         const response = await fetch('/api/spawn-agent', {
           method: 'POST',
@@ -152,6 +178,26 @@
         await Promise.all([actions.loadDepartments(), actions.loadTasks()]);
       } catch (error) {
         ui.setAgentFeedback(error.message || 'Could not create agent.', 'error');
+      }
+    });
+
+    refs.panelBudgetSave.addEventListener('click', async () => {
+      if (!state.selectedAgentId) return;
+      ui.setAgentPanelBudgetFeedback('Saving budget...');
+      try {
+        const response = await fetch(`/api/agents/${encodeURIComponent(state.selectedAgentId)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            monthly_budget: refs.panelBudgetInput.value.trim(),
+          }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.ok === false) throw new Error(payload.error || 'Could not save budget');
+        ui.setAgentPanelBudgetFeedback('Budget saved.', 'success');
+        await Promise.all([actions.loadDepartments(), typeof actions.renderBudget === 'function' ? actions.renderBudget() : Promise.resolve()]);
+      } catch (error) {
+        ui.setAgentPanelBudgetFeedback(error.message || 'Could not save budget.', 'error');
       }
     });
 

@@ -9,6 +9,7 @@ This folder is served by nginx at the droplet public URL.
   - `admin-core.js`
   - `admin-work.js`
   - `admin-models.js`
+  - `admin-integrations.js`
   - `admin-budget.js`
   - `admin-team.js`
 - `/api/*` is proxied to the Syntella API, which then proxies bridge-specific calls when needed

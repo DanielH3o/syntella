@@ -4,21 +4,7 @@
     featureRegistry.push(feature);
   };
 
-  document.querySelectorAll('.nav-item').forEach((item) => {
-    item.addEventListener('click', function () {
-      document.querySelectorAll('.nav-item').forEach((nav) => nav.classList.remove('active'));
-      this.classList.add('active');
-    });
-  });
-
   window.addEventListener('DOMContentLoaded', () => {
-    const hash = window.location.hash || '#tasks';
-    const activeNav = document.querySelector(`.nav-item[href="${hash}"]`);
-    if (activeNav) activeNav.classList.add('active');
-    if (!window.location.hash) {
-      window.location.hash = '#tasks';
-    }
-
     const refs = {
       panelName: document.getElementById('org-panel-name'),
       panelRole: document.getElementById('org-panel-role'),
@@ -26,6 +12,10 @@
       panelStatus: document.getElementById('org-panel-status'),
       panelFocus: document.getElementById('org-panel-focus'),
       panelResponsibilities: document.getElementById('org-panel-responsibilities'),
+      panelBudgetInput: document.getElementById('org-panel-budget-input'),
+      panelBudgetHelp: document.getElementById('org-panel-budget-help'),
+      panelBudgetFeedback: document.getElementById('org-panel-budget-feedback'),
+      panelBudgetSave: document.getElementById('org-panel-budget-save'),
       teamChartShell: document.getElementById('team-chart-shell'),
       teamChartPanelBackdrop: document.getElementById('team-chart-panel-backdrop'),
       teamChartPanelClose: document.getElementById('team-chart-panel-close'),
@@ -39,9 +29,11 @@
       agentRoleInput: document.getElementById('agent-role-input'),
       agentDescriptionInput: document.getElementById('agent-description-input'),
       agentModelSelect: document.getElementById('agent-model-select'),
+      agentSpecialtySelect: document.getElementById('agent-specialty-select'),
       agentPortInput: document.getElementById('agent-port-input'),
       agentDiscordTokenInput: document.getElementById('agent-discord-token-input'),
       agentChannelIdInput: document.getElementById('agent-channel-id-input'),
+      agentMonthlyBudgetInput: document.getElementById('agent-monthly-budget-input'),
       orgRootNode: document.getElementById('team-chart-root-node'),
       orgBranches: document.getElementById('team-chart-members'),
       taskForm: document.getElementById('task-form'),
@@ -119,10 +111,16 @@
       reportDetailStatus: document.getElementById('report-detail-status'),
       reportDetailCreated: document.getElementById('report-detail-created'),
       reportDetailBody: document.getElementById('report-detail-body'),
-      budgetRange: document.getElementById('budget-range'),
       budgetAgentFilter: document.getElementById('budget-agent-filter'),
       budgetModelFilter: document.getElementById('budget-model-filter'),
       budgetView: document.getElementById('budget-view'),
+      budgetEnvelopeMeta: document.getElementById('budget-envelope-meta'),
+      budgetEnvelopeCap: document.getElementById('budget-envelope-cap'),
+      budgetEnvelopeActual: document.getElementById('budget-envelope-actual'),
+      budgetEnvelopeProjected: document.getElementById('budget-envelope-projected'),
+      budgetEnvelopeTotal: document.getElementById('budget-envelope-total'),
+      budgetEnvelopeProjectedBar: document.getElementById('budget-envelope-projected-bar'),
+      budgetEnvelopeActualBar: document.getElementById('budget-envelope-actual-bar'),
       budgetProjectedSpend: document.getElementById('budget-projected-spend'),
       budgetProjectedDetail: document.getElementById('budget-projected-detail'),
       budgetActualSpend: document.getElementById('budget-actual-spend'),
@@ -178,22 +176,47 @@
       modelCostCacheReadInput: document.getElementById('model-cost-cache-read-input'),
       modelCostCacheWriteInput: document.getElementById('model-cost-cache-write-input'),
       modelNotesInput: document.getElementById('model-notes-input'),
+      integrationsCount: document.getElementById('integrations-count'),
+      integrationsCountDetail: document.getElementById('integrations-count-detail'),
+      integrationsEnabledCount: document.getElementById('integrations-enabled-count'),
+      integrationsEnabledDetail: document.getElementById('integrations-enabled-detail'),
+      integrationsConfiguredCount: document.getElementById('integrations-configured-count'),
+      integrationsConfiguredDetail: document.getElementById('integrations-configured-detail'),
+      integrationsSeoCount: document.getElementById('integrations-seo-count'),
+      integrationsSeoDetail: document.getElementById('integrations-seo-detail'),
+      integrationsTableBody: document.getElementById('integrations-table-body'),
+      integrationsDrawerBackdrop: document.getElementById('integrations-drawer-backdrop'),
+      integrationsDrawerClose: document.getElementById('integrations-drawer-close'),
+      integrationsEditorTitle: document.getElementById('integrations-editor-title'),
+      integrationsEditorMeta: document.getElementById('integrations-editor-meta'),
+      integrationsForm: document.getElementById('integrations-form'),
+      integrationsFeedback: document.getElementById('integrations-feedback'),
+      integrationsResetButton: document.getElementById('integrations-reset-button'),
+      integrationsCancelButton: document.getElementById('integrations-cancel-button'),
+      integrationSystemValue: document.getElementById('integration-system-value'),
+      integrationScopeSelect: document.getElementById('integration-scope-select'),
+      integrationEnabledInput: document.getElementById('integration-enabled-input'),
+      integrationDynamicFields: document.getElementById('integration-dynamic-fields'),
+      integrationNotesInput: document.getElementById('integration-notes-input'),
     };
 
     const state = {
       selectedTaskId: null,
       selectedRoutineId: null,
       selectedReportId: null,
+      selectedAgentId: null,
+      agentsCatalog: {},
       routinesCatalog: [],
       reportsCatalog: [],
       modelsCatalog: [],
       selectedModelKey: null,
+      integrationsCatalog: [],
+      selectedIntegrationSystem: null,
     };
 
     const constants = {
       statusOrder: ['backlog', 'todo', 'in_progress', 'review', 'done'],
       priorityClass: { low: 'priority-low', medium: 'priority-medium', high: 'priority-high' },
-      monthBudgetByAgent: { syntella: 180, dev: 240, seo: 90, support: 70 },
       budgetPolicyTemplates: [
         { title: 'Default cheaper models for routine work', copy: 'Most operational flows should stay on smaller models unless the task explicitly needs a premium one.', tone: '' },
         { title: 'Escalate only for synthesis-heavy tasks', copy: 'Planning, architecture, and multi-file reasoning can justify higher spend when they reduce retries and execution churn.', tone: 'warning' },
@@ -335,12 +358,20 @@
         const shell = document.querySelector('.models-shell');
         if (shell) shell.classList.toggle('is-drawer-open', Boolean(isOpen));
       },
+      setIntegrationsDrawerOpen(isOpen) {
+        const shell = document.querySelector('.integrations-shell');
+        if (shell) shell.classList.toggle('is-drawer-open', Boolean(isOpen));
+      },
       setRoutinesDrawerOpen(isOpen) {
         if (refs.routinesShell) refs.routinesShell.classList.toggle('is-drawer-open', Boolean(isOpen));
       },
       setAgentFeedback(message, tone = '') {
         refs.agentFeedback.textContent = message;
         refs.agentFeedback.className = `agent-feedback${tone ? ` is-${tone}` : ''}`;
+      },
+      setAgentPanelBudgetFeedback(message, tone = '') {
+        refs.panelBudgetFeedback.textContent = message;
+        refs.panelBudgetFeedback.className = `agent-feedback${tone ? ` is-${tone}` : ''}`;
       },
       resetAgentForm() { refs.agentForm.reset(); this.setAgentFeedback(''); },
       setTaskFeedback(message, tone = '') {
@@ -354,6 +385,10 @@
       setModelsFeedback(message, tone = '') {
         refs.modelsFeedback.textContent = message;
         refs.modelsFeedback.className = `models-feedback${tone ? ` is-${tone}` : ''}`;
+      },
+      setIntegrationsFeedback(message, tone = '') {
+        refs.integrationsFeedback.textContent = message;
+        refs.integrationsFeedback.className = `models-feedback${tone ? ` is-${tone}` : ''}`;
       },
       toggleTaskForm(visible) {
         refs.taskForm.classList.toggle('is-hidden', !visible);
@@ -385,22 +420,74 @@
     window.SyntellaAdminApp = app;
 
     featureRegistry.forEach((feature) => feature(app));
+    const setActiveNav = (hash) => {
+      document.querySelectorAll('.nav-item').forEach((nav) => {
+        nav.classList.toggle('active', nav.getAttribute('href') === hash);
+      });
+    };
+
+    app.actions.refreshSection = async (hash = window.location.hash || '#tasks') => {
+      setActiveNav(hash);
+      const sectionId = hash.replace(/^#/, '');
+      if (sectionId === 'tasks' && typeof app.actions.loadTasks === 'function') {
+        await app.actions.loadTasks();
+        return;
+      }
+      if (sectionId === 'routines' && typeof app.actions.loadRoutines === 'function') {
+        await app.actions.loadRoutines();
+        return;
+      }
+      if (sectionId === 'reports' && typeof app.actions.loadReports === 'function') {
+        await app.actions.loadReports();
+        return;
+      }
+      if (sectionId === 'models' && typeof app.actions.loadModels === 'function') {
+        await app.actions.loadModels();
+        return;
+      }
+      if (sectionId === 'integrations' && typeof app.actions.loadIntegrations === 'function') {
+        await app.actions.loadIntegrations();
+        return;
+      }
+      if (sectionId === 'budget' && typeof app.actions.renderBudget === 'function') {
+        await app.actions.renderBudget();
+        return;
+      }
+      if (sectionId === 'team' && typeof app.actions.loadDepartments === 'function') {
+        await app.actions.loadDepartments();
+      }
+    };
+
     app.actions.init = async () => {
-      const tasksPromise = typeof app.actions.loadTasks === 'function' ? app.actions.loadTasks() : Promise.resolve();
-      const routinesPromise = typeof app.actions.loadRoutines === 'function' ? app.actions.loadRoutines() : Promise.resolve();
-      const reportsPromise = typeof app.actions.loadReports === 'function' ? app.actions.loadReports() : Promise.resolve();
-      const modelsPromise = typeof app.actions.loadModels === 'function' ? app.actions.loadModels() : Promise.resolve();
-      const budgetPromise = typeof app.actions.renderBudget === 'function' ? app.actions.renderBudget() : Promise.resolve();
-      const teamPromise = typeof app.actions.loadDepartments === 'function' ? app.actions.loadDepartments() : Promise.resolve();
+      const initialHash = window.location.hash || '#tasks';
+      if (!window.location.hash) {
+        window.location.hash = initialHash;
+      } else {
+        setActiveNav(initialHash);
+      }
       await Promise.all([
-        tasksPromise,
-        routinesPromise,
-        reportsPromise,
-        modelsPromise,
-        budgetPromise,
-        teamPromise,
+        typeof app.actions.loadTasks === 'function' ? app.actions.loadTasks() : Promise.resolve(),
+        typeof app.actions.loadRoutines === 'function' ? app.actions.loadRoutines() : Promise.resolve(),
+        typeof app.actions.loadReports === 'function' ? app.actions.loadReports() : Promise.resolve(),
+        typeof app.actions.loadModels === 'function' ? app.actions.loadModels() : Promise.resolve(),
+        typeof app.actions.loadIntegrations === 'function' ? app.actions.loadIntegrations() : Promise.resolve(),
+        typeof app.actions.renderBudget === 'function' ? app.actions.renderBudget() : Promise.resolve(),
+        typeof app.actions.loadDepartments === 'function' ? app.actions.loadDepartments() : Promise.resolve(),
       ]);
     };
+
+    document.querySelectorAll('.nav-item').forEach((item) => {
+      item.addEventListener('click', () => {
+        const hash = item.getAttribute('href') || '#tasks';
+        setActiveNav(hash);
+      });
+    });
+    window.addEventListener('hashchange', () => {
+      if (typeof app.actions.refreshSection === 'function') {
+        app.actions.refreshSection(window.location.hash || '#tasks');
+      }
+    });
+
     if (typeof app.actions.init === 'function') {
       app.actions.init();
     }

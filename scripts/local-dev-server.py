@@ -217,6 +217,21 @@ def init_db():
     )
     cursor.execute(
         """
+        CREATE TABLE IF NOT EXISTS integrations (
+            system TEXT PRIMARY KEY,
+            display_name TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 0,
+            allowed_specialties TEXT NOT NULL DEFAULT '[]',
+            config_json TEXT NOT NULL DEFAULT '{}',
+            secrets_json TEXT NOT NULL DEFAULT '{}',
+            notes TEXT NOT NULL DEFAULT '',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    cursor.execute(
+        """
         CREATE INDEX IF NOT EXISTS idx_usage_events_agent_ts
         ON usage_events (agent_id, ts)
         """
@@ -292,6 +307,13 @@ def read_registry():
         return data if isinstance(data, dict) else {}
     except (OSError, json.JSONDecodeError):
         return {}
+
+
+def write_registry(data):
+    REGISTRY.parent.mkdir(parents=True, exist_ok=True)
+    with REGISTRY.open("w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=2)
+        handle.write("\n")
 
 
 def read_openclaw_config():
@@ -380,15 +402,62 @@ def discover_openclaw_agents():
         discovered[agent_id] = {
             "id": agent_id,
             "role": registry_meta.get("role") or ("Main Orchestrator" if agent_id == "main" else "OpenClaw Agent"),
-            "description": registry_meta.get("description") or ("Primary root agent for the local OpenClaw profile." if agent_id == "main" else f"Discovered from local OpenClaw state for `{agent_id}`."),
+            "description": registry_meta.get("description") or registry_meta.get("personality") or ("Primary root agent for the local OpenClaw profile." if agent_id == "main" else f"Discovered from local OpenClaw state for `{agent_id}`."),
             "pid": registry_meta.get("pid"),
             "port": registry_meta.get("port"),
             "channel_id": registry_meta.get("channel_id"),
+            "monthly_budget": parse_optional_number(registry_meta.get("monthly_budget"), float),
+            "specialty": registry_meta.get("specialty"),
             "status": "Running" if latest_ts else "Discovered",
             "latest_activity": latest_ts,
             "session_count": event_count,
         }
     return discovered
+
+
+def update_agent_metadata(agent_id, body):
+    agent_key = (agent_id or "").strip()
+    if not agent_key:
+        raise ValueError("Agent ID is required.")
+
+    registry = read_registry()
+    discovered = discover_openclaw_agents()
+    discovered_agent = discovered.get(agent_key)
+    current = registry.get(agent_key)
+    if not isinstance(current, dict) and not discovered_agent:
+        raise ValueError("Agent not found.")
+
+    updated = dict(current) if isinstance(current, dict) else {}
+    if discovered_agent:
+        updated.setdefault("role", discovered_agent.get("role"))
+        updated.setdefault("description", discovered_agent.get("description"))
+        updated.setdefault("pid", discovered_agent.get("pid"))
+        updated.setdefault("port", discovered_agent.get("port"))
+        updated.setdefault("channel_id", discovered_agent.get("channel_id"))
+        updated.setdefault("specialty", discovered_agent.get("specialty"))
+    if "role" in body:
+        updated["role"] = (body.get("role") or "").strip()
+    if "description" in body:
+        updated["description"] = (body.get("description") or "").strip()
+    if "channel_id" in body:
+        channel_id = (body.get("channel_id") or "").strip()
+        if channel_id and not channel_id.isdigit():
+            raise ValueError("channel_id must be numeric")
+        updated["channel_id"] = channel_id or None
+    if "monthly_budget" in body:
+        monthly_budget = parse_optional_number(body.get("monthly_budget"), float)
+        if monthly_budget is not None and monthly_budget < 0:
+            raise ValueError("monthly_budget must be zero or greater")
+        updated["monthly_budget"] = monthly_budget
+    if "specialty" in body:
+        specialty = (body.get("specialty") or "").strip().lower() or None
+        if specialty not in {None, "seo"}:
+            raise ValueError("specialty must be empty or seo")
+        updated["specialty"] = specialty
+
+    registry[agent_key] = updated
+    write_registry(registry)
+    return discover_openclaw_agents().get(agent_key)
 
 
 def parse_bool(value):
@@ -1029,6 +1098,177 @@ def delete_model_override(provider, model_id):
     )
 
 
+INTEGRATION_DEFAULTS = {
+    "ghost": {
+        "display_name": "Ghost CMS",
+        "description": "Create and update drafts for the Asima and Wonderful blogs.",
+        "config_fields": [
+            {"key": "asima_admin_url", "label": "Asima Admin API URL", "type": "text", "placeholder": "https://asima.co.uk/ghost/api/admin"},
+            {"key": "wonderful_admin_url", "label": "Wonderful Admin API URL", "type": "text", "placeholder": "https://wonderful.co.uk/ghost/api/admin"},
+        ],
+        "secret_fields": [
+            {"key": "asima_admin_key", "label": "Asima Admin API Key", "type": "password"},
+            {"key": "wonderful_admin_key", "label": "Wonderful Admin API Key", "type": "password"},
+        ],
+    },
+    "google_search_console": {
+        "display_name": "Google Search Console",
+        "description": "Read search query and indexing signals for both sites.",
+        "config_fields": [
+            {"key": "asima_property", "label": "Asima Property", "type": "text", "placeholder": "sc-domain:asima.co.uk"},
+            {"key": "wonderful_property", "label": "Wonderful Property", "type": "text", "placeholder": "sc-domain:wonderful.co.uk"},
+        ],
+        "secret_fields": [
+            {"key": "service_account_json", "label": "Service Account JSON", "type": "textarea"},
+        ],
+    },
+    "google_analytics": {
+        "display_name": "Google Analytics",
+        "description": "Read landing-page, engagement, and conversion signals for both sites.",
+        "config_fields": [
+            {"key": "asima_property_id", "label": "Asima Property ID", "type": "text", "placeholder": "123456789"},
+            {"key": "wonderful_property_id", "label": "Wonderful Property ID", "type": "text", "placeholder": "987654321"},
+        ],
+        "secret_fields": [
+            {"key": "service_account_json", "label": "Service Account JSON", "type": "textarea"},
+        ],
+    },
+}
+
+
+def load_integrations():
+    rows = run_query(
+        """
+        SELECT system, display_name, enabled, allowed_specialties, config_json, secrets_json, notes, updated_at
+        FROM integrations
+        ORDER BY display_name ASC
+        """,
+        fetchall=True,
+    ) or []
+    by_system = {}
+    for row in rows:
+        try:
+            config = json.loads(row.get("config_json") or "{}")
+        except json.JSONDecodeError:
+            config = {}
+        try:
+            secrets = json.loads(row.get("secrets_json") or "{}")
+        except json.JSONDecodeError:
+            secrets = {}
+        try:
+            allowed_specialties = json.loads(row.get("allowed_specialties") or "[]")
+        except json.JSONDecodeError:
+            allowed_specialties = []
+        by_system[row["system"]] = {
+            "system": row["system"],
+            "display_name": row["display_name"],
+            "enabled": bool(row.get("enabled")),
+            "allowed_specialties": allowed_specialties if isinstance(allowed_specialties, list) else [],
+            "config": config if isinstance(config, dict) else {},
+            "secrets": secrets if isinstance(secrets, dict) else {},
+            "notes": row.get("notes") or "",
+            "updated_at": row.get("updated_at"),
+        }
+    return by_system
+
+
+def list_integrations():
+    stored = load_integrations()
+    integrations = []
+    for system, defaults in INTEGRATION_DEFAULTS.items():
+        current = stored.get(system, {})
+        config = current.get("config", {})
+        secrets = current.get("secrets", {})
+        integrations.append({
+            "system": system,
+            "display_name": current.get("display_name") or defaults["display_name"],
+            "description": defaults["description"],
+            "enabled": bool(current.get("enabled")),
+            "allowed_specialties": current.get("allowed_specialties") or [],
+            "config": config,
+            "config_fields": defaults["config_fields"],
+            "secret_fields": [
+                {**field, "configured": bool((secrets.get(field["key"]) or "").strip())}
+                for field in defaults["secret_fields"]
+            ],
+            "notes": current.get("notes") or "",
+            "configured": any(bool(str(value).strip()) for value in config.values()) or any(bool((secrets.get(field["key"]) or "").strip()) for field in defaults["secret_fields"]),
+            "updated_at": current.get("updated_at"),
+        })
+    return integrations
+
+
+def upsert_integration(body):
+    system = (body.get("system") or "").strip()
+    if system not in INTEGRATION_DEFAULTS:
+        raise ValueError("Unknown integration system.")
+    defaults = INTEGRATION_DEFAULTS[system]
+    existing = load_integrations().get(system, {})
+    current_config = dict(existing.get("config") or {})
+    current_secrets = dict(existing.get("secrets") or {})
+
+    config = {}
+    for field in defaults["config_fields"]:
+        value = body.get(field["key"])
+        if value is None:
+            value = current_config.get(field["key"], "")
+        config[field["key"]] = str(value or "").strip()
+
+    for field in defaults["secret_fields"]:
+        secret_value = body.get(field["key"])
+        if secret_value is None:
+            secret_value = current_secrets.get(field["key"], "")
+        if isinstance(secret_value, str) and secret_value.strip():
+            current_secrets[field["key"]] = secret_value
+        elif field["key"] not in current_secrets:
+            current_secrets[field["key"]] = ""
+
+    allowed_specialties = body.get("allowed_specialties")
+    if not isinstance(allowed_specialties, list):
+        allowed_specialties = existing.get("allowed_specialties") or []
+    normalized_specialties = []
+    for item in allowed_specialties:
+        specialty = str(item or "").strip().lower()
+        if not specialty:
+            continue
+        if specialty not in {"seo"}:
+            raise ValueError("allowed_specialties may only contain seo")
+        normalized_specialties.append(specialty)
+
+    run_query(
+        """
+        INSERT INTO integrations (
+            system, display_name, enabled, allowed_specialties, config_json, secrets_json, notes, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(system) DO UPDATE SET
+            display_name = excluded.display_name,
+            enabled = excluded.enabled,
+            allowed_specialties = excluded.allowed_specialties,
+            config_json = excluded.config_json,
+            secrets_json = excluded.secrets_json,
+            notes = excluded.notes,
+            updated_at = CURRENT_TIMESTAMP
+        """,
+        (
+            system,
+            defaults["display_name"],
+            int(parse_bool(body.get("enabled"))),
+            json.dumps(normalized_specialties),
+            json.dumps(config),
+            json.dumps(current_secrets),
+            (body.get("notes") or "").strip(),
+        ),
+        commit=True,
+    )
+    return next((item for item in list_integrations() if item["system"] == system), None)
+
+
+def clear_integration(system):
+    if system not in INTEGRATION_DEFAULTS:
+        raise ValueError("Unknown integration system.")
+    run_query("DELETE FROM integrations WHERE system = ?", (system,), commit=True)
+
+
 def normalize_usage_record(agent_id, source_file, line_no, payload):
     message = payload.get("message") or {}
     usage = message.get("usage")
@@ -1140,6 +1380,8 @@ def build_usage_filters(params):
     agent = params.get("agent", ["all"])[0]
     model = params.get("model", ["all"])[0]
     days = params.get("days", [None])[0]
+    start = params.get("start", [None])[0]
+    end = params.get("end", [None])[0]
 
     clauses.append(f"model NOT IN ({','.join('?' for _ in INTERNAL_MODEL_IDS)})")
     args.extend(sorted(INTERNAL_MODEL_IDS))
@@ -1150,6 +1392,12 @@ def build_usage_filters(params):
     if model and model != "all":
         clauses.append("model = ?")
         args.append(model)
+    if start:
+        clauses.append("ts >= ?")
+        args.append(start)
+    if end:
+        clauses.append("ts < ?")
+        args.append(end)
     if days:
         try:
             range_days = max(1, int(days))
@@ -1269,6 +1517,8 @@ def usage_summary(params):
             "agent": params.get("agent", ["all"])[0],
             "model": params.get("model", ["all"])[0],
             "days": params.get("days", ["30"])[0],
+            "start": params.get("start", [None])[0],
+            "end": params.get("end", [None])[0],
         },
     }
 
@@ -1834,6 +2084,9 @@ class Handler(BaseHTTPRequestHandler):
             sync = sync_usage_events()
             return self._send_json(200, {"ok": True, "sync": sync, "models": list_models()})
 
+        if path == "/api/integrations":
+            return self._send_json(200, {"ok": True, "integrations": list_integrations()})
+
         if path == "/api/routines":
             return self._send_json(200, {"ok": True, "routines": fetch_routines()})
 
@@ -1920,6 +2173,16 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 return self._send_json(500, {"ok": False, "error": str(exc)})
 
+        if path == "/api/integrations":
+            body = self._parse_body()
+            try:
+                integration = upsert_integration(body)
+                return self._send_json(200, {"ok": True, "integration": integration, "integrations": list_integrations()})
+            except ValueError as exc:
+                return self._send_json(400, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                return self._send_json(500, {"ok": False, "error": str(exc)})
+
         if path == "/api/spawn-agent":
             body = self._parse_body()
             try:
@@ -1991,6 +2254,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json(400, {"ok": False, "error": str(exc)})
             except Exception as exc:
                 return self._send_json(500, {"ok": False, "error": str(exc)})
+        if path.startswith("/api/agents/"):
+            agent_id = path.rsplit("/", 1)[-1]
+            body = self._parse_body()
+            try:
+                agent = update_agent_metadata(agent_id, body)
+                return self._send_json(200, {"ok": True, "agent": agent})
+            except ValueError as exc:
+                message = str(exc)
+                status = 404 if message == "Agent not found." else 400
+                return self._send_json(status, {"ok": False, "error": message})
+            except Exception as exc:
+                return self._send_json(500, {"ok": False, "error": str(exc)})
         if not path.startswith("/api/tasks/"):
             return self._send_json(404, {"error": "not_found"})
 
@@ -2036,6 +2311,19 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 delete_model_override(provider, model_id)
                 return self._send_json(200, {"ok": True, "models": list_models()})
+            except Exception as exc:
+                return self._send_json(500, {"ok": False, "error": str(exc)})
+
+        if path == "/api/integrations":
+            body = self._parse_body()
+            system = (body.get("system") or "").strip()
+            if not system:
+                return self._send_json(400, {"ok": False, "error": "system is required"})
+            try:
+                clear_integration(system)
+                return self._send_json(200, {"ok": True, "integrations": list_integrations()})
+            except ValueError as exc:
+                return self._send_json(400, {"ok": False, "error": str(exc)})
             except Exception as exc:
                 return self._send_json(500, {"ok": False, "error": str(exc)})
         if not path.startswith("/api/tasks/"):

@@ -204,6 +204,10 @@ if [[ -d "$SHARED_WS_ROOT/templates/extensions/reports" ]]; then
   rm -rf "$AGENT_WS/.openclaw/extensions/reports"
   cp -R "$SHARED_WS_ROOT/templates/extensions/reports" "$AGENT_WS/.openclaw/extensions/reports"
 fi
+if [[ "${SYNTELLA_AGENT_SPECIALTY:-}" == "seo" && -d "$SHARED_WS_ROOT/templates/extensions/seo" ]]; then
+  rm -rf "$AGENT_WS/.openclaw/extensions/seo"
+  cp -R "$SHARED_WS_ROOT/templates/extensions/seo" "$AGENT_WS/.openclaw/extensions/seo"
+fi
 DISPLAY_NAME="$(python3 -c "
 import sys
 s='$AGENT_ID'.replace('-', ' ').strip()
@@ -418,10 +422,10 @@ fi
 log "Gateway ready, updating registry"
 
 # Update registry, SOUL.md, and TEAM.md.
-python3 - "$AGENT_ID" "$PORT" "$ROLE" "$CHILD_HOME" "__DISCORD_GUILD_ID__" "$DISCORD_CHANNEL_ID_AGENT" "$GATEWAY_PID" <<'PY'
+python3 - "$AGENT_ID" "$PORT" "$ROLE" "$CHILD_HOME" "__DISCORD_GUILD_ID__" "$DISCORD_CHANNEL_ID_AGENT" "$GATEWAY_PID" "${SYNTELLA_MONTHLY_BUDGET:-}" "${SYNTELLA_AGENT_SPECIALTY:-}" <<'PY'
 import json, os, re, sys
 
-agent, port, role_raw, home, guild_id, channel_id, pid = (
+agent, port, role_raw, home, guild_id, channel_id, pid, monthly_budget_raw, specialty = (
     sys.argv[1],
     int(sys.argv[2]),
     sys.argv[3],
@@ -429,12 +433,19 @@ agent, port, role_raw, home, guild_id, channel_id, pid = (
     sys.argv[5],
     sys.argv[6],
     int(sys.argv[7]),
+    sys.argv[8],
+    sys.argv[9].strip().lower(),
 )
 
 if " — " in role_raw:
     role, personality = role_raw.split(" — ", 1)
 else:
     role, personality = role_raw, ""
+
+try:
+    monthly_budget = float(monthly_budget_raw) if monthly_budget_raw.strip() else None
+except ValueError:
+    monthly_budget = None
 
 # 1) Update registry.
 p = os.path.expanduser("~/.openclaw/workspace/agents/registry.json")
@@ -451,10 +462,13 @@ d[agent] = {
     "port": port,
     "pid": pid,
     "role": role.strip(),
+    "description": personality.strip(),
     "personality": personality.strip(),
     "home": home,
     "guild_id": guild_id,
     "channel_id": channel_id,
+    "monthly_budget": monthly_budget,
+    "specialty": specialty or None,
 }
 
 with open(p, "w", encoding="utf-8") as f:
@@ -487,6 +501,8 @@ entry = (
     f"  - personality: {(personality or role_raw).strip()}\n"
     f"  - port: {port}\n"
     f"  - inbox_channel_id: {channel_id}\n"
+    f"  - monthly_budget_usd: {monthly_budget if monthly_budget is not None else 'unset'}\n"
+    f"  - specialty: {specialty or 'general'}\n"
 )
 start = f"<!-- AGENT:{agent}:START -->"
 end = f"<!-- AGENT:{agent}:END -->"
@@ -517,6 +533,8 @@ print(
             "home": home,
             "guild_id": guild_id,
             "channel_id": channel_id,
+            "monthly_budget": monthly_budget,
+            "specialty": specialty or None,
             "guild_configured": True,
             "status": "started",
         }

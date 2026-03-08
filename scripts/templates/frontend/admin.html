@@ -37,6 +37,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M12 4h9"></path><path d="M4 9h16"></path><path d="M4 15h16"></path><path d="M8 4v16"></path></svg>
             Models
           </a>
+          <a href="#integrations" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20a6 6 0 0 0-12 0"></path><circle cx="12" cy="10" r="4"></circle><path d="M21 12h-2"></path><path d="M5 12H3"></path><path d="M12 3v2"></path><path d="M12 19v2"></path></svg>
+            Integrations
+          </a>
           <a href="#team" class="nav-item">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
             Team
@@ -429,12 +433,8 @@
         <div class="budget-shell">
           <div class="budget-controls">
             <div class="task-form__field">
-              <label class="form-label" for="budget-range">Range</label>
-              <select id="budget-range">
-                <option value="7">Last 7 days</option>
-                <option value="30" selected>Last 30 days</option>
-                <option value="90">Last 90 days</option>
-              </select>
+              <label class="form-label">Period</label>
+              <div class="budget-period-chip">Current calendar month</div>
             </div>
             <div class="task-form__field">
               <label class="form-label" for="budget-agent-filter">Agent</label>
@@ -454,6 +454,38 @@
                 <option value="cost" selected>Cost focus</option>
                 <option value="tokens">Token focus</option>
               </select>
+            </div>
+          </div>
+
+          <div class="budget-panel budget-envelope">
+            <div class="budget-panel__header">
+              <div>
+                <h2 class="budget-panel__title">Budget Envelope</h2>
+                <p id="budget-envelope-meta" class="budget-panel__meta">Actual and projected spend against total configured agent budgets.</p>
+              </div>
+              <span id="budget-envelope-cap" class="budget-badge">Cap $0.00</span>
+            </div>
+            <div class="budget-envelope__numbers">
+              <div class="budget-envelope__stat">
+                <span class="budget-envelope__label">Actual</span>
+                <strong id="budget-envelope-actual">$0.00</strong>
+              </div>
+              <div class="budget-envelope__stat">
+                <span class="budget-envelope__label">Projected</span>
+                <strong id="budget-envelope-projected">$0.00</strong>
+              </div>
+              <div class="budget-envelope__stat">
+                <span class="budget-envelope__label">Total Budget</span>
+                <strong id="budget-envelope-total">$0.00</strong>
+              </div>
+            </div>
+            <div class="budget-envelope__track">
+              <div id="budget-envelope-projected-bar" class="budget-envelope__fill budget-envelope__fill--projected"></div>
+              <div id="budget-envelope-actual-bar" class="budget-envelope__fill budget-envelope__fill--actual"></div>
+            </div>
+            <div class="budget-envelope__legend">
+              <span><span class="budget-envelope__swatch budget-envelope__swatch--actual"></span> Actual current spend</span>
+              <span><span class="budget-envelope__swatch budget-envelope__swatch--projected"></span> Projected monthly spend</span>
             </div>
           </div>
 
@@ -750,11 +782,106 @@
         </div>
       </section>
 
+      <section id="integrations" class="view-section">
+        <header class="view-header">
+          <div>
+            <h1 class="view-title">Integrations</h1>
+            <p class="text-muted mt-1 text-sm">Connect Ghost, Search Console, Analytics, and other external systems without editing OpenClaw config by hand. Click an integration row to configure it.</p>
+          </div>
+        </header>
+        <div class="integrations-shell">
+          <div class="models-summary">
+            <article class="models-card">
+              <p class="models-card__label">Total Integrations</p>
+              <p id="integrations-count" class="models-card__value">0</p>
+              <p id="integrations-count-detail" class="models-card__detail">Known external systems Syntella can connect to.</p>
+            </article>
+            <article class="models-card">
+              <p class="models-card__label">Enabled</p>
+              <p id="integrations-enabled-count" class="models-card__value">0</p>
+              <p id="integrations-enabled-detail" class="models-card__detail">Available for connected tooling right now.</p>
+            </article>
+            <article class="models-card">
+              <p class="models-card__label">Configured</p>
+              <p id="integrations-configured-count" class="models-card__value">0</p>
+              <p id="integrations-configured-detail" class="models-card__detail">Have some live config or credentials saved.</p>
+            </article>
+            <article class="models-card">
+              <p class="models-card__label">SEO Scoped</p>
+              <p id="integrations-seo-count" class="models-card__value">0</p>
+              <p id="integrations-seo-detail" class="models-card__detail">Currently limited to SEO-specialist agents.</p>
+            </article>
+          </div>
+          <div class="models-layout mt-8">
+            <div class="models-panel">
+              <div class="models-panel__header">
+                <div>
+                  <h2 class="models-panel__title">Integration Catalog</h2>
+                  <p class="models-panel__meta">Credentials are write-only in the UI. Connected tools should read from this control layer.</p>
+                </div>
+              </div>
+              <table class="models-table">
+                <thead>
+                  <tr>
+                    <th>Integration</th>
+                    <th>Status</th>
+                    <th>Access</th>
+                    <th>Secrets</th>
+                    <th>Updated</th>
+                  </tr>
+                </thead>
+                <tbody id="integrations-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+          <button type="button" id="integrations-drawer-backdrop" class="integrations-drawer-backdrop" aria-label="Close integration editor"></button>
+          <aside class="integrations-drawer" aria-live="polite">
+            <div class="models-drawer__header">
+              <div>
+                <p class="models-drawer__eyebrow">Integration</p>
+                <h2 id="integrations-editor-title" class="team-chart__panel-title">Configure Integration</h2>
+                <p id="integrations-editor-meta" class="team-chart__panel-role">Select a system and store the config the matching tools will need.</p>
+              </div>
+              <button type="button" id="integrations-drawer-close" class="models-drawer__close" aria-label="Close integration editor">×</button>
+            </div>
+            <form id="integrations-form" class="models-form mt-8">
+              <div class="models-form__grid">
+                <div class="task-form__field">
+                  <label class="form-label" for="integration-system-value">System</label>
+                  <div id="integration-system-value" class="budget-period-chip">Select an integration row</div>
+                </div>
+                <div class="task-form__field">
+                  <label class="form-label" for="integration-scope-select">Allowed Specialty</label>
+                  <select id="integration-scope-select" name="allowed_specialties">
+                    <option value="seo" selected>SEO agents only</option>
+                    <option value="">All specialties</option>
+                  </select>
+                </div>
+              </div>
+              <div class="models-form__toggles">
+                <label class="models-toggle"><input id="integration-enabled-input" type="checkbox" /> Enabled</label>
+              </div>
+              <div id="integration-dynamic-fields" class="models-form"></div>
+              <div class="task-form__field">
+                <label class="form-label" for="integration-notes-input">Notes</label>
+                <textarea id="integration-notes-input" name="notes" placeholder="What this integration is for, any setup assumptions, or who owns it."></textarea>
+              </div>
+              <div id="integrations-feedback" class="models-feedback" aria-live="polite"></div>
+              <div class="models-form__actions">
+                <button class="btn btn-primary" type="submit">Save Integration</button>
+                <button id="integrations-reset-button" class="btn btn-secondary" type="button">Clear Config</button>
+                <button id="integrations-cancel-button" class="btn btn-secondary" type="button">Close</button>
+              </div>
+            </form>
+          </aside>
+        </div>
+      </section>
+
       <section id="team" class="view-section">
         <header class="view-header">
           <div>
             <h1 class="view-title">Team</h1>
-            <p class="text-muted mt-1 text-sm">Real local OpenClaw agents discovered from your machine, shown as a flat team under the main profile</p>
+            <p class="text-muted mt-1 text-sm">Main sits at the top as the orchestrator, with the rest of the team shown as peer agents beneath it.</p>
           </div>
           <button id="team-new-agent-button" class="btn btn-primary" type="button">New Agent</button>
         </header>
@@ -765,7 +892,7 @@
                 <button
                   type="button"
                   id="team-chart-root-node"
-                  class="org-node org-node--root"
+                  class="org-node org-node--root org-node--hero"
                   data-agent-name="main"
                   data-agent-role="Main Agent"
                   data-agent-status="Running"
@@ -839,7 +966,7 @@
                 <div>
                   <p class="team-chart__panel-label">Selected Agent</p>
                   <h2 id="org-panel-name" class="team-chart__panel-title">No agent selected</h2>
-                  <p id="org-panel-role" class="team-chart__panel-role">Pick any node in the team chart</p>
+                  <p id="org-panel-role" class="team-chart__panel-role">Pick any agent card in the team view</p>
                 </div>
                 <button type="button" id="team-chart-panel-close" class="team-chart__panel-close" aria-label="Close selected agent details">×</button>
               </div>
@@ -847,6 +974,15 @@
               <ul id="org-panel-responsibilities" class="team-chart__panel-list">
                 <li>Select an agent to inspect status, role, and responsibilities.</li>
               </ul>
+              <div class="task-form__field">
+                <label class="form-label" for="org-panel-budget-input">Monthly Budget (USD)</label>
+                <input id="org-panel-budget-input" inputmode="decimal" placeholder="Unset" />
+                <p id="org-panel-budget-help" class="models-helper">Select an agent to configure their budget cap.</p>
+              </div>
+              <div id="org-panel-budget-feedback" class="agent-feedback" aria-live="polite"></div>
+              <div class="models-form__actions">
+                <button type="button" id="org-panel-budget-save" class="btn btn-primary">Save Budget</button>
+              </div>
               <div class="team-chart__panel-footer">
                 <span id="org-panel-status">Status: -</span>
                 <span id="org-panel-focus">Focus: -</span>
@@ -885,8 +1021,22 @@
                     </select>
                   </div>
                   <div class="task-form__field">
+                    <label class="form-label" for="agent-specialty-select">Specialty</label>
+                    <select id="agent-specialty-select" name="specialty">
+                      <option value="" selected>General agent</option>
+                      <option value="seo">SEO agent</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="models-form__grid">
+                  <div class="task-form__field">
                     <label class="form-label" for="agent-port-input">Port (optional)</label>
                     <input id="agent-port-input" name="port" inputmode="numeric" placeholder="19007" />
+                  </div>
+                  <div class="task-form__field">
+                    <label class="form-label" for="agent-monthly-budget-input">Monthly Budget (USD)</label>
+                    <input id="agent-monthly-budget-input" name="monthly_budget" inputmode="decimal" placeholder="120" />
+                    <p class="models-helper">Optional monthly spend cap used by the Budget page and team planning.</p>
                   </div>
                 </div>
                 <div class="task-form__field">
@@ -915,6 +1065,7 @@
   <script src="admin-core.js"></script>
   <script src="admin-work.js"></script>
   <script src="admin-models.js"></script>
+  <script src="admin-integrations.js"></script>
   <script src="admin-budget.js"></script>
   <script src="admin-team.js"></script>
 </body>

@@ -57,6 +57,7 @@ Local data sources:
 
 - Agent creation should be available from the Team page.
 - Model availability and pricing should have a dedicated Models page.
+- External service credentials and tool configuration should have a dedicated Integrations page.
 - Model pricing should default from OpenClaw/local model metadata when available.
 - Missing or zero-cost model pricing should be overridable locally by the user.
 - `~/.openclaw/openclaw.json` is the canonical base catalog for models in this environment.
@@ -65,6 +66,16 @@ Local data sources:
 - Task workflow is moving out of prompt text and into a real OpenClaw plugin tool plus companion skill.
 - Agent communication is shifting away from one shared Discord room to one inbox channel per agent.
 - `HEARTBEAT.MAIN.md` should reflect a main-only orchestration loop that uses the `tasks` tool as the operational source of truth.
+
+### Client SEO agent
+
+- The Wonderful Payments / Asima SEO agent should be built as:
+  - one primary SEO operating skill
+  - focused data/publishing tools
+  - routines driving the ongoing workflow
+- Publishing should remain approval-gated in v1.
+- Paid placements and paid acquisition automation are out of scope for this client implementation.
+- SEO capability should be scoped only to explicitly designated SEO agents, not seeded into every agent workspace by default.
 
 ### Budget tracking
 
@@ -98,7 +109,8 @@ Local data sources:
 
 - Reworked into an interactive Team view.
 - Root agent now comes from actual local OpenClaw state, preferring `main`.
-- Discovered local agents render beneath the root.
+- Main now renders as a highlighted lead card at the top.
+- Discovered local agents render beneath it as peer cards instead of a formal org-chart hierarchy.
 - Details drawer updates on click.
 - Team page now hydrates from actual discovered OpenClaw agents, not the stale workspace registry.
 - Team page starts with no selected agent and the details drawer closed.
@@ -107,6 +119,8 @@ Local data sources:
 - Team agent creation now submits through the local dev server to the operator bridge.
 - New-agent creation now requires an inbox `channel_id`.
 - Team metadata now surfaces each agent's inbox channel.
+- Team page now lets the user set an optional `monthly_budget` during agent creation.
+- Selected-agent drawer now lets the user edit an agent's monthly budget in place.
 
 ### Models page
 
@@ -128,6 +142,25 @@ Local data sources:
   - editing pricing overrides
   - creating custom models
   - clearing overrides back to the base metadata
+
+### Integrations page
+
+- Added a dedicated Integrations page to the admin UI.
+- Added a new `integrations` table to the local control-plane DB.
+- Integrations currently supported as first-class config objects:
+  - Ghost CMS
+  - Google Search Console
+  - Google Analytics
+- Integration secrets are write-only in the UI.
+- Integration config now supports:
+  - enabled/disabled status
+  - specialty scoping (`seo` or unrestricted)
+  - config fields
+  - credential fields
+  - notes
+- Added APIs for:
+  - `/api/integrations`
+- This page is intended to be the control layer for future `ghost`, `search-console`, and `analytics` tools.
 
 ### Tasks page
 
@@ -155,11 +188,19 @@ Local data sources:
   - create/edit
   - enable/disable
   - structured schedule input in the admin UI
+  - one-shot `Date` mode for testing/single scheduled runs
   - compiled cron expressions
   - assigned agent
   - output mode
   - manual `Run Now`
 - Routine create/edit/detail now uses a right-side drawer instead of a permanent inline card, matching the Team and Models interaction pattern.
+- Routine scheduling UI is now mode-specific:
+  - daily / weekdays: time only
+  - weekly: day + time
+  - hourly: interval only
+  - date: date + time
+  - custom: raw cron only
+- Routine schedules now use the browser/machine timezone automatically instead of a freeform timezone field in the UI.
 - Routine save now attempts to sync a real OpenClaw cron job, storing `cron_job_id` and `cron_expression` on the routine.
 - `Run Now` now attempts to execute the synced OpenClaw cron job instead of creating a placeholder report directly in the backend.
 - Full runtime verification of the exact OpenClaw cron CLI flags is still pending on a real running environment.
@@ -177,6 +218,7 @@ Local data sources:
   - [admin-team.js](/Users/daniel/.openclaw/workspace/syntella/scripts/templates/frontend/admin-team.js)
 - [admin.js](/Users/daniel/.openclaw/workspace/syntella/scripts/templates/frontend/admin.js) is now just a deprecated stub kept only to avoid confusion during the transition.
 - Bootstrap now copies the split admin assets to the droplet project directory.
+- Admin section data now refreshes again when the user switches tabs/sections instead of only fetching once on initial page load.
 
 ### Tasks plugin
 
@@ -193,6 +235,18 @@ Local data sources:
   - `update_description`
 - The helper updates `task_runs` when status transitions happen so task-cost attribution still works.
 
+### Reports plugin
+
+- Added a seeded workspace plugin `syntella-reports` under the workspace extension templates.
+- Added a companion `reports-tool` skill for durable report creation guidance.
+- Bootstrap and spawned-agent config now explicitly enable the plugin under `tools.allow`, `plugins.allow`, and `plugins.entries.syntella-reports.enabled`.
+- The tool currently supports:
+  - `list_recent`
+  - `list_mine`
+  - `get`
+  - `create`
+- Agent templates now instruct agents to use the `reports` tool for routine outputs and longer durable findings instead of relying on chat alone.
+
 ### Task attribution
 
 - `task_runs` table added to local DB.
@@ -207,6 +261,9 @@ Local data sources:
 - Initially demo-backed, now converted to live usage data.
 - Pulls real usage/cost telemetry from ingested OpenClaw sessions.
 - Includes top cost tasks based on estimated task-run attribution.
+- Agent budget caps now come from Team/registry metadata instead of hardcoded frontend values.
+- Added a top-level Budget Envelope meter showing actual spend and projected spend against the total configured team budget.
+- Budget scope is now calendar month based, so actual month-to-date spend and projected month-end spend are compared against monthly caps on the same timeframe.
 - Shows:
   - projected monthly spend
   - actual spend
@@ -215,7 +272,27 @@ Local data sources:
   - cost by model
   - top cost tasks
   - recent usage events
-  - budget alerts
+- budget alerts
+
+### Client SEO implementation plan
+
+- Added a concrete SEO implementation plan in [SEO_AGENT_IMPLEMENTATION_PLAN.md](/Users/daniel/.openclaw/workspace/syntella/SEO_AGENT_IMPLEMENTATION_PLAN.md).
+- Planned architecture:
+  - `seo-authority-operator` skill
+  - `search-console` tool
+  - `analytics` tool
+  - `ghost` tool
+  - `signals` tool
+  - reuse existing `tasks` and `reports` tools
+- Planned routine set:
+  - Daily SEO Review
+  - Daily Industry Monitor
+  - Weekly Editorial Planner
+  - Draft Production Run
+  - Performance Refresh Review
+- Seeded the first `seo-authority-operator` skill scaffold into workspace templates under the SEO extension path.
+- Bootstrap now keeps the SEO extension only as a shared template; spawned agents inherit it only when created with SEO specialty.
+- Agent templates now tell Syntella/spawned agents to use the SEO skill when assigned editorial authority or search-optimisation work.
 
 ### Usage ingestion
 
@@ -274,40 +351,53 @@ This means total accounted tokens can be much larger than just input + output.
 
 ## Immediate Next Step
 
-Verify the new per-agent inbox channel model on a real droplet, then harden the Team-side agent creation path further.
+Deploy to a fresh droplet and verify the new routine/reporting/runtime path end to end.
 
 Immediate direction:
 
-1. Verify the seeded `syntella-tasks` plugin loads correctly in real OpenClaw workspaces.
-2. Verify spawned agents only respond in their assigned inbox channels.
-3. Make Team-page agent creation robust when the operator bridge is unavailable or misconfigured.
-4. Add clearer bridge health / spawn failure visibility in the UI.
-5. Then improve attribution accuracy by attaching exact `session_id` to task runs when possible.
+1. Verify the seeded `syntella-tasks` and `syntella-reports` plugins both load correctly in real OpenClaw workspaces.
+2. Verify routine save creates/updates real OpenClaw cron jobs, including one-shot `Date` routines.
+3. Verify `Run Now` triggers the intended agent turn through OpenClaw cron.
+4. Verify successful routine runs create durable DB-backed reports through the `reports` tool on a real droplet.
+5. Then harden Team-page agent creation and operator-bridge failure visibility further.
+6. After that, improve attribution accuracy by attaching exact `session_id` to task runs when possible.
 
 ## Planned Next Work
 
-### V1.1 Agent creation
+### V1.1 Routine execution hardening
+
+- verify exact OpenClaw cron CLI behavior in droplet runtime
+- handle cron create/edit/enable/disable/run failures more gracefully
+- show cron job state, next run, and sync failures in the Routines UI
+- remove any remaining placeholder-only routine/report behavior
+
+### V1.2 Agent creation
 
 - create new local agents from the Team page
-- allow name/role/description/model selection at creation time
-- persist new agents into the local OpenClaw-aware setup
-- refresh Team and Task assignee lists immediately after creation
-- current bridge still requires a Discord token for provisioning
+- done: name/role/description/model/channel selection and optional monthly budget
+- done: refresh Team and Task assignee lists immediately after creation
+- remaining: improve bridge failure visibility and reduce the Discord-token dependency if possible
 
-### V1.2 Models page follow-up
+### V1.3 Models page follow-up
 
 - define default model choices for future agents
 - show stronger pricing provenance and warning states
 - decide whether disabled models should be hidden from all other UI surfaces by default
 
-### V1.3 Task runs
+### V1.4 Reports integration
+
+- make routine executions reliably create DB-backed reports through the `reports` tool
+- decide whether file-based markdown reports should remain optional, secondary output
+- surface report provenance more clearly in the Reports UI
+
+### V1.5 Task runs
 
 - refine task run lifecycle rules
 - decide exact terminal statuses
 - support reopened tasks cleanly
 - improve task detail/run presentation
 
-### V1.4 Task-level budget visibility
+### V1.6 Task-level budget visibility
 
 - cost per task
 - cost per agent per task
@@ -315,7 +405,7 @@ Immediate direction:
 - compare task cost vs task outcome/status
 - make task and budget views cross-link cleanly
 
-### V1.5 Attribution improvements
+### V1.7 Attribution improvements
 
 - attach exact `session_id` to task runs when possible
 - move from pure time-window attribution to session-aware attribution
@@ -347,7 +437,6 @@ Immediate direction:
 - Should one task support multiple runs by default?
 - Should reopening a task create a new run automatically?
 - Where should exact run/session mapping live once we improve attribution?
-- Do we want editable budget caps in the UI or config-first for now?
 
 ## Practical Commands
 
@@ -364,6 +453,8 @@ Useful local URLs:
 - `http://127.0.0.1:3000/admin#tasks`
 - `http://127.0.0.1:3000/admin#budget`
 - `http://127.0.0.1:3000/admin#models`
+- `http://127.0.0.1:3000/admin#routines`
+- `http://127.0.0.1:3000/admin#reports`
 - `http://127.0.0.1:3000/admin#team`
 
 Useful API URLs:
@@ -371,6 +462,8 @@ Useful API URLs:
 - `http://127.0.0.1:3000/api/tasks`
 - `http://127.0.0.1:3000/api/departments`
 - `http://127.0.0.1:3000/api/models`
+- `http://127.0.0.1:3000/api/routines`
+- `http://127.0.0.1:3000/api/reports`
 - `http://127.0.0.1:3000/api/usage`
 - `http://127.0.0.1:3000/api/usage/summary?days=30`
 

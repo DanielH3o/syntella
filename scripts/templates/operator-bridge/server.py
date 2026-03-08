@@ -70,6 +70,8 @@ def normalize_payload(body):
         or body.get("discord_channel_id")
     )
     port = body.get("port")
+    monthly_budget = body.get("monthly_budget") or body.get("monthlyBudget")
+    specialty = body.get("specialty") or body.get("agent_specialty") or body.get("agentSpecialty")
     model_primary = (
         body.get("model_primary")
         or body.get("modelPrimary")
@@ -108,13 +110,23 @@ def normalize_payload(body):
     discord_token = str(discord_token).strip()
     channel_id = str(channel_id).strip()
     port = "" if port is None else str(port).strip()
+    monthly_budget = "" if monthly_budget is None else str(monthly_budget).strip()
+    specialty = "" if specialty is None else str(specialty).strip().lower()
     model_primary = str(model_primary).strip()
     if not channel_id.isdigit():
         return None, {"error": "bad_request", "detail": "channel_id must be numeric"}
     if port and not port.isdigit():
         return None, {"error": "bad_request", "detail": "port must be numeric when provided"}
+    if monthly_budget:
+        try:
+            if float(monthly_budget) < 0:
+                raise ValueError
+        except ValueError:
+            return None, {"error": "bad_request", "detail": "monthly_budget must be zero or greater"}
     if "/" not in model_primary:
         return None, {"error": "bad_request", "detail": "model_primary must be in provider/model format"}
+    if specialty and specialty not in {"seo"}:
+        return None, {"error": "bad_request", "detail": "specialty must be empty or one of: seo"}
 
     return {
         "agent_id": agent_id,
@@ -123,6 +135,8 @@ def normalize_payload(body):
         "discord_token": discord_token,
         "channel_id": channel_id,
         "port": port,
+        "monthly_budget": monthly_budget,
+        "specialty": specialty,
         "model_primary": model_primary,
     }, None
 
@@ -251,13 +265,20 @@ class Handler(BaseHTTPRequestHandler):
             description=payload["description"],
             channel_id=payload["channel_id"],
             port=payload["port"],
+            monthly_budget=payload["monthly_budget"],
+            specialty=payload["specialty"],
             model_primary=payload["model_primary"],
             token="***redacted***",
         )
 
         t0 = time.time()
         try:
-            r = run(cmd, capture_output=True, text=True, timeout=SPAWN_TIMEOUT)
+            env = os.environ.copy()
+            if payload["monthly_budget"]:
+                env["SYNTELLA_MONTHLY_BUDGET"] = payload["monthly_budget"]
+            if payload["specialty"]:
+                env["SYNTELLA_AGENT_SPECIALTY"] = payload["specialty"]
+            r = run(cmd, capture_output=True, text=True, timeout=SPAWN_TIMEOUT, env=env)
         except TimeoutExpired as e:
             dur_ms = int((time.time() - t0) * 1000)
             log_event("spawn_timeout", req_id=req_id, duration_ms=dur_ms)

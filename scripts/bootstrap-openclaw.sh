@@ -132,6 +132,7 @@ assert_templates_exist() {
     "$TEMPLATE_DIR/frontend/admin-core.js"
     "$TEMPLATE_DIR/frontend/admin-work.js"
     "$TEMPLATE_DIR/frontend/admin-models.js"
+    "$TEMPLATE_DIR/frontend/admin-integrations.js"
     "$TEMPLATE_DIR/frontend/admin-budget.js"
     "$TEMPLATE_DIR/frontend/admin-team.js"
     "$TEMPLATE_DIR/frontend/README.md"
@@ -455,11 +456,13 @@ seed_workspace_context_files() {
     "$syntella_ws/.openclaw/extensions/tasks" \
     "$syntella_ws/.openclaw/extensions/reports" \
     "$template_extensions_root/tasks" \
-    "$template_extensions_root/reports"
+    "$template_extensions_root/reports" \
+    "$template_extensions_root/seo"
   cp -R "$ws_tmpl/extensions/tasks" "$syntella_ws/.openclaw/extensions/tasks"
   cp -R "$ws_tmpl/extensions/tasks" "$template_extensions_root/tasks"
   cp -R "$ws_tmpl/extensions/reports" "$syntella_ws/.openclaw/extensions/reports"
   cp -R "$ws_tmpl/extensions/reports" "$template_extensions_root/reports"
+  cp -R "$ws_tmpl/extensions/seo" "$template_extensions_root/seo"
 
   local today yesterday
   today="$(date +%F)"
@@ -815,6 +818,7 @@ setup_frontend_workspace() {
   cp "$TEMPLATE_DIR/frontend/admin-core.js" "$project_dir/admin-core.js"
   cp "$TEMPLATE_DIR/frontend/admin-work.js" "$project_dir/admin-work.js"
   cp "$TEMPLATE_DIR/frontend/admin-models.js" "$project_dir/admin-models.js"
+  cp "$TEMPLATE_DIR/frontend/admin-integrations.js" "$project_dir/admin-integrations.js"
   cp "$TEMPLATE_DIR/frontend/admin-budget.js" "$project_dir/admin-budget.js"
   cp "$TEMPLATE_DIR/frontend/admin-team.js" "$project_dir/admin-team.js"
   cp "$TEMPLATE_DIR/frontend/README.md" "$project_dir/README.md"
