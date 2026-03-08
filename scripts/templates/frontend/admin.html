@@ -1761,6 +1761,11 @@
                   <input id="agent-discord-token-input" name="discord_token" placeholder="Required by current spawn bridge" required />
                   <p class="models-helper">The current operator bridge still requires a Discord token for provisioning.</p>
                 </div>
+                <div class="task-form__field">
+                  <label class="form-label" for="agent-channel-id-input">Inbox Channel ID</label>
+                  <input id="agent-channel-id-input" name="channel_id" inputmode="numeric" placeholder="123456789012345678" required />
+                  <p class="models-helper">This agent will listen only to this Discord channel. Treat it as the agent's inbox.</p>
+                </div>
                 <div id="agent-feedback" class="agent-feedback" aria-live="polite"></div>
                 <div class="models-form__actions">
                   <button class="btn btn-primary" type="submit">Create Agent</button>
@@ -1816,6 +1821,7 @@
       const agentModelSelect = document.getElementById('agent-model-select');
       const agentPortInput = document.getElementById('agent-port-input');
       const agentDiscordTokenInput = document.getElementById('agent-discord-token-input');
+      const agentChannelIdInput = document.getElementById('agent-channel-id-input');
       const orgRootNode = document.getElementById('team-chart-root-node');
       const orgBranches = document.getElementById('team-chart-members');
       const taskForm = document.getElementById('task-form');
@@ -2716,6 +2722,7 @@
             model_primary: agentModelSelect.value,
             port: agentPortInput.value.trim(),
             discord_token: agentDiscordTokenInput.value.trim(),
+            channel_id: agentChannelIdInput.value.trim(),
           };
           const response = await fetch('/api/spawn-agent', {
             method: 'POST',
@@ -2776,7 +2783,11 @@
           : description;
         const responsibilities = isRoot
           ? ['Routes and coordinates local work', 'Owns the primary profile', 'Acts as root for the team view']
-          : ['Handles assigned work', 'Operates as an independent agent', `Visible under ${orgRootNode.dataset.agentName || 'main'} in the team view`];
+          : [
+            'Handles assigned work',
+            'Operates as an independent agent',
+            agent && agent.channel_id ? `Listens only on inbox channel ${agent.channel_id}` : 'Should be assigned a dedicated inbox channel',
+          ];
         return {
           name: titleName,
           role,
@@ -2790,6 +2801,7 @@
           meta: [
             status === 'Running' ? 'Active now' : status,
             agent && agent.port ? `Port ${agent.port}` : null,
+            agent && agent.channel_id ? `Inbox ${agent.channel_id}` : null,
             agent && agent.session_count ? `${agent.session_count} sessions` : null,
           ].filter(Boolean),
         };

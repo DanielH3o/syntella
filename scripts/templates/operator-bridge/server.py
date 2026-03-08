@@ -64,6 +64,11 @@ def normalize_payload(body):
         or body.get("discordBotToken")
         or body.get("discord_bot_token")
     )
+    channel_id = (
+        body.get("channel_id")
+        or body.get("channelId")
+        or body.get("discord_channel_id")
+    )
     port = body.get("port")
     model_primary = (
         body.get("model_primary")
@@ -80,6 +85,8 @@ def normalize_payload(body):
         missing.append("description")
     if not discord_token:
         missing.append("discord_token")
+    if not channel_id:
+        missing.append("channel_id")
     if not model_primary:
         missing.append("model_primary")
     if missing:
@@ -99,8 +106,11 @@ def normalize_payload(body):
     role = str(role).strip()
     description = str(description).strip()
     discord_token = str(discord_token).strip()
+    channel_id = str(channel_id).strip()
     port = "" if port is None else str(port).strip()
     model_primary = str(model_primary).strip()
+    if not channel_id.isdigit():
+        return None, {"error": "bad_request", "detail": "channel_id must be numeric"}
     if port and not port.isdigit():
         return None, {"error": "bad_request", "detail": "port must be numeric when provided"}
     if "/" not in model_primary:
@@ -111,6 +121,7 @@ def normalize_payload(body):
         "role": role,
         "description": description,
         "discord_token": discord_token,
+        "channel_id": channel_id,
         "port": port,
         "model_primary": model_primary,
     }, None
@@ -223,6 +234,7 @@ class Handler(BaseHTTPRequestHandler):
             payload["agent_id"],
             full_role,
             payload["discord_token"],
+            payload["channel_id"],
         ]
         cmd.append(payload["model_primary"])
         if payload["port"]:
@@ -237,6 +249,7 @@ class Handler(BaseHTTPRequestHandler):
             agent_id=payload["agent_id"],
             role=payload["role"],
             description=payload["description"],
+            channel_id=payload["channel_id"],
             port=payload["port"],
             model_primary=payload["model_primary"],
             token="***redacted***",

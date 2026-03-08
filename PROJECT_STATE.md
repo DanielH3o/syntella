@@ -61,6 +61,7 @@ Local data sources:
 - Agent workspace instructions should treat `~/.openclaw/workspace/tasks.db` and `/api/tasks` as the canonical task system.
 - `~/.openclaw/workspace/shared/TASKS.md` is now legacy compatibility context, not the source of truth.
 - Task workflow is moving out of prompt text and into a real OpenClaw plugin tool plus companion skill.
+- Agent communication is shifting away from one shared Discord room to one inbox channel per agent.
 
 ### Budget tracking
 
@@ -101,6 +102,8 @@ Local data sources:
 - Selected agent details now open in a screen-edge sidenav overlay.
 - Added a Team-side New Agent drawer wired to the shared Models catalog.
 - Team agent creation now submits through the local dev server to the operator bridge.
+- New-agent creation now requires an inbox `channel_id`.
+- Team metadata now surfaces each agent's inbox channel.
 
 ### Models page
 
@@ -229,14 +232,15 @@ This means total accounted tokens can be much larger than just input + output.
 
 ## Immediate Next Step
 
-Harden the Team-side agent creation path and then improve attribution accuracy.
+Verify the new per-agent inbox channel model on a real droplet, then harden the Team-side agent creation path further.
 
 Immediate direction:
 
 1. Verify the seeded `syntella-tasks` plugin loads correctly in real OpenClaw workspaces.
-2. Make Team-page agent creation robust when the operator bridge is unavailable or misconfigured.
-3. Add clearer bridge health / spawn failure visibility in the UI.
-4. Then improve attribution accuracy by attaching exact `session_id` to task runs when possible.
+2. Verify spawned agents only respond in their assigned inbox channels.
+3. Make Team-page agent creation robust when the operator bridge is unavailable or misconfigured.
+4. Add clearer bridge health / spawn failure visibility in the UI.
+5. Then improve attribution accuracy by attaching exact `session_id` to task runs when possible.
 
 ## Planned Next Work
 

@@ -14,11 +14,12 @@ set -euo pipefail
 AGENT_ID="${1:-}"
 ROLE="${2:-}"
 DISCORD_BOT_TOKEN_AGENT="${3:-}"
-MODEL_PRIMARY="${4:-moonshot/kimi-k2.5}"
-PORT="${5:-}"
+DISCORD_CHANNEL_ID_AGENT="${4:-}"
+MODEL_PRIMARY="${5:-moonshot/kimi-k2.5}"
+PORT="${6:-}"
 
-[[ -n "$AGENT_ID" && -n "$ROLE" && -n "$DISCORD_BOT_TOKEN_AGENT" && -n "$MODEL_PRIMARY" ]] || {
-  echo "usage: syntella-spawn-agent <agent_id> <role> <discord_token> <model_primary> [port]"
+[[ -n "$AGENT_ID" && -n "$ROLE" && -n "$DISCORD_BOT_TOKEN_AGENT" && -n "$DISCORD_CHANNEL_ID_AGENT" && -n "$MODEL_PRIMARY" ]] || {
+  echo "usage: syntella-spawn-agent <agent_id> <role> <discord_token> <channel_id> <model_primary> [port]"
   exit 2
 }
 
@@ -256,7 +257,7 @@ config_set tools.fs.workspaceOnly false
 config_set tools.exec.applyPatch.workspaceOnly false
 
 # Write all JSON config (model, arrays, guilds) in a single Python pass.
-python3 - "$HOME/.openclaw/openclaw.json" "$CHILD_HOME" "$MODEL_PRIMARY" "__DISCORD_HUMAN_ID__" "__DISCORD_GUILD_ID__" "__DISCORD_CHANNEL_ID__" "$SPAWN_LOG" <<'PYSCRIPT'
+python3 - "$HOME/.openclaw/openclaw.json" "$CHILD_HOME" "$MODEL_PRIMARY" "__DISCORD_HUMAN_ID__" "__DISCORD_GUILD_ID__" "$DISCORD_CHANNEL_ID_AGENT" "$SPAWN_LOG" <<'PYSCRIPT'
 import json, os, sys
 
 global_cfg_path, home, model_primary, human_id, guild_id, channel_id, log_path = sys.argv[1:8]
@@ -345,11 +346,11 @@ PYSCRIPT
 
 # Validate critical config.
 child_group_policy="$(oc_child config get channels.discord.groupPolicy 2>/dev/null | tr -d '"[:space:]' || true)"
-child_guild_allow="$(oc_child config get channels.discord.guilds.__DISCORD_GUILD_ID__.channels.__DISCORD_CHANNEL_ID__.allow 2>/dev/null | tr -d '"[:space:]' || true)"
+child_guild_allow="$(oc_child config get channels.discord.guilds.__DISCORD_GUILD_ID__.channels.${DISCORD_CHANNEL_ID_AGENT}.allow 2>/dev/null | tr -d '"[:space:]' || true)"
 child_model_primary="$(oc_child config get agents.defaults.model.primary 2>/dev/null | tr -d '"[:space:]' || true)"
 
 if [[ "$child_group_policy" != "allowlist" || "$child_guild_allow" != "true" ]]; then
-  echo "ERROR: child guild allowlist wiring failed (groupPolicy=${child_group_policy:-<unset>}, channelAllow=${child_guild_allow:-<unset>})" >&2
+  echo "ERROR: child guild allowlist wiring failed (groupPolicy=${child_group_policy:-<unset>}, channelAllow=${child_guild_allow:-<unset>}, channel=${DISCORD_CHANNEL_ID_AGENT:-<unset>})" >&2
   oc_child config get channels.discord.guilds >&2 || true
   exit 1
 fi
@@ -404,7 +405,7 @@ fi
 log "Gateway ready, updating registry"
 
 # Update registry, SOUL.md, and TEAM.md.
-python3 - "$AGENT_ID" "$PORT" "$ROLE" "$CHILD_HOME" "__DISCORD_GUILD_ID__" "__DISCORD_CHANNEL_ID__" "$GATEWAY_PID" <<'PY'
+python3 - "$AGENT_ID" "$PORT" "$ROLE" "$CHILD_HOME" "__DISCORD_GUILD_ID__" "$DISCORD_CHANNEL_ID_AGENT" "$GATEWAY_PID" <<'PY'
 import json, os, re, sys
 
 agent, port, role_raw, home, guild_id, channel_id, pid = (
@@ -472,6 +473,7 @@ entry = (
     f"  - role: {role.strip()}\n"
     f"  - personality: {(personality or role_raw).strip()}\n"
     f"  - port: {port}\n"
+    f"  - inbox_channel_id: {channel_id}\n"
 )
 start = f"<!-- AGENT:{agent}:START -->"
 end = f"<!-- AGENT:{agent}:END -->"

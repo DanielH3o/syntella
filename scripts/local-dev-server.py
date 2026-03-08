@@ -284,6 +284,7 @@ def discover_openclaw_agents():
             "description": registry_meta.get("description") or ("Primary root agent for the local OpenClaw profile." if agent_id == "main" else f"Discovered from local OpenClaw state for `{agent_id}`."),
             "pid": registry_meta.get("pid"),
             "port": registry_meta.get("port"),
+            "channel_id": registry_meta.get("channel_id"),
             "status": "Running" if latest_ts else "Discovered",
             "latest_activity": latest_ts,
             "session_count": event_count,
