@@ -70,70 +70,72 @@ async function runTaskDb(args: ToolArgs) {
 }
 
 export default async function register(api: any) {
-  api.registerTool({
-    name: "tasks",
-    description:
-      "Create, inspect, and update Syntella tasks in the shared workspace task system.",
-    optional: true,
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      required: ["action"],
-      properties: {
-        action: {
-          type: "string",
-          enum: [...TASK_ACTIONS],
-          description: "The task operation to perform.",
-        },
-        task_id: {
-          type: "integer",
-          description: "Task ID for get or update actions.",
-        },
-        title: {
-          type: "string",
-          description: "Task title for create.",
-        },
-        description: {
-          type: "string",
-          description: "Task description or updated notes.",
-        },
-        assignee: {
-          type: "string",
-          description: "Assignee agent ID. Omit on list_mine to use the current agent.",
-        },
-        priority: {
-          type: "string",
-          enum: ["low", "medium", "high"],
-          description: "Priority for create.",
-        },
-        status: {
-          type: "string",
-          enum: [...TASK_STATUSES],
-          description: "New task status for create or update_status.",
-        },
-        limit: {
-          type: "integer",
-          minimum: 1,
-          maximum: 100,
-          description: "Maximum number of tasks to return for list actions.",
-        },
-        agent_id: {
-          type: "string",
-          description: "Explicit agent ID to use when needed.",
+  api.registerTool(
+    {
+      name: "tasks",
+      description:
+        "Create, inspect, and update Syntella tasks in the shared workspace task system.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        required: ["action"],
+        properties: {
+          action: {
+            type: "string",
+            enum: [...TASK_ACTIONS],
+            description: "The task operation to perform.",
+          },
+          task_id: {
+            type: "integer",
+            description: "Task ID for get or update actions.",
+          },
+          title: {
+            type: "string",
+            description: "Task title for create.",
+          },
+          description: {
+            type: "string",
+            description: "Task description or updated notes.",
+          },
+          assignee: {
+            type: "string",
+            description: "Assignee agent ID. Omit on list_mine to use the current agent.",
+          },
+          priority: {
+            type: "string",
+            enum: ["low", "medium", "high"],
+            description: "Priority for create.",
+          },
+          status: {
+            type: "string",
+            enum: [...TASK_STATUSES],
+            description: "New task status for create or update_status.",
+          },
+          limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 100,
+            description: "Maximum number of tasks to return for list actions.",
+          },
+          agent_id: {
+            type: "string",
+            description: "Explicit agent ID to use when needed.",
+          },
         },
       },
+      async execute(_callId: string, args: ToolArgs) {
+        const result = await runTaskDb(args);
+        return {
+          content: [
+            {
+              type: "text",
+              text: summarize(result),
+            },
+          ],
+          structuredContent: result,
+        };
+      },
     },
-    async execute(args: ToolArgs) {
-      const result = await runTaskDb(args);
-      return {
-        content: [
-          {
-            type: "text",
-            text: summarize(result),
-          },
-        ],
-        structuredContent: result,
-      };
-    },
-  });
+    { optional: true },
+  );
 }

@@ -137,6 +137,8 @@ Local data sources:
 
 - Added a seeded workspace plugin `syntella-tasks` under the workspace extension templates.
 - Added a companion `tasks-tool` skill that tells agents to use the tool instead of manual curl/API walkthroughs.
+- Plugin registration now uses the OpenClaw optional-tool pattern and includes an explicit manifest `configSchema`.
+- Bootstrap and spawned-agent config now explicitly enable the plugin under `plugins.allow` and `plugins.entries.syntella-tasks.enabled`.
 - The tool currently supports:
   - `list`
   - `list_mine`

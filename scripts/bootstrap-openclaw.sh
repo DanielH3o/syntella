@@ -706,6 +706,22 @@ if not isinstance(allow, list):
 if 'syntella-tasks' not in allow:
     allow.append('syntella-tasks')
 tools['allow'] = allow
+plugins = cfg.setdefault('plugins', {})
+plugin_allow = plugins.get('allow')
+if not isinstance(plugin_allow, list):
+    plugin_allow = []
+if 'syntella-tasks' not in plugin_allow:
+    plugin_allow.append('syntella-tasks')
+plugins['allow'] = plugin_allow
+entries = plugins.get('entries')
+if not isinstance(entries, dict):
+    entries = {}
+entry = entries.get('syntella-tasks')
+if not isinstance(entry, dict):
+    entry = {}
+entry['enabled'] = True
+entries['syntella-tasks'] = entry
+plugins['entries'] = entries
 with open(config_path, 'w') as f:
     json.dump(cfg, f, indent=2)
 PY

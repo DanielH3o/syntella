@@ -3,6 +3,11 @@
   "name": "Syntella Tasks",
   "version": "0.1.0",
   "description": "Task workflow tool for Syntella agents backed by the shared OpenClaw workspace task database.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
   "skills": [
     "skills"
   ]
