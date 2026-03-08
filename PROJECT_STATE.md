@@ -240,6 +240,7 @@ Local data sources:
 - Added a seeded workspace plugin `syntella-reports` under the workspace extension templates.
 - Added a companion `reports-tool` skill for durable report creation guidance.
 - Bootstrap and spawned-agent config now explicitly enable the plugin under `tools.allow`, `plugins.allow`, and `plugins.entries.syntella-reports.enabled`.
+- Fixed a droplet/runtime plugin discovery bug where spawned agents were copying the task/report extensions into `tasks` and `reports` folder names instead of the plugin ID folder names OpenClaw expected. Spawn now copies them into `syntella-tasks` and `syntella-reports`, with a fallback for older template stores.
 - The tool currently supports:
   - `list_recent`
   - `list_mine`
@@ -355,7 +356,7 @@ Deploy to a fresh droplet and verify the new routine/reporting/runtime path end 
 
 Immediate direction:
 
-1. Verify the seeded `syntella-tasks` and `syntella-reports` plugins both load correctly in real OpenClaw workspaces.
+1. Redeploy and verify spawned agents now discover `syntella-tasks` and `syntella-reports` correctly in real OpenClaw workspaces.
 2. Verify routine save creates/updates real OpenClaw cron jobs, including one-shot `Date` routines.
 3. Verify `Run Now` triggers the intended agent turn through OpenClaw cron.
 4. Verify successful routine runs create durable DB-backed reports through the `reports` tool on a real droplet.

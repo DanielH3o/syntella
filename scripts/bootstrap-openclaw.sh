@@ -455,13 +455,17 @@ seed_workspace_context_files() {
   rm -rf \
     "$syntella_ws/.openclaw/extensions/tasks" \
     "$syntella_ws/.openclaw/extensions/reports" \
+    "$syntella_ws/.openclaw/extensions/syntella-tasks" \
+    "$syntella_ws/.openclaw/extensions/syntella-reports" \
     "$template_extensions_root/tasks" \
     "$template_extensions_root/reports" \
+    "$template_extensions_root/syntella-tasks" \
+    "$template_extensions_root/syntella-reports" \
     "$template_extensions_root/seo"
-  cp -R "$ws_tmpl/extensions/tasks" "$syntella_ws/.openclaw/extensions/tasks"
-  cp -R "$ws_tmpl/extensions/tasks" "$template_extensions_root/tasks"
-  cp -R "$ws_tmpl/extensions/reports" "$syntella_ws/.openclaw/extensions/reports"
-  cp -R "$ws_tmpl/extensions/reports" "$template_extensions_root/reports"
+  cp -R "$ws_tmpl/extensions/tasks" "$syntella_ws/.openclaw/extensions/syntella-tasks"
+  cp -R "$ws_tmpl/extensions/tasks" "$template_extensions_root/syntella-tasks"
+  cp -R "$ws_tmpl/extensions/reports" "$syntella_ws/.openclaw/extensions/syntella-reports"
+  cp -R "$ws_tmpl/extensions/reports" "$template_extensions_root/syntella-reports"
   cp -R "$ws_tmpl/extensions/seo" "$template_extensions_root/seo"
 
   local today yesterday

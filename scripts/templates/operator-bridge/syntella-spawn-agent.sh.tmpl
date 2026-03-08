@@ -196,13 +196,19 @@ PY
 # Copy spawned agent template.
 cp "$SHARED_WS_ROOT/AGENTS.SPAWNED.md" "$AGENT_WS/AGENTS.md" 2>/dev/null || true
 mkdir -p "$AGENT_WS/.openclaw/extensions"
-if [[ -d "$SHARED_WS_ROOT/templates/extensions/tasks" ]]; then
-  rm -rf "$AGENT_WS/.openclaw/extensions/tasks"
-  cp -R "$SHARED_WS_ROOT/templates/extensions/tasks" "$AGENT_WS/.openclaw/extensions/tasks"
+if [[ -d "$SHARED_WS_ROOT/templates/extensions/syntella-tasks" ]]; then
+  rm -rf "$AGENT_WS/.openclaw/extensions/tasks" "$AGENT_WS/.openclaw/extensions/syntella-tasks"
+  cp -R "$SHARED_WS_ROOT/templates/extensions/syntella-tasks" "$AGENT_WS/.openclaw/extensions/syntella-tasks"
+elif [[ -d "$SHARED_WS_ROOT/templates/extensions/tasks" ]]; then
+  rm -rf "$AGENT_WS/.openclaw/extensions/tasks" "$AGENT_WS/.openclaw/extensions/syntella-tasks"
+  cp -R "$SHARED_WS_ROOT/templates/extensions/tasks" "$AGENT_WS/.openclaw/extensions/syntella-tasks"
 fi
-if [[ -d "$SHARED_WS_ROOT/templates/extensions/reports" ]]; then
-  rm -rf "$AGENT_WS/.openclaw/extensions/reports"
-  cp -R "$SHARED_WS_ROOT/templates/extensions/reports" "$AGENT_WS/.openclaw/extensions/reports"
+if [[ -d "$SHARED_WS_ROOT/templates/extensions/syntella-reports" ]]; then
+  rm -rf "$AGENT_WS/.openclaw/extensions/reports" "$AGENT_WS/.openclaw/extensions/syntella-reports"
+  cp -R "$SHARED_WS_ROOT/templates/extensions/syntella-reports" "$AGENT_WS/.openclaw/extensions/syntella-reports"
+elif [[ -d "$SHARED_WS_ROOT/templates/extensions/reports" ]]; then
+  rm -rf "$AGENT_WS/.openclaw/extensions/reports" "$AGENT_WS/.openclaw/extensions/syntella-reports"
+  cp -R "$SHARED_WS_ROOT/templates/extensions/reports" "$AGENT_WS/.openclaw/extensions/syntella-reports"
 fi
 if [[ "${SYNTELLA_AGENT_SPECIALTY:-}" == "seo" && -d "$SHARED_WS_ROOT/templates/extensions/seo" ]]; then
   rm -rf "$AGENT_WS/.openclaw/extensions/seo"
