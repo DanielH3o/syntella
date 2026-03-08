@@ -44,6 +44,8 @@ Local data sources:
 - Stay on OpenClaw for now.
 - Do not switch to NanoClaw at this stage.
 - Reason: OpenClaw already stores usable local usage telemetry per message/session/agent, so the main missing layer is attribution, not token accounting.
+- Syntella/main should own the primary heartbeat-based control loop.
+- Worker agents should remain event-driven by default and only get their own heartbeat for narrow, explicit reasons.
 
 ### Local development
 
@@ -62,6 +64,7 @@ Local data sources:
 - `~/.openclaw/workspace/shared/TASKS.md` is now legacy compatibility context, not the source of truth.
 - Task workflow is moving out of prompt text and into a real OpenClaw plugin tool plus companion skill.
 - Agent communication is shifting away from one shared Discord room to one inbox channel per agent.
+- `HEARTBEAT.MAIN.md` should reflect a main-only orchestration loop that uses the `tasks` tool as the operational source of truth.
 
 ### Budget tracking
 
@@ -135,6 +138,40 @@ Local data sources:
 - Task cards now show estimated cost and run status.
 - Task detail panel now shows estimated tokens/cost and run history.
 - Workspace templates now instruct agents to interact with tasks through the real task system instead of maintaining a parallel ledger in `shared/TASKS.md`.
+
+### Routines and Reports
+
+- Added first-pass `routines`, `routine_runs`, and `reports` tables to the local control-plane DB.
+- Added APIs for:
+  - `/api/routines`
+  - `/api/routines/:id`
+  - `/api/routines/:id/run`
+  - `/api/reports`
+  - `/api/reports/:id`
+- Added top-level `Routines` and `Reports` admin pages.
+- Routines currently support:
+  - create/edit
+  - enable/disable
+  - schedule metadata
+  - assigned agent
+  - output mode
+  - manual `Run Now`
+- Routine create/edit/detail now uses a right-side drawer instead of a permanent inline card, matching the Team and Models interaction pattern.
+- `Run Now` records a `routine_run` and creates a placeholder durable report when the routine output mode expects one.
+- Full scheduler execution is not wired yet; this is the control-plane and reporting surface first.
+
+### Frontend refactor
+
+- Frontend refactor is underway to move the admin surface away from one giant HTML file.
+- `admin.html` now loads dedicated assets:
+  - [admin.css](/Users/daniel/.openclaw/workspace/syntella/scripts/templates/frontend/admin.css)
+  - [admin-core.js](/Users/daniel/.openclaw/workspace/syntella/scripts/templates/frontend/admin-core.js)
+  - [admin-work.js](/Users/daniel/.openclaw/workspace/syntella/scripts/templates/frontend/admin-work.js)
+  - [admin-models.js](/Users/daniel/.openclaw/workspace/syntella/scripts/templates/frontend/admin-models.js)
+  - [admin-budget.js](/Users/daniel/.openclaw/workspace/syntella/scripts/templates/frontend/admin-budget.js)
+  - [admin-team.js](/Users/daniel/.openclaw/workspace/syntella/scripts/templates/frontend/admin-team.js)
+- [admin.js](/Users/daniel/.openclaw/workspace/syntella/scripts/templates/frontend/admin.js) is now just a deprecated stub kept only to avoid confusion during the transition.
+- Bootstrap now copies the split admin assets to the droplet project directory.
 
 ### Tasks plugin
 

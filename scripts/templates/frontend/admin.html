@@ -5,1149 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Admin - Syntella</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <style>
-    :root {
-      color-scheme: light;
-      --bg-deep: #f3f4f6;
-      --bg-body: #ffffff;
-      --bg-card: #ffffff;
-      --bg-card-hover: #f9fafb;
-      --bg-input: #ffffff;
-      --border-subtle: #e5e7eb;
-      --border-card: #e5e7eb;
-      --text-primary: #111827;
-      --text-secondary: #374151;
-      --text-muted: #6b7280;
-      --accent-blue: #4f46e5;
-      --accent-blue-hover: #4338ca;
-      --status-online: #10b981;
-      --status-offline: #ef4444;
-      --status-warning: #f59e0b;
-      --radius-sm: 6px;
-      --radius-md: 8px;
-      --radius-lg: 12px;
-      --radius-full: 9999px;
-      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-      --font-sans: 'Inter', system-ui, sans-serif;
-    }
-    * { box-sizing: border-box; }
-    html, body { height: 100%; margin: 0; font-family: var(--font-sans); color: var(--text-primary); background-color: var(--bg-deep); }
-    
-    .app-layout { display: flex; flex-direction: column; height: 100vh; width: 100vw; }
-    
-    /* Top Navigation */
-    .top-nav { display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-body); border-bottom: 1px solid var(--border-subtle); padding: 0 32px; height: 72px; flex-shrink: 0; }
-    .top-nav-left { display: flex; align-items: center; gap: 40px; height: 100%; }
-    .nav-brand { display: flex; align-items: center; gap: 8px; }
-    .nav-logo { font-weight: 700; font-size: 1.25rem; letter-spacing: -0.03em; }
-    .nav-badge { font-size: 0.65rem; text-transform: uppercase; font-weight: 700; background: #eff6ff; color: var(--accent-blue); padding: 2px 8px; border-radius: var(--radius-full); }
-    
-    .nav-links { display: flex; gap: 8px; height: 100%; }
-    .nav-item { display: flex; align-items: center; gap: 8px; padding: 0 16px; color: var(--text-secondary); text-decoration: none; font-size: 0.9375rem; font-weight: 500; transition: all 0.2s ease; cursor: pointer; height: 100%; border-bottom: 2px solid transparent; }
-    .nav-item svg { width: 16px; height: 16px; opacity: 0.6; }
-    .nav-item:hover { color: var(--text-primary); }
-    .nav-item:hover svg { opacity: 0.9; color: var(--accent-blue); }
-    .nav-item.active { color: var(--accent-blue); border-bottom-color: var(--accent-blue); font-weight: 600; }
-    .nav-item.active svg { opacity: 1; color: var(--accent-blue); }
-    
-    .top-nav-right { display: flex; align-items: center; gap: 8px; font-size: 0.8125rem; font-weight: 500; color: var(--text-muted); }
-    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-    .status-dot--online { background-color: var(--status-online); }
-    .status-dot--offline { background-color: var(--status-offline); }
-    
-    /* Main Content */
-    .main-content { flex: 1; overflow-y: auto; padding: 40px 48px; background-color: var(--bg-deep); }
-    .view-section { display: none; max-width: 1400px; margin: 0 auto; }
-    .view-section:target { display: block; }
-    
-    .view-header { margin-bottom: 32px; display: flex; justify-content: space-between; align-items: flex-end; }
-    .view-title { font-size: 1.875rem; font-weight: 700; margin: 0; }
-    .text-muted { color: var(--text-muted); }
-    .text-sm { font-size: 0.875rem; }
-    .mt-1 { margin-top: 4px; }
-    .mt-8 { margin-top: 40px; }
-    
-    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; font-size: 0.875rem; font-weight: 500; border-radius: var(--radius-md); cursor: pointer; border: none; font-family: inherit; }
-    .btn-primary { background-color: var(--accent-blue); color: white; }
-    .btn-primary:hover { background-color: var(--accent-blue-hover); }
-    
-    .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; }
-    .stat-card { background: var(--bg-card); border: 1px solid var(--border-card); border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-sm); }
-    .stat-card__label { font-size: 0.875rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; }
-    .stat-card__value { font-size: 2.25rem; font-weight: 700; margin-bottom: 8px; }
-    .stat-card__detail { font-size: 0.875rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
-    
-    .spawn-section { background: var(--bg-card); border: 1px solid var(--border-card); border-radius: var(--radius-lg); padding: 32px; box-shadow: var(--shadow-sm); max-width: 800px;}
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
-    .form-group { display: flex; flex-direction: column; gap: 6px; }
-    .form-label { font-size: 0.875rem; font-weight: 500; }
-    input,
-    select,
-    textarea {
-      width: 100%;
-      padding: 10px 14px;
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-md);
-      font-family: inherit;
-      font-size: 0.9375rem;
-      color: var(--text-primary);
-      background: var(--bg-input);
-      box-shadow: inset 0 1px 2px rgba(17, 24, 39, 0.02);
-      transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
-      -webkit-appearance: none;
-      appearance: none;
-    }
-    textarea {
-      min-height: 96px;
-      resize: vertical;
-      line-height: 1.45;
-    }
-    select {
-      padding-right: 40px;
-      background-image:
-        linear-gradient(45deg, transparent 50%, #6b7280 50%),
-        linear-gradient(135deg, #6b7280 50%, transparent 50%);
-      background-position:
-        calc(100% - 18px) calc(50% - 2px),
-        calc(100% - 12px) calc(50% - 2px);
-      background-size: 6px 6px, 6px 6px;
-      background-repeat: no-repeat;
-    }
-    input:focus,
-    select:focus,
-    textarea:focus {
-      outline: none;
-      border-color: rgba(79, 70, 229, 0.55);
-      box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.12);
-    }
-    
-    .kanban-board { display: flex; gap: 24px; height: calc(100vh - 220px); overflow-x: auto; padding-bottom: 24px; }
-    .tasks-layout {
-      display: grid;
-      grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.8fr);
-      gap: 24px;
-      align-items: start;
-    }
-    .kanban-column { flex: 0 0 320px; background-color: #f9fafb; border: 1px solid var(--border-card); border-radius: var(--radius-lg); display: flex; flex-direction: column; }
-    .kanban-column-header { padding: 16px 20px; border-bottom: 1px solid var(--border-card); display: flex; justify-content: space-between; align-items: center; background: white; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
-    .kanban-column-title { margin: 0; font-size: 0.875rem; font-weight: 600; text-transform: uppercase; }
-    .kanban-count { background: #f3f4f6; font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: var(--radius-full); }
-    .kanban-items { padding: 16px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
-    
-    .task-card { background: var(--bg-card); border: 1px solid var(--border-card); border-radius: var(--radius-md); padding: 16px; box-shadow: var(--shadow-sm); }
-    .task-card[draggable="true"] { cursor: grab; }
-    .task-card.is-dragging { opacity: 0.45; cursor: grabbing; }
-    .task-title { margin: 0 0 8px 0; font-size: 0.9375rem; font-weight: 600; }
-    .task-card.is-selected {
-      border-color: rgba(79, 70, 229, 0.65);
-      box-shadow: 0 10px 26px rgba(79, 70, 229, 0.12);
-    }
-    .task-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; }
-    .task-cost-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      margin-top: 10px;
-      font-size: 0.8rem;
-      color: var(--text-muted);
-    }
-    .task-run-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 8px;
-      border-radius: var(--radius-full);
-      background: #eef2ff;
-      color: #4338ca;
-      font-weight: 700;
-      font-size: 0.72rem;
-      text-transform: uppercase;
-    }
-    .task-run-badge.is-open {
-      background: #ecfdf5;
-      color: #047857;
-    }
-    .task-run-badge.is-closed {
-      background: #f3f4f6;
-      color: #4b5563;
-    }
-    .task-assignee { font-size: 0.75rem; color: var(--accent-blue); background: #eff6ff; padding: 4px 8px; border-radius: var(--radius-sm); font-weight: 600; }
-    .task-priority { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-    .priority-low { background: #9ca3af; } .priority-medium { background: var(--status-warning); } .priority-high { background: var(--status-offline); }
-    .kanban-items.is-drop-target { background: rgba(79, 70, 229, 0.04); outline: 2px dashed rgba(79, 70, 229, 0.35); outline-offset: -6px; }
-    .task-empty { padding: 18px; border: 1px dashed var(--border-card); border-radius: var(--radius-md); color: var(--text-muted); font-size: 0.875rem; text-align: center; background: rgba(255, 255, 255, 0.7); }
-    .task-form {
-      display: grid;
-      grid-template-columns: minmax(0, 2fr) minmax(160px, 1fr) minmax(160px, 1fr) auto;
-      gap: 12px;
-      align-items: end;
-      margin-bottom: 24px;
-      padding: 18px;
-      background: #fff;
-      border: 1px solid var(--border-card);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-sm);
-    }
-    .task-form.is-hidden { display: none; }
-    .task-form textarea,
-    .task-form select {
-      width: 100%;
-      padding: 10px 14px;
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-md);
-      font-family: inherit;
-      background: #fff;
-    }
-    .task-form textarea {
-      min-height: 42px;
-      max-height: 140px;
-      resize: vertical;
-    }
-    .task-form__field {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .task-form__actions {
-      display: flex;
-      gap: 10px;
-      justify-content: flex-end;
-    }
-    .btn-secondary {
-      background: #f3f4f6;
-      color: var(--text-secondary);
-      border: 1px solid var(--border-subtle);
-    }
-    .task-feedback {
-      min-height: 20px;
-      margin-bottom: 12px;
-      color: var(--text-muted);
-      font-size: 0.875rem;
-    }
-    .task-feedback.is-error { color: #b91c1c; }
-    .task-feedback.is-success { color: #047857; }
-    .task-detail {
-      position: sticky;
-      top: 24px;
-      border: 1px solid var(--border-card);
-      border-radius: 22px;
-      background: #fff;
-      box-shadow: var(--shadow-sm);
-      padding: 24px;
-    }
-    .task-detail__title {
-      margin: 0;
-      font-size: 1.25rem;
-      font-weight: 700;
-      letter-spacing: -0.03em;
-    }
-    .task-detail__sub {
-      margin: 8px 0 0;
-      color: var(--text-muted);
-      font-size: 0.92rem;
-      line-height: 1.5;
-    }
-    .task-detail__stats {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-      margin-top: 20px;
-    }
-    .task-detail__stat {
-      padding: 14px;
-      border-radius: 16px;
-      background: #f8fafc;
-      border: 1px solid #eef2f7;
-    }
-    .task-detail__label {
-      display: block;
-      font-size: 0.72rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-muted);
-      margin-bottom: 6px;
-    }
-    .task-detail__value {
-      font-size: 1rem;
-      font-weight: 700;
-    }
-    .task-detail__section {
-      margin-top: 22px;
-    }
-    .task-detail__section-title {
-      margin: 0 0 10px;
-      font-size: 0.86rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-muted);
-    }
-    .task-run-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-      display: grid;
-      gap: 10px;
-    }
-    .task-run-list li {
-      padding: 12px 14px;
-      border-radius: 16px;
-      background: #f8fafc;
-      border: 1px solid #eef2f7;
-    }
-    .task-run-list strong {
-      display: block;
-      margin-bottom: 6px;
-      font-size: 0.9rem;
-    }
-    .task-run-list span {
-      display: block;
-      color: var(--text-muted);
-      font-size: 0.82rem;
-      line-height: 1.45;
-    }
-    .budget-shell { display: grid; gap: 24px; }
-    .budget-controls {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 14px;
-      padding: 18px;
-      border: 1px solid var(--border-card);
-      border-radius: 18px;
-      background: linear-gradient(180deg, #fff, #f8fafc);
-      box-shadow: var(--shadow-sm);
-    }
-    .budget-controls select {
-      width: 100%;
-      padding: 10px 14px;
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-md);
-      background: #fff;
-      font-family: inherit;
-    }
-    .budget-grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 18px;
-    }
-    .budget-card {
-      background: #fff;
-      border: 1px solid var(--border-card);
-      border-radius: 20px;
-      padding: 22px;
-      box-shadow: var(--shadow-sm);
-    }
-    .budget-card--hero {
-      background: linear-gradient(135deg, #111827 0%, #312e81 100%);
-      color: #fff;
-      border-color: transparent;
-    }
-    .budget-card__label {
-      margin: 0 0 10px;
-      font-size: 0.78rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-muted);
-    }
-    .budget-card--hero .budget-card__label { color: rgba(255,255,255,0.72); }
-    .budget-card__value {
-      margin: 0;
-      font-size: 2rem;
-      font-weight: 700;
-      letter-spacing: -0.04em;
-    }
-    .budget-card__detail {
-      margin: 10px 0 0;
-      color: var(--text-muted);
-      font-size: 0.92rem;
-      line-height: 1.5;
-    }
-    .budget-card--hero .budget-card__detail { color: rgba(255,255,255,0.76); }
-    .budget-layout {
-      display: grid;
-      grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.9fr);
-      gap: 24px;
-      align-items: start;
-    }
-    .budget-panel {
-      background: #fff;
-      border: 1px solid var(--border-card);
-      border-radius: 22px;
-      padding: 24px;
-      box-shadow: var(--shadow-sm);
-    }
-    .budget-panel__header {
-      display: flex;
-      justify-content: space-between;
-      gap: 18px;
-      align-items: flex-start;
-      margin-bottom: 18px;
-    }
-    .budget-panel__title {
-      margin: 0;
-      font-size: 1.1rem;
-      font-weight: 700;
-    }
-    .budget-panel__meta {
-      margin: 6px 0 0;
-      color: var(--text-muted);
-      font-size: 0.88rem;
-    }
-    .budget-progress { display: grid; gap: 14px; }
-    .budget-progress__row { display: grid; gap: 8px; }
-    .budget-progress__top {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      align-items: center;
-      font-size: 0.9rem;
-    }
-    .budget-progress__name {
-      font-weight: 600;
-      color: var(--text-primary);
-    }
-    .budget-progress__track {
-      position: relative;
-      height: 11px;
-      border-radius: 999px;
-      background: #eef2f7;
-      overflow: hidden;
-    }
-    .budget-progress__fill {
-      position: absolute;
-      inset: 0 auto 0 0;
-      border-radius: inherit;
-      background: linear-gradient(90deg, #4f46e5 0%, #06b6d4 100%);
-    }
-    .budget-progress__fill.is-warning { background: linear-gradient(90deg, #f59e0b 0%, #f97316 100%); }
-    .budget-progress__fill.is-danger { background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%); }
-    .budget-bars { display: grid; gap: 12px; }
-    .budget-bar {
-      display: grid;
-      grid-template-columns: 112px minmax(0, 1fr) 86px;
-      gap: 12px;
-      align-items: center;
-    }
-    .budget-bar__label {
-      font-size: 0.88rem;
-      font-weight: 600;
-      color: var(--text-secondary);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .budget-bar__track {
-      position: relative;
-      height: 12px;
-      border-radius: 999px;
-      background: #eef2ff;
-      overflow: hidden;
-    }
-    .budget-bar__fill {
-      position: absolute;
-      inset: 0 auto 0 0;
-      border-radius: inherit;
-      background: linear-gradient(90deg, #4338ca, #818cf8);
-    }
-    .budget-bar__value {
-      text-align: right;
-      font-size: 0.84rem;
-      color: var(--text-muted);
-      font-variant-numeric: tabular-nums;
-    }
-    .budget-split {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 24px;
-    }
-    .budget-alerts { display: grid; gap: 12px; }
-    .budget-alert {
-      padding: 14px 16px;
-      border-radius: 16px;
-      border: 1px solid #f3f4f6;
-      background: #f8fafc;
-    }
-    .budget-alert.is-warning {
-      background: #fffbeb;
-      border-color: #fde68a;
-    }
-    .budget-alert.is-danger {
-      background: #fef2f2;
-      border-color: #fca5a5;
-    }
-    .budget-alert__title {
-      margin: 0 0 6px;
-      font-size: 0.92rem;
-      font-weight: 700;
-    }
-    .budget-alert__copy {
-      margin: 0;
-      font-size: 0.88rem;
-      line-height: 1.45;
-      color: var(--text-secondary);
-    }
-    .budget-table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    .budget-table th,
-    .budget-table td {
-      text-align: left;
-      padding: 12px 0;
-      border-bottom: 1px solid #f1f5f9;
-      font-size: 0.9rem;
-      vertical-align: top;
-    }
-    .budget-table th {
-      color: var(--text-muted);
-      font-size: 0.78rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      font-weight: 700;
-    }
-    .budget-table td:last-child,
-    .budget-table th:last-child {
-      text-align: right;
-    }
-    .budget-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 9px;
-      border-radius: 999px;
-      font-size: 0.75rem;
-      font-weight: 700;
-      background: #eef2ff;
-      color: #4338ca;
-    }
-    .budget-badge.is-warning {
-      background: #fffbeb;
-      color: #b45309;
-    }
-    .budget-badge.is-danger {
-      background: #fef2f2;
-      color: #b91c1c;
-    }
-    .budget-mini-note {
-      color: var(--text-muted);
-      font-size: 0.84rem;
-      line-height: 1.45;
-    }
-    .models-shell {
-      display: grid;
-      gap: 24px;
-    }
-    .models-summary {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 18px;
-    }
-    .models-card {
-      border: 1px solid var(--border-card);
-      border-radius: 22px;
-      background: #fff;
-      box-shadow: var(--shadow-sm);
-      padding: 20px 22px;
-    }
-    .models-card__label {
-      margin: 0 0 10px;
-      font-size: 0.8rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-muted);
-    }
-    .models-card__value {
-      margin: 0;
-      font-size: 1.8rem;
-      font-weight: 700;
-      letter-spacing: -0.04em;
-    }
-    .models-card__detail {
-      margin: 10px 0 0;
-      font-size: 0.88rem;
-      color: var(--text-secondary);
-    }
-    .models-layout {
-      display: block;
-    }
-    .models-panel {
-      border: 1px solid var(--border-card);
-      border-radius: 24px;
-      background: #fff;
-      box-shadow: var(--shadow-sm);
-      padding: 24px;
-    }
-    .models-panel__header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 16px;
-      margin-bottom: 18px;
-    }
-    .models-panel__title {
-      margin: 0;
-      font-size: 1.15rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-    }
-    .models-panel__meta {
-      margin: 6px 0 0;
-      font-size: 0.88rem;
-      color: var(--text-muted);
-    }
-    .models-controls {
-      display: grid;
-      grid-template-columns: minmax(220px, 1.3fr) repeat(2, minmax(140px, 0.7fr));
-      gap: 14px;
-      margin-bottom: 18px;
-    }
-    .models-table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    .models-table th,
-    .models-table td {
-      text-align: left;
-      padding: 14px 0;
-      border-bottom: 1px solid #f1f5f9;
-      font-size: 0.9rem;
-      vertical-align: top;
-    }
-    .models-table th {
-      color: var(--text-muted);
-      font-size: 0.78rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      font-weight: 700;
-    }
-    .models-table tr {
-      cursor: pointer;
-    }
-    .models-table tr.is-selected td {
-      color: var(--accent-blue);
-    }
-    .models-table tr:hover td {
-      color: var(--accent-blue);
-    }
-    .models-status {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 5px 10px;
-      border-radius: 999px;
-      font-size: 0.75rem;
-      font-weight: 700;
-      background: #ecfdf5;
-      color: #166534;
-    }
-    .models-status.is-muted {
-      background: #f3f4f6;
-      color: #475569;
-    }
-    .models-status.is-warning {
-      background: #fffbeb;
-      color: #b45309;
-    }
-    .models-form {
-      display: grid;
-      gap: 14px;
-    }
-    .models-form__grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px;
-    }
-    .models-form__toggles {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 16px;
-      padding-top: 4px;
-    }
-    .models-toggle {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 0.9rem;
-      color: var(--text-secondary);
-    }
-    .models-form__actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 8px;
-    }
-    .models-feedback {
-      min-height: 22px;
-      font-size: 0.9rem;
-      color: var(--text-muted);
-    }
-    .models-feedback.is-success { color: #166534; }
-    .models-feedback.is-error { color: #b91c1c; }
-    .models-empty {
-      padding: 22px;
-      border-radius: 18px;
-      background: #f8fafc;
-      color: var(--text-muted);
-      text-align: center;
-    }
-    .models-drawer-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(15, 23, 42, 0.24);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.22s ease;
-      z-index: 90;
-    }
-    .models-shell.is-drawer-open .models-drawer-backdrop {
-      opacity: 1;
-      pointer-events: auto;
-    }
-    .models-drawer {
-      position: fixed;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      width: min(460px, calc(100vw - 48px));
-      border-left: 1px solid var(--border-card);
-      background: rgba(255, 255, 255, 0.985);
-      box-shadow: -24px 0 60px rgba(15, 23, 42, 0.16);
-      padding: 32px 28px;
-      z-index: 91;
-      overflow-y: auto;
-      transform: translateX(100%);
-      opacity: 0;
-      pointer-events: none;
-      transition: transform 0.24s ease, opacity 0.24s ease;
-    }
-    .models-shell.is-drawer-open .models-drawer {
-      transform: translateX(0);
-      opacity: 1;
-      pointer-events: auto;
-    }
-    .models-drawer__header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 16px;
-      margin-bottom: 8px;
-    }
-    .models-drawer__close {
-      border: 0;
-      background: #eef2ff;
-      color: var(--accent-blue);
-      width: 38px;
-      height: 38px;
-      border-radius: 999px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      font: inherit;
-      font-size: 1.1rem;
-      line-height: 1;
-    }
-    .models-drawer__eyebrow {
-      margin: 0 0 12px;
-      font-size: 0.75rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: var(--text-muted);
-    }
-    .models-helper {
-      margin: 0;
-      font-size: 0.84rem;
-      color: var(--text-muted);
-      line-height: 1.45;
-    }
-    .agent-drawer-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(15, 23, 42, 0.24);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.22s ease;
-      z-index: 92;
-    }
-    .team-chart.is-agent-drawer-open .agent-drawer-backdrop {
-      opacity: 1;
-      pointer-events: auto;
-    }
-    .agent-drawer {
-      position: fixed;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      width: min(460px, calc(100vw - 48px));
-      border-left: 1px solid var(--border-card);
-      background: rgba(255, 255, 255, 0.985);
-      box-shadow: -24px 0 60px rgba(15, 23, 42, 0.16);
-      padding: 32px 28px;
-      z-index: 93;
-      overflow-y: auto;
-      transform: translateX(100%);
-      opacity: 0;
-      pointer-events: none;
-      transition: transform 0.24s ease, opacity 0.24s ease;
-    }
-    .team-chart.is-agent-drawer-open .agent-drawer {
-      transform: translateX(0);
-      opacity: 1;
-      pointer-events: auto;
-    }
-    .agent-drawer__header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 16px;
-      margin-bottom: 8px;
-    }
-    .agent-drawer__eyebrow {
-      margin: 0 0 12px;
-      font-size: 0.75rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: var(--text-muted);
-    }
-    .agent-drawer__close {
-      border: 0;
-      background: #eef2ff;
-      color: var(--accent-blue);
-      width: 38px;
-      height: 38px;
-      border-radius: 999px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      font: inherit;
-      font-size: 1.1rem;
-      line-height: 1;
-    }
-    .agent-form {
-      display: grid;
-      gap: 14px;
-    }
-    .agent-feedback {
-      min-height: 22px;
-      font-size: 0.9rem;
-      color: var(--text-muted);
-    }
-    .agent-feedback.is-success { color: #166534; }
-    .agent-feedback.is-error { color: #b91c1c; }
-    
-    .team-chart {
-      position: relative;
-      padding-top: 10px;
-    }
-    .team-chart__layout {
-      position: relative;
-    }
-    .team-chart__tree {
-      position: relative;
-      min-height: 560px;
-      padding: 8px 0 0;
-    }
-    .team-chart__root {
-      display: flex;
-      justify-content: center;
-      position: relative;
-      padding-bottom: 88px;
-    }
-    .team-chart__root::after {
-      content: "";
-      position: absolute;
-      left: 50%;
-      bottom: 20px;
-      width: 2px;
-      height: 68px;
-      background: linear-gradient(180deg, rgba(79, 70, 229, 0.55), rgba(79, 70, 229, 0.12));
-      transform: translateX(-50%);
-    }
-    .team-chart__members {
-      position: relative;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 22px;
-      padding-top: 34px;
-    }
-    .team-chart__members::before {
-      content: "";
-      position: absolute;
-      top: 0;
-      left: 8%;
-      right: 8%;
-      height: 2px;
-      background: linear-gradient(90deg, rgba(79, 70, 229, 0.12), rgba(79, 70, 229, 0.55), rgba(79, 70, 229, 0.12));
-    }
-    .team-chart__member {
-      position: relative;
-      padding-top: 28px;
-    }
-    .team-chart__member::before {
-      content: "";
-      position: absolute;
-      top: 0;
-      left: 50%;
-      width: 2px;
-      height: 28px;
-      background: linear-gradient(180deg, rgba(79, 70, 229, 0.5), rgba(79, 70, 229, 0.15));
-      transform: translateX(-50%);
-    }
-    .org-node {
-      width: 100%;
-      text-align: left;
-      border: 1px solid var(--border-card);
-      border-radius: 22px;
-      padding: 20px;
-      background: rgba(255, 255, 255, 0.92);
-      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
-      cursor: pointer;
-      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-      font: inherit;
-      color: inherit;
-    }
-    .org-node:hover {
-      transform: translateY(-3px);
-      border-color: rgba(79, 70, 229, 0.35);
-      box-shadow: 0 22px 50px rgba(79, 70, 229, 0.12);
-    }
-    .org-node.is-selected {
-      transform: translateY(-4px);
-      border-color: rgba(79, 70, 229, 0.7);
-      box-shadow: 0 24px 60px rgba(79, 70, 229, 0.18);
-      background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(239, 246, 255, 0.92));
-    }
-    .org-node--root {
-      max-width: 360px;
-      min-height: 172px;
-      background: linear-gradient(160deg, #eef2ff 0%, #ffffff 72%);
-    }
-    .org-node__eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 16px;
-      font-size: 0.75rem;
-      font-weight: 700;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--accent-blue);
-    }
-    .org-node__title-row {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 10px;
-    }
-    .org-node__name {
-      margin: 0;
-      font-size: 1.25rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-    }
-    .org-node__role {
-      margin: 0 0 12px;
-      font-size: 0.95rem;
-      font-weight: 600;
-      color: var(--accent-blue);
-    }
-    .org-node__desc {
-      margin: 0;
-      font-size: 0.9rem;
-      line-height: 1.5;
-      color: var(--text-muted);
-    }
-    .org-node__meta {
-      margin-top: 16px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-    .org-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 5px 10px;
-      border-radius: var(--radius-full);
-      background: #f3f4f6;
-      color: var(--text-secondary);
-      font-size: 0.75rem;
-      font-weight: 600;
-    }
-    .team-chart__panel-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(15, 23, 42, 0.24);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.22s ease;
-      z-index: 90;
-    }
-    .team-chart.is-panel-open .team-chart__panel-backdrop {
-      opacity: 1;
-      pointer-events: auto;
-    }
-    .team-chart__panel {
-      position: fixed;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      width: min(460px, calc(100vw - 48px));
-      border-left: 1px solid var(--border-card);
-      background: rgba(255, 255, 255, 0.98);
-      box-shadow: -24px 0 60px rgba(15, 23, 42, 0.16);
-      padding: 32px 28px;
-      z-index: 91;
-      overflow-y: auto;
-      transform: translateX(100%);
-      opacity: 0;
-      pointer-events: none;
-      transition: transform 0.24s ease, opacity 0.24s ease;
-    }
-    .team-chart.is-panel-open .team-chart__panel {
-      transform: translateX(0);
-      opacity: 1;
-      pointer-events: auto;
-    }
-    .team-chart__panel-header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 16px;
-      margin-bottom: 6px;
-    }
-    .team-chart__panel-close {
-      border: 0;
-      background: #eef2ff;
-      color: var(--accent-blue);
-      width: 38px;
-      height: 38px;
-      border-radius: 999px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      font: inherit;
-      font-size: 1.1rem;
-      line-height: 1;
-    }
-    .team-chart__panel-label {
-      margin: 0 0 12px;
-      font-size: 0.75rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: var(--text-muted);
-    }
-    .team-chart__panel-title {
-      margin: 0;
-      font-size: 1.5rem;
-      font-weight: 700;
-      letter-spacing: -0.03em;
-    }
-    .team-chart__panel-role {
-      margin: 8px 0 18px;
-      font-size: 0.95rem;
-      font-weight: 600;
-      color: var(--accent-blue);
-    }
-    .team-chart__panel-copy {
-      margin: 0;
-      color: var(--text-secondary);
-      line-height: 1.6;
-    }
-    .team-chart__panel-list {
-      margin: 22px 0 0;
-      padding: 0;
-      list-style: none;
-      display: grid;
-      gap: 10px;
-    }
-    .team-chart__panel-list li {
-      padding: 12px 14px;
-      border-radius: 14px;
-      background: #f8fafc;
-      color: var(--text-secondary);
-      font-size: 0.9rem;
-    }
-    .team-chart__panel-footer {
-      margin-top: 22px;
-      padding-top: 18px;
-      border-top: 1px solid var(--border-subtle);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      color: var(--text-muted);
-      font-size: 0.82rem;
-    }
-    @media (max-width: 1100px) {
-      .tasks-layout { grid-template-columns: 1fr; }
-      .models-summary,
-      .models-controls,
-      .budget-controls,
-      .budget-grid,
-      .budget-layout,
-      .budget-split { grid-template-columns: 1fr; }
-      .models-drawer { width: min(400px, calc(100vw - 32px)); }
-      .team-chart__tree { min-height: auto; }
-      .team-chart__panel { width: min(400px, calc(100vw - 32px)); }
-    }
-    @media (max-width: 700px) {
-      .main-content { padding: 24px 20px; }
-      .top-nav { padding: 0 18px; }
-      .top-nav-left { gap: 20px; }
-      .nav-links { gap: 0; }
-      .budget-bar { grid-template-columns: 1fr; }
-      .task-form { grid-template-columns: 1fr; }
-      .task-form__actions { justify-content: stretch; }
-      .models-form__grid { grid-template-columns: 1fr; }
-      .models-drawer {
-        top: auto;
-        right: 0;
-        bottom: 0;
-        width: 100%;
-        max-height: min(82vh, 760px);
-        border-left: 0;
-        border-top: 1px solid var(--border-card);
-        border-radius: 24px 24px 0 0;
-        transform: translateY(calc(100% + 24px));
-      }
-      .models-shell.is-drawer-open .models-drawer {
-        transform: translateY(0);
-      }
-      .team-chart__root { padding-bottom: 70px; }
-      .team-chart__root::after { height: 52px; bottom: 14px; }
-      .team-chart__members::before { left: 14%; right: 14%; }
-      .team-chart__members { grid-template-columns: 1fr; gap: 18px; }
-      .team-chart__panel {
-        top: auto;
-        right: 0;
-        bottom: 0;
-        width: 100%;
-        max-height: min(78vh, 680px);
-        border-left: 0;
-        border-top: 1px solid var(--border-card);
-        border-radius: 24px 24px 0 0;
-        transform: translateY(calc(100% + 24px));
-      }
-      .team-chart.is-panel-open .team-chart__panel {
-        transform: translateY(0);
-      }
-      .team-chart__panel-footer {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-    }
-  </style>
+  <link rel="stylesheet" href="admin.css" />
 </head>
 <body>
   <div class="app-layout">
@@ -1162,6 +20,14 @@
           <a href="#tasks" class="nav-item">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
             Tasks
+          </a>
+          <a href="#routines" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            Routines
+          </a>
+          <a href="#reports" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M16 13H8"></path><path d="M16 17H8"></path><path d="M10 9H8"></path></svg>
+            Reports
           </a>
           <a href="#budget" class="nav-item">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
@@ -1281,6 +147,226 @@
               <ul id="task-detail-runs" class="task-run-list">
                 <li><span>No runs recorded yet.</span></li>
               </ul>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="routines" class="view-section">
+        <header class="view-header">
+          <div>
+            <h1 class="view-title">Routines</h1>
+            <p class="text-muted mt-1 text-sm">Recurring scheduled work for agents. Use routines for checks, reviews, and repeatable operating loops.</p>
+          </div>
+          <button id="routines-new-button" type="button" class="btn btn-primary">New Routine</button>
+        </header>
+        <div id="routines-shell" class="routines-shell">
+        <div class="models-summary">
+          <article class="models-card">
+            <p class="models-card__label">Total Routines</p>
+            <p id="routines-count" class="models-card__value">0</p>
+            <p id="routines-count-detail" class="models-card__detail">Recurring workflows defined in the system.</p>
+          </article>
+          <article class="models-card">
+            <p class="models-card__label">Enabled</p>
+            <p id="routines-enabled-count" class="models-card__value">0</p>
+            <p id="routines-enabled-detail" class="models-card__detail">Routines currently active.</p>
+          </article>
+          <article class="models-card">
+            <p class="models-card__label">Reports Generated</p>
+            <p id="routines-report-count" class="models-card__value">0</p>
+            <p id="routines-report-detail" class="models-card__detail">Reports currently attached to routines.</p>
+          </article>
+          <article class="models-card">
+            <p class="models-card__label">Most Recent Run</p>
+            <p id="routines-last-run" class="models-card__value">-</p>
+            <p id="routines-last-run-detail" class="models-card__detail">Latest recorded routine execution.</p>
+          </article>
+        </div>
+        <div class="models-layout mt-8">
+          <div class="models-panel">
+            <div class="models-panel__header">
+              <div>
+                <h2 class="models-panel__title">Routine Catalog</h2>
+                <p class="models-panel__meta">Friendly recurring jobs that can later be backed by cron or heartbeat-triggered orchestration.</p>
+              </div>
+            </div>
+            <table class="models-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Agent</th>
+                  <th>Schedule</th>
+                  <th>Status</th>
+                  <th>Last Run</th>
+                </tr>
+              </thead>
+              <tbody id="routines-table-body"></tbody>
+            </table>
+          </div>
+          <button type="button" id="routines-drawer-backdrop" class="routines-drawer-backdrop" aria-label="Close routine editor"></button>
+          <aside class="routines-drawer" aria-live="polite">
+            <div class="models-drawer__header">
+              <div>
+                <p class="models-drawer__eyebrow">Routine</p>
+                <h2 id="routine-detail-title" class="task-detail__title">No routine selected</h2>
+                <p id="routine-detail-description" class="task-detail__sub">The drawer stays closed until you click a routine or create a new one.</p>
+              </div>
+              <button type="button" id="routines-drawer-close" class="models-drawer__close" aria-label="Close routine editor">×</button>
+            </div>
+            <form id="routine-form" class="models-form mt-8">
+              <div class="models-form__grid">
+                <div class="task-form__field">
+                  <label class="form-label" for="routine-name-input">Name</label>
+                  <input id="routine-name-input" placeholder="Daily Search Console Review" required />
+                </div>
+                <div class="task-form__field">
+                  <label class="form-label" for="routine-agent-select">Agent</label>
+                  <select id="routine-agent-select" required>
+                    <option value="">Select an agent</option>
+                  </select>
+                </div>
+              </div>
+              <div class="models-form__grid">
+                <div class="task-form__field">
+                  <label class="form-label" for="routine-schedule-type">Schedule Type</label>
+                  <select id="routine-schedule-type">
+                    <option value="daily">Daily</option>
+                    <option value="weekdays">Weekdays</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="hourly">Hourly</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </div>
+                <div class="task-form__field">
+                  <label class="form-label" for="routine-schedule-value">Schedule Value</label>
+                  <input id="routine-schedule-value" placeholder="09:00 or Every 4 hours" />
+                </div>
+              </div>
+              <div class="models-form__grid">
+                <div class="task-form__field">
+                  <label class="form-label" for="routine-timezone-input">Timezone</label>
+                  <input id="routine-timezone-input" value="Europe/London" />
+                </div>
+                <div class="task-form__field">
+                  <label class="form-label" for="routine-output-mode">Output Mode</label>
+                  <select id="routine-output-mode">
+                    <option value="report_only">Report only</option>
+                    <option value="report_if_needed" selected>Report if needed</option>
+                    <option value="report_and_task_if_needed">Report + create task if needed</option>
+                  </select>
+                </div>
+              </div>
+              <div class="task-form__field">
+                <label class="form-label" for="routine-report-channel-input">Report Channel ID (optional)</label>
+                <input id="routine-report-channel-input" placeholder="Send short summaries here later" />
+              </div>
+              <div class="task-form__field">
+                <label class="form-label" for="routine-prompt-input">Instruction</label>
+                <textarea id="routine-prompt-input" placeholder="Check Search Console performance, summarize wins/issues, and propose next changes."></textarea>
+              </div>
+              <label class="models-toggle">
+                <input id="routine-enabled-input" type="checkbox" checked />
+                <span>Enabled</span>
+              </label>
+              <div id="routine-feedback" class="models-feedback" aria-live="polite"></div>
+              <div class="models-form__actions">
+                <button class="btn btn-primary" type="submit">Save Routine</button>
+                <button id="routine-run-button" class="btn btn-secondary" type="button">Run Now</button>
+                <button id="routine-reset-button" class="btn btn-secondary" type="button">Clear</button>
+              </div>
+            </form>
+            <div class="task-detail__section">
+              <h3 class="task-detail__section-title">Recent Runs</h3>
+              <ul id="routine-runs-list" class="task-run-list">
+                <li><span>No routine selected.</span></li>
+              </ul>
+            </div>
+            <div class="task-detail__section">
+              <h3 class="task-detail__section-title">Linked Reports</h3>
+              <ul id="routine-reports-list" class="task-run-list">
+                <li><span>No routine selected.</span></li>
+              </ul>
+            </div>
+          </aside>
+        </div>
+        </div>
+      </section>
+
+      <section id="reports" class="view-section">
+        <header class="view-header">
+          <div>
+            <h1 class="view-title">Reports</h1>
+            <p class="text-muted mt-1 text-sm">Durable report history. Use Discord for alerts; use reports for summaries, analysis, and auditability.</p>
+          </div>
+        </header>
+        <div class="models-summary">
+          <article class="models-card">
+            <p class="models-card__label">Total Reports</p>
+            <p id="reports-count" class="models-card__value">0</p>
+            <p id="reports-count-detail" class="models-card__detail">Reports stored in the local control plane.</p>
+          </article>
+          <article class="models-card">
+            <p class="models-card__label">Today</p>
+            <p id="reports-today-count" class="models-card__value">0</p>
+            <p id="reports-today-detail" class="models-card__detail">Reports created today.</p>
+          </article>
+          <article class="models-card">
+            <p class="models-card__label">Latest Routine</p>
+            <p id="reports-latest-routine" class="models-card__value">-</p>
+            <p id="reports-latest-routine-detail" class="models-card__detail">Most recent routine with a report.</p>
+          </article>
+          <article class="models-card">
+            <p class="models-card__label">Latest Agent</p>
+            <p id="reports-latest-agent" class="models-card__value">-</p>
+            <p id="reports-latest-agent-detail" class="models-card__detail">Most recent agent to publish a report.</p>
+          </article>
+        </div>
+        <div class="tasks-layout mt-8">
+          <div class="models-panel">
+            <div class="models-panel__header">
+              <div>
+                <h2 class="models-panel__title">Report Feed</h2>
+                <p class="models-panel__meta">Routine outputs live here so they can be reviewed without trawling chat history.</p>
+              </div>
+            </div>
+            <table class="models-table">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Agent</th>
+                  <th>Routine</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody id="reports-table-body"></tbody>
+            </table>
+          </div>
+          <aside class="task-detail">
+            <h2 id="report-detail-title" class="task-detail__title">Select a report</h2>
+            <p id="report-detail-summary" class="task-detail__sub">Choose a report to inspect the durable summary and full body.</p>
+            <div class="task-detail__stats">
+              <div class="task-detail__stat">
+                <span class="task-detail__label">Agent</span>
+                <span id="report-detail-agent" class="task-detail__value">-</span>
+              </div>
+              <div class="task-detail__stat">
+                <span class="task-detail__label">Routine</span>
+                <span id="report-detail-routine" class="task-detail__value">-</span>
+              </div>
+              <div class="task-detail__stat">
+                <span class="task-detail__label">Status</span>
+                <span id="report-detail-status" class="task-detail__value">-</span>
+              </div>
+              <div class="task-detail__stat">
+                <span class="task-detail__label">Created</span>
+                <span id="report-detail-created" class="task-detail__value">-</span>
+              </div>
+            </div>
+            <div class="task-detail__section">
+              <h3 class="task-detail__section-title">Body</h3>
+              <div id="report-detail-body" class="task-detail__sub report-body">No report selected.</div>
             </div>
           </aside>
         </div>
@@ -1779,1083 +865,10 @@
     </main>
   </div>
   
-  <script>
-    // A tiny script just to keep the navigation bar highlighted when you click a link
-    // The actual section showing/hiding is handled purely by CSS :target now!
-    document.querySelectorAll('.nav-item').forEach(item => {
-      item.addEventListener('click', function() {
-        document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
-        this.classList.add('active');
-      });
-    });
-    
-    // Set active link on initial page load if hash exists
-    window.addEventListener('DOMContentLoaded', () => {
-      const hash = window.location.hash || '#tasks';
-      const activeNav = document.querySelector(`.nav-item[href="${hash}"]`);
-      if (activeNav) activeNav.classList.add('active');
-      
-      // If there's no hash at all on first load, forcefully route to #tasks
-      if (!window.location.hash) {
-        window.location.hash = '#tasks';
-      }
-
-      const panelName = document.getElementById('org-panel-name');
-      const panelRole = document.getElementById('org-panel-role');
-      const panelDesc = document.getElementById('org-panel-desc');
-      const panelStatus = document.getElementById('org-panel-status');
-      const panelFocus = document.getElementById('org-panel-focus');
-      const panelResponsibilities = document.getElementById('org-panel-responsibilities');
-      const teamChartShell = document.getElementById('team-chart-shell');
-      const teamChartPanelBackdrop = document.getElementById('team-chart-panel-backdrop');
-      const teamChartPanelClose = document.getElementById('team-chart-panel-close');
-      const teamNewAgentButton = document.getElementById('team-new-agent-button');
-      const agentDrawerBackdrop = document.getElementById('agent-drawer-backdrop');
-      const agentDrawerClose = document.getElementById('agent-drawer-close');
-      const agentForm = document.getElementById('agent-form');
-      const agentFeedback = document.getElementById('agent-feedback');
-      const agentCancelButton = document.getElementById('agent-cancel-button');
-      const agentNameInput = document.getElementById('agent-name-input');
-      const agentRoleInput = document.getElementById('agent-role-input');
-      const agentDescriptionInput = document.getElementById('agent-description-input');
-      const agentModelSelect = document.getElementById('agent-model-select');
-      const agentPortInput = document.getElementById('agent-port-input');
-      const agentDiscordTokenInput = document.getElementById('agent-discord-token-input');
-      const agentChannelIdInput = document.getElementById('agent-channel-id-input');
-      const orgRootNode = document.getElementById('team-chart-root-node');
-      const orgBranches = document.getElementById('team-chart-members');
-      const taskForm = document.getElementById('task-form');
-      const taskNewButton = document.getElementById('task-new-button');
-      const taskCancelButton = document.getElementById('task-cancel-button');
-      const taskTitleInput = document.getElementById('task-title-input');
-      const taskDescriptionInput = document.getElementById('task-description-input');
-      const taskAssigneeSelect = document.getElementById('task-assignee-select');
-      const taskPrioritySelect = document.getElementById('task-priority-select');
-      const taskFeedback = document.getElementById('task-feedback');
-      const kanbanColumns = Array.from(document.querySelectorAll('.kanban-column'));
-      const taskDetailTitle = document.getElementById('task-detail-title');
-      const taskDetailDescription = document.getElementById('task-detail-description');
-      const taskDetailCost = document.getElementById('task-detail-cost');
-      const taskDetailTokens = document.getElementById('task-detail-tokens');
-      const taskDetailAssignee = document.getElementById('task-detail-assignee');
-      const taskDetailStatus = document.getElementById('task-detail-status');
-      const taskDetailLatestRun = document.getElementById('task-detail-latest-run');
-      const taskDetailRuns = document.getElementById('task-detail-runs');
-      const budgetRange = document.getElementById('budget-range');
-      const budgetAgentFilter = document.getElementById('budget-agent-filter');
-      const budgetModelFilter = document.getElementById('budget-model-filter');
-      const budgetView = document.getElementById('budget-view');
-      const budgetProjectedSpend = document.getElementById('budget-projected-spend');
-      const budgetProjectedDetail = document.getElementById('budget-projected-detail');
-      const budgetActualSpend = document.getElementById('budget-actual-spend');
-      const budgetActualDetail = document.getElementById('budget-actual-detail');
-      const budgetTotalTokens = document.getElementById('budget-total-tokens');
-      const budgetTokenDetail = document.getElementById('budget-token-detail');
-      const budgetTopAgent = document.getElementById('budget-top-agent');
-      const budgetTopAgentDetail = document.getElementById('budget-top-agent-detail');
-      const budgetHealthBadge = document.getElementById('budget-health-badge');
-      const budgetAllocationList = document.getElementById('budget-allocation-list');
-      const budgetAllocationMeta = document.getElementById('budget-allocation-meta');
-      const budgetAlerts = document.getElementById('budget-alerts');
-      const budgetAgentBars = document.getElementById('budget-agent-bars');
-      const budgetModelBars = document.getElementById('budget-model-bars');
-      const budgetTaskCostsBody = document.getElementById('budget-task-costs-body');
-      const budgetEventsBody = document.getElementById('budget-events-body');
-      const budgetPolicyNotes = document.getElementById('budget-policy-notes');
-      const modelsCount = document.getElementById('models-count');
-      const modelsCountDetail = document.getElementById('models-count-detail');
-      const modelsEnabledCount = document.getElementById('models-enabled-count');
-      const modelsEnabledDetail = document.getElementById('models-enabled-detail');
-      const modelsMissingPricing = document.getElementById('models-missing-pricing');
-      const modelsMissingPricingDetail = document.getElementById('models-missing-pricing-detail');
-      const modelsObservedCount = document.getElementById('models-observed-count');
-      const modelsObservedDetail = document.getElementById('models-observed-detail');
-      const modelsSearch = document.getElementById('models-search');
-      const modelsProviderFilter = document.getElementById('models-provider-filter');
-      const modelsStatusFilter = document.getElementById('models-status-filter');
-      const modelsTableBody = document.getElementById('models-table-body');
-      const modelsDrawerBackdrop = document.getElementById('models-drawer-backdrop');
-      const modelsDrawerClose = document.getElementById('models-drawer-close');
-      const modelsEditorTitle = document.getElementById('models-editor-title');
-      const modelsEditorMeta = document.getElementById('models-editor-meta');
-      const modelsForm = document.getElementById('models-form');
-      const modelsFeedback = document.getElementById('models-feedback');
-      const modelsNewButton = document.getElementById('models-new-button');
-      const modelsResetButton = document.getElementById('models-reset-button');
-      const modelsCancelButton = document.getElementById('models-cancel-button');
-      const modelProviderBaseUrlInput = document.getElementById('model-provider-base-url-input');
-      const modelProviderApiAdapterInput = document.getElementById('model-provider-api-adapter-input');
-      const modelProviderApiKeyInput = document.getElementById('model-provider-api-key-input');
-      const modelProviderApiKeyHelp = document.getElementById('model-provider-api-key-help');
-      const modelProviderInput = document.getElementById('model-provider-input');
-      const modelIdInput = document.getElementById('model-id-input');
-      const modelDisplayNameInput = document.getElementById('model-display-name-input');
-      const modelEnabledInput = document.getElementById('model-enabled-input');
-      const modelReasoningInput = document.getElementById('model-reasoning-input');
-      const modelModalitiesInput = document.getElementById('model-modalities-input');
-      const modelContextWindowInput = document.getElementById('model-context-window-input');
-      const modelMaxTokensInput = document.getElementById('model-max-tokens-input');
-      const modelCostInputInput = document.getElementById('model-cost-input-input');
-      const modelCostOutputInput = document.getElementById('model-cost-output-input');
-      const modelCostCacheReadInput = document.getElementById('model-cost-cache-read-input');
-      const modelCostCacheWriteInput = document.getElementById('model-cost-cache-write-input');
-      const modelNotesInput = document.getElementById('model-notes-input');
-
-      const orgNodes = () => Array.from(document.querySelectorAll('.org-node'));
-      const escapeHtml = (value) => String(value)
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
-      const currency = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'USD' });
-      const numberFormat = new Intl.NumberFormat('en-GB');
-      const compactNumber = new Intl.NumberFormat('en-GB', { notation: 'compact', maximumFractionDigits: 1 });
-      let selectedTaskId = null;
-      let modelsCatalog = [];
-      let selectedModelKey = null;
-
-      const setTeamPanelOpen = (isOpen) => {
-        teamChartShell.classList.toggle('is-panel-open', Boolean(isOpen));
-      };
-      const setAgentDrawerOpen = (isOpen) => {
-        teamChartShell.classList.toggle('is-agent-drawer-open', Boolean(isOpen));
-      };
-      const setAgentFeedback = (message, tone = '') => {
-        agentFeedback.textContent = message;
-        agentFeedback.className = `agent-feedback${tone ? ` is-${tone}` : ''}`;
-      };
-      const resetAgentForm = () => {
-        agentForm.reset();
-        setAgentFeedback('');
-      };
-
-      const modelKey = (provider, modelId) => `${provider}::${modelId}`;
-      const setModelsDrawerOpen = (isOpen) => {
-        document.querySelector('.models-shell').classList.toggle('is-drawer-open', Boolean(isOpen));
-      };
-      const formatPrice = (value) => value || value === 0 ? `$${Number(value).toFixed(2)}` : '-';
-      const setModelsFeedback = (message, tone = '') => {
-        modelsFeedback.textContent = message;
-        modelsFeedback.className = `models-feedback${tone ? ` is-${tone}` : ''}`;
-      };
-      const parseFormNumber = (value) => {
-        if (value === '' || value === null || value === undefined) return null;
-        const parsed = Number(value);
-        return Number.isFinite(parsed) ? parsed : null;
-      };
-      const currentModelSelection = () => modelsCatalog.find((item) => modelKey(item.provider, item.model_id) === selectedModelKey) || null;
-      const resetModelsForm = (model = null) => {
-        if (!model) {
-          selectedModelKey = null;
-          modelsEditorTitle.textContent = 'New Model';
-          modelsEditorMeta.textContent = 'Add a model to the shared OpenClaw catalog so agents can actually use it.';
-          modelProviderBaseUrlInput.value = '';
-          modelProviderApiAdapterInput.value = '';
-          modelProviderApiKeyInput.value = '';
-          modelProviderApiKeyHelp.textContent = 'Stored in OpenClaw config. Existing keys are never shown back in the UI.';
-          modelProviderInput.value = '';
-          modelIdInput.value = '';
-          modelDisplayNameInput.value = '';
-          modelEnabledInput.checked = true;
-          modelReasoningInput.checked = false;
-          modelModalitiesInput.value = '';
-          modelContextWindowInput.value = '';
-          modelMaxTokensInput.value = '';
-          modelCostInputInput.value = '';
-          modelCostOutputInput.value = '';
-          modelCostCacheReadInput.value = '';
-          modelCostCacheWriteInput.value = '';
-          modelNotesInput.value = '';
-          return;
-        }
-        selectedModelKey = modelKey(model.provider, model.model_id);
-        modelsEditorTitle.textContent = model.display_name || model.model_id;
-        modelsEditorMeta.textContent = `${model.provider} • ${model.has_override ? 'Override active' : 'Using shared OpenClaw config'}`;
-        modelProviderBaseUrlInput.value = model.provider_base_url || '';
-        modelProviderApiAdapterInput.value = model.provider_api_adapter || '';
-        modelProviderApiKeyInput.value = '';
-        modelProviderApiKeyHelp.textContent = model.provider_has_api_key
-          ? 'An API key already exists for this provider. Enter a new one only if you want to replace it.'
-          : 'No provider API key detected yet. Add one here if this provider needs it.';
-        modelProviderInput.value = model.provider || '';
-        modelIdInput.value = model.model_id || '';
-        modelDisplayNameInput.value = model.display_name || '';
-        modelEnabledInput.checked = Boolean(model.enabled);
-        modelReasoningInput.checked = Boolean(model.reasoning);
-        modelModalitiesInput.value = (model.input_modalities || []).join(',');
-        modelContextWindowInput.value = model.context_window || '';
-        modelMaxTokensInput.value = model.max_tokens || '';
-        modelCostInputInput.value = model.cost_input ?? '';
-        modelCostOutputInput.value = model.cost_output ?? '';
-        modelCostCacheReadInput.value = model.cost_cache_read ?? '';
-        modelCostCacheWriteInput.value = model.cost_cache_write ?? '';
-        modelNotesInput.value = model.notes || '';
-        setModelsDrawerOpen(true);
-      };
-
-      const filteredModels = () => {
-        const search = (modelsSearch.value || '').trim().toLowerCase();
-        const provider = modelsProviderFilter.value || 'all';
-        const status = modelsStatusFilter.value || 'all';
-        return modelsCatalog.filter((model) => {
-          if (provider !== 'all' && model.provider !== provider) return false;
-          if (status === 'enabled' && !model.enabled) return false;
-          if (status === 'disabled' && model.enabled) return false;
-          if (status === 'missing_pricing' && model.pricing_complete) return false;
-          if (status === 'observed' && !model.observed) return false;
-          if (!search) return true;
-          return [model.display_name, model.model_id, model.provider]
-            .filter(Boolean)
-            .some((value) => value.toLowerCase().includes(search));
-        });
-      };
-
-      const renderModels = () => {
-        const providers = [...new Set(modelsCatalog.map((model) => model.provider).filter(Boolean))];
-        fillSelectOptions(modelsProviderFilter, providers, 'All providers');
-        const visible = filteredModels();
-        const enabledCount = modelsCatalog.filter((model) => model.enabled).length;
-        const missingPricingCount = modelsCatalog.filter((model) => !model.pricing_complete).length;
-        const observedCount = modelsCatalog.filter((model) => model.observed).length;
-        modelsCount.textContent = numberFormat.format(modelsCatalog.length);
-        modelsEnabledCount.textContent = numberFormat.format(enabledCount);
-        modelsMissingPricing.textContent = numberFormat.format(missingPricingCount);
-        modelsObservedCount.textContent = numberFormat.format(observedCount);
-        modelsCountDetail.textContent = `${numberFormat.format(visible.length)} visible with current filters.`;
-        modelsEnabledDetail.textContent = `${numberFormat.format(enabledCount)} enabled for future agent use.`;
-        modelsMissingPricingDetail.textContent = `${numberFormat.format(missingPricingCount)} need manual pricing help.`;
-        modelsObservedDetail.textContent = `${numberFormat.format(observedCount)} have already appeared in usage logs.`;
-
-        if (!visible.length) {
-          modelsTableBody.innerHTML = '<tr><td colspan="5"><div class="models-empty">No models match the current filter.</div></td></tr>';
-          return;
-        }
-        modelsTableBody.innerHTML = visible.map((model) => {
-          const key = modelKey(model.provider, model.model_id);
-          const statusClass = model.enabled ? (model.pricing_complete ? '' : ' is-warning') : ' is-muted';
-          const statusLabel = model.enabled ? (model.pricing_complete ? 'Enabled' : 'Needs pricing') : 'Disabled';
-          return `
-            <tr data-model-key="${escapeHtml(key)}" class="${selectedModelKey === key ? 'is-selected' : ''}">
-              <td>
-                <strong>${escapeHtml(model.display_name || model.model_id)}</strong><br />
-                <span class="text-muted">${escapeHtml(model.model_id)}</span>
-              </td>
-              <td>${escapeHtml(model.provider)}</td>
-              <td><span class="models-status${statusClass}">${escapeHtml(statusLabel)}</span></td>
-              <td>${escapeHtml(formatPrice(model.cost_input))}</td>
-              <td>${escapeHtml(formatPrice(model.cost_output))}</td>
-            </tr>
-          `;
-        }).join('');
-        modelsTableBody.querySelectorAll('tr[data-model-key]').forEach((row) => {
-          row.addEventListener('click', () => {
-            const model = modelsCatalog.find((item) => modelKey(item.provider, item.model_id) === row.dataset.modelKey);
-            if (!model) return;
-            resetModelsForm(model);
-            renderModels();
-          });
-        });
-      };
-
-      const loadModels = async () => {
-        try {
-          const response = await fetch('/api/models', { signal: AbortSignal.timeout(10000) });
-          if (!response.ok) throw new Error('Could not load model catalog');
-          const payload = await response.json();
-          modelsCatalog = payload.models || [];
-          const enabledModels = modelsCatalog
-            .filter((model) => model.enabled)
-            .sort((left, right) => (left.display_name || left.model_id).localeCompare(right.display_name || right.model_id));
-          agentModelSelect.innerHTML = ['<option value="">Select a model</option>']
-            .concat(enabledModels.map((model) => {
-              const label = `${model.display_name || model.model_id} (${model.provider}/${model.model_id})`;
-              return `<option value="${escapeHtml(`${model.provider}/${model.model_id}`)}">${escapeHtml(label)}</option>`;
-            }))
-            .join('');
-          const selected = currentModelSelection();
-          if (selected) {
-            resetModelsForm(selected);
-          } else {
-            resetModelsForm(null);
-          }
-          renderModels();
-        } catch (error) {
-          modelsTableBody.innerHTML = `<tr><td colspan="5"><div class="models-empty">${escapeHtml(error.message || 'Could not load models.')}</div></td></tr>`;
-          setModelsFeedback(error.message || 'Could not load models.', 'error');
-        }
-      };
-
-      const clearOrgPanel = () => {
-        orgNodes().forEach((item) => item.classList.remove('is-selected'));
-        panelName.textContent = 'No agent selected';
-        panelRole.textContent = 'Pick any node in the team chart';
-        panelDesc.textContent = 'The drawer stays closed until you click an agent.';
-        panelStatus.textContent = 'Status: -';
-        panelFocus.textContent = 'Focus: -';
-        panelResponsibilities.innerHTML = '<li>Select an agent to inspect status, role, and responsibilities.</li>';
-        setTeamPanelOpen(false);
-      };
-
-      const renderOrgPanel = (node) => {
-        orgNodes().forEach((item) => item.classList.toggle('is-selected', item === node));
-        panelName.textContent = node.dataset.agentName || '';
-        panelRole.textContent = node.dataset.agentRole || '';
-        panelDesc.textContent = node.dataset.agentDesc || '';
-        panelStatus.textContent = `Status: ${node.dataset.agentStatus || 'Unknown'}`;
-        panelFocus.textContent = `Focus: ${node.dataset.agentFocus || 'N/A'}`;
-        const responsibilities = (node.dataset.agentResponsibilities || '')
-          .split('|')
-          .filter(Boolean);
-        panelResponsibilities.innerHTML = responsibilities
-          .map((item) => `<li>${escapeHtml(item)}</li>`)
-          .join('');
-        setTeamPanelOpen(true);
-      };
-
-      const statusOrder = ['backlog', 'todo', 'in_progress', 'review', 'done'];
-      const priorityClass = {
-        low: 'priority-low',
-        medium: 'priority-medium',
-        high: 'priority-high',
-      };
-      const monthBudgetByAgent = {
-        syntella: 180,
-        dev: 240,
-        seo: 90,
-        support: 70,
-      };
-      const budgetPolicyTemplates = [
-        { title: 'Default cheaper models for routine work', copy: 'Most operational flows should stay on smaller models unless the task explicitly needs a premium one.', tone: '' },
-        { title: 'Escalate only for synthesis-heavy tasks', copy: 'Planning, architecture, and multi-file reasoning can justify higher spend when they reduce retries and execution churn.', tone: 'warning' },
-        { title: 'Track cost per shipped outcome', copy: 'Next step is attaching task and run identifiers to these usage events so the budget page can show spend per delivered task.', tone: '' },
-      ];
-
-      const setTaskFeedback = (message, tone = '') => {
-        taskFeedback.textContent = message;
-        taskFeedback.className = `task-feedback${tone ? ` is-${tone}` : ''}`;
-      };
-      const formatCurrency = (value) => currency.format(value || 0);
-      const sum = (items, selector) => items.reduce((total, item) => total + selector(item), 0);
-      const groupBy = (items, selector) => items.reduce((acc, item) => {
-        const key = selector(item);
-        acc[key] = acc[key] || [];
-        acc[key].push(item);
-        return acc;
-      }, {});
-      const fillSelectOptions = (select, values, fallbackLabel) => {
-        const selected = select.value;
-        select.innerHTML = [`<option value="all">${escapeHtml(fallbackLabel)}</option>`]
-          .concat(values.sort().map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`))
-          .join('');
-        if (values.includes(selected)) {
-          select.value = selected;
-        } else {
-          select.value = 'all';
-        }
-      };
-      const classifyBudgetState = (ratio) => {
-        if (ratio >= 1) return 'danger';
-        if (ratio >= 0.8) return 'warning';
-        return 'healthy';
-      };
-      const buildQuery = (params) => new URLSearchParams(
-        Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')
-      ).toString();
-
-      const toggleTaskForm = (visible) => {
-        taskForm.classList.toggle('is-hidden', !visible);
-        taskNewButton.textContent = visible ? 'Hide Form' : 'New Task';
-        if (visible) taskTitleInput.focus();
-      };
-
-      const formatRunStatus = (run) => {
-        if (!run) return 'No run';
-        return run.ended_at ? run.status : 'active';
-      };
-
-      const selectTaskCard = (taskId) => {
-        selectedTaskId = taskId;
-        document.querySelectorAll('.task-card').forEach((card) => {
-          card.classList.toggle('is-selected', Number(card.dataset.taskId) === Number(taskId));
-        });
-      };
-
-      const renderTaskDetail = (task) => {
-        if (!task) {
-          taskDetailTitle.textContent = 'Select a task';
-          taskDetailDescription.textContent = 'Choose a task card to inspect its estimated cost and run history.';
-          taskDetailCost.textContent = '$0.00';
-          taskDetailTokens.textContent = '0';
-          taskDetailAssignee.textContent = '-';
-          taskDetailStatus.textContent = '-';
-          taskDetailLatestRun.innerHTML = '<li><span>No run selected yet.</span></li>';
-          taskDetailRuns.innerHTML = '<li><span>No runs recorded yet.</span></li>';
-          return;
-        }
-        taskDetailTitle.textContent = task.title || 'Untitled task';
-        taskDetailDescription.textContent = task.description || 'No description yet.';
-        taskDetailCost.textContent = formatCurrency(task.estimated_cost || 0);
-        taskDetailTokens.textContent = numberFormat.format(task.estimated_tokens || 0);
-        taskDetailAssignee.textContent = task.assignee || 'unassigned';
-        taskDetailStatus.textContent = task.status || 'backlog';
-        const latestRun = task.latest_run;
-        taskDetailLatestRun.innerHTML = latestRun ? `
-          <li>
-            <strong>${escapeHtml(latestRun.agent_id)} • ${escapeHtml(formatRunStatus(latestRun))}</strong>
-            <span>${escapeHtml(formatCurrency(latestRun.estimated_cost || 0))} • ${escapeHtml(numberFormat.format(latestRun.estimated_tokens || 0))} tokens</span>
-            <span>Started ${escapeHtml(new Date(latestRun.started_at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }))}</span>
-            <span>${latestRun.ended_at ? `Ended ${escapeHtml(new Date(latestRun.ended_at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }))}` : 'Still open'}</span>
-          </li>
-        ` : '<li><span>No run recorded yet.</span></li>';
-        taskDetailRuns.innerHTML = (task.runs || []).length ? task.runs.map((run) => `
-          <li>
-            <strong>${escapeHtml(run.agent_id)} • ${escapeHtml(formatRunStatus(run))}</strong>
-            <span>${escapeHtml(formatCurrency(run.estimated_cost || 0))} • ${escapeHtml(numberFormat.format(run.estimated_tokens || 0))} tokens</span>
-            <span>Window: ${escapeHtml(new Date(run.started_at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }))} to ${escapeHtml(run.ended_at ? new Date(run.ended_at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) : 'present')}</span>
-          </li>
-        `).join('') : '<li><span>No runs recorded yet.</span></li>';
-      };
-
-      const loadTaskDetail = async (taskId) => {
-        try {
-          const response = await fetch(`/api/tasks/${taskId}`, { signal: AbortSignal.timeout(5000) });
-          if (!response.ok) throw new Error('Could not load task detail');
-          const payload = await response.json();
-          selectTaskCard(taskId);
-          renderTaskDetail(payload.task);
-        } catch (error) {
-          setTaskFeedback(error.message || 'Could not load task detail', 'error');
-        }
-      };
-
-      const createTaskCard = (task) => {
-        const card = document.createElement('article');
-        card.className = 'task-card';
-        card.draggable = true;
-        card.dataset.taskId = String(task.id);
-        card.dataset.taskStatus = task.status || 'backlog';
-        card.innerHTML = `
-          <h4 class="task-title">${escapeHtml(task.title || 'Untitled task')}</h4>
-          <p class="text-muted text-sm" style="margin:0 0 12px 0;">${escapeHtml(task.description || 'No description yet.')}</p>
-          <div class="task-cost-row">
-            <span>${escapeHtml(formatCurrency(task.estimated_cost || 0))} estimated</span>
-            <span class="task-run-badge ${(task.open_run && !task.open_run.ended_at) ? 'is-open' : 'is-closed'}">${escapeHtml(task.open_run && !task.open_run.ended_at ? 'run active' : (task.latest_run ? formatRunStatus(task.latest_run) : 'no run'))}</span>
-          </div>
-          <div class="task-meta">
-            <span class="task-assignee">${escapeHtml(task.assignee || 'unassigned')}</span>
-            <span class="task-priority ${priorityClass[task.priority] || priorityClass.medium}" title="${escapeHtml(task.priority || 'medium')}"></span>
-          </div>
-        `;
-        card.addEventListener('click', () => loadTaskDetail(task.id));
-        card.addEventListener('dragstart', () => {
-          card.classList.add('is-dragging');
-        });
-        card.addEventListener('dragend', () => {
-          card.classList.remove('is-dragging');
-          document.querySelectorAll('.kanban-items').forEach((items) => items.classList.remove('is-drop-target'));
-        });
-        return card;
-      };
-
-      const updateKanbanCounts = () => {
-        kanbanColumns.forEach((column) => {
-          const count = column.querySelectorAll('.task-card').length;
-          const countEl = column.querySelector('.kanban-count');
-          if (countEl) countEl.textContent = String(count);
-          const items = column.querySelector('.kanban-items');
-          const empty = items.querySelector('.task-empty');
-          if (!count && !empty) {
-            items.innerHTML = '<div class="task-empty">No tasks here yet.</div>';
-          } else if (count && empty) {
-            empty.remove();
-          }
-        });
-      };
-
-      const renderTasks = (tasks) => {
-        kanbanColumns.forEach((column) => {
-          const items = column.querySelector('.kanban-items');
-          items.innerHTML = '';
-        });
-        const sorted = [...tasks].sort((left, right) => {
-          const statusDelta = statusOrder.indexOf(left.status) - statusOrder.indexOf(right.status);
-          if (statusDelta !== 0) return statusDelta;
-          return (right.id || 0) - (left.id || 0);
-        });
-        sorted.forEach((task) => {
-          const column = document.querySelector(`.kanban-column[data-status="${task.status || 'backlog'}"] .kanban-items`);
-          if (!column) return;
-          column.appendChild(createTaskCard(task));
-        });
-        updateKanbanCounts();
-        if (selectedTaskId) {
-          const stillExists = tasks.some((task) => Number(task.id) === Number(selectedTaskId));
-          if (stillExists) {
-            loadTaskDetail(selectedTaskId);
-          } else {
-            selectedTaskId = null;
-            renderTaskDetail(null);
-          }
-        } else if (sorted.length) {
-          loadTaskDetail(sorted[0].id);
-        } else {
-          renderTaskDetail(null);
-        }
-      };
-
-      const loadTasks = async () => {
-        try {
-          const response = await fetch('/api/tasks', { signal: AbortSignal.timeout(5000) });
-          if (!response.ok) throw new Error('Could not load tasks');
-          const payload = await response.json();
-          renderTasks(payload.tasks || []);
-        } catch (error) {
-          setTaskFeedback(error.message || 'Could not load tasks', 'error');
-        }
-      };
-
-      const renderBudgetBars = (container, rows, valueSelector, formatter) => {
-        const max = Math.max(...rows.map((row) => valueSelector(row)), 0);
-        if (!rows.length) {
-          container.innerHTML = '<div class="task-empty">No demo data matches the current filter.</div>';
-          return;
-        }
-        container.innerHTML = rows.map((row) => {
-          const value = valueSelector(row);
-          const width = max ? Math.max((value / max) * 100, 6) : 0;
-          return `
-            <div class="budget-bar">
-              <div class="budget-bar__label">${escapeHtml(row.label)}</div>
-              <div class="budget-bar__track">
-                <div class="budget-bar__fill" style="width:${width}%"></div>
-              </div>
-              <div class="budget-bar__value">${escapeHtml(formatter(value))}</div>
-            </div>
-          `;
-        }).join('');
-      };
-
-      const renderBudget = async () => {
-        const rangeDays = Number(budgetRange.value || 30);
-        const focusOnTokens = budgetView.value === 'tokens';
-        const activeAgent = budgetAgentFilter.value || 'all';
-        const activeModel = budgetModelFilter.value || 'all';
-        const referenceQuery = buildQuery({ days: rangeDays });
-        const summaryQuery = buildQuery({ days: rangeDays, agent: activeAgent, model: activeModel });
-        const eventsQuery = buildQuery({ days: rangeDays, agent: activeAgent, model: activeModel, limit: 8 });
-
-        try {
-          const [referenceRes, summaryRes, eventsRes, tasksRes] = await Promise.all([
-            fetch(`/api/usage/summary?${referenceQuery}`, { signal: AbortSignal.timeout(10000) }),
-            fetch(`/api/usage/summary?${summaryQuery}`, { signal: AbortSignal.timeout(10000) }),
-            fetch(`/api/usage?${eventsQuery}`, { signal: AbortSignal.timeout(10000) }),
-            fetch('/api/costs/by-task?limit=8', { signal: AbortSignal.timeout(10000) }),
-          ]);
-          if (!referenceRes.ok || !summaryRes.ok || !eventsRes.ok || !tasksRes.ok) {
-            throw new Error('Could not load usage telemetry');
-          }
-
-          const referencePayload = await referenceRes.json();
-          const summaryPayload = await summaryRes.json();
-          const eventsPayload = await eventsRes.json();
-          const tasksPayload = await tasksRes.json();
-          const referenceAgents = (referencePayload.by_agent || []).map((row) => row.agent);
-          const referenceModels = (referencePayload.by_model || []).map((row) => row.model).filter(Boolean);
-          fillSelectOptions(budgetAgentFilter, referenceAgents, 'All agents');
-          fillSelectOptions(budgetModelFilter, referenceModels, 'All models');
-          if (activeAgent !== budgetAgentFilter.value || activeModel !== budgetModelFilter.value) {
-            return renderBudget();
-          }
-
-          const totals = summaryPayload.totals || {};
-          const byAgent = (summaryPayload.by_agent || []).map((row) => ({
-            label: row.agent,
-            cost: Number(row.total_cost || 0),
-            tokens: Number(row.total_tokens || 0),
-            count: Number(row.event_count || 0),
-            budget: monthBudgetByAgent[row.agent] || 60,
-          }));
-          const byModel = (summaryPayload.by_model || []).map((row) => ({
-            label: row.model || 'unknown',
-            provider: row.provider || '',
-            cost: Number(row.total_cost || 0),
-            tokens: Number(row.total_tokens || 0),
-            count: Number(row.event_count || 0),
-          }));
-          const events = eventsPayload.events || [];
-          const totalCost = Number(totals.total_cost || 0);
-          const totalTokensRaw = Number(totals.total_tokens || 0);
-          const totalInput = Number(totals.input_tokens || 0);
-          const totalOutput = Number(totals.output_tokens || 0);
-          const dailyBurn = rangeDays ? totalCost / rangeDays : 0;
-          const projectedMonthly = dailyBurn * 30;
-          const topAgent = byAgent[0];
-          const combinedBudget = sum(byAgent, (row) => row.budget);
-          const budgetRatio = combinedBudget ? projectedMonthly / combinedBudget : 0;
-          const state = classifyBudgetState(budgetRatio);
-
-          budgetProjectedSpend.textContent = formatCurrency(projectedMonthly);
-          budgetProjectedDetail.textContent = `${formatCurrency(dailyBurn)} per day extrapolated across a 30 day month.`;
-          budgetActualSpend.textContent = formatCurrency(totalCost);
-          budgetActualDetail.textContent = `${Number(totals.event_count || 0)} usage event${Number(totals.event_count || 0) === 1 ? '' : 's'} inside the selected range.`;
-          budgetTotalTokens.textContent = numberFormat.format(totalTokensRaw);
-          budgetTokenDetail.textContent = `${compactNumber.format(totalInput)} input and ${compactNumber.format(totalOutput)} output tokens.`;
-          budgetTopAgent.textContent = topAgent ? topAgent.label : '-';
-          budgetTopAgentDetail.textContent = topAgent
-            ? `${formatCurrency(topAgent.cost)} across ${topAgent.count} model responses.`
-            : 'No matching activity in this filter window.';
-          budgetHealthBadge.className = `budget-badge${state === 'warning' ? ' is-warning' : state === 'danger' ? ' is-danger' : ''}`;
-          budgetHealthBadge.textContent = state === 'danger' ? 'Over target' : state === 'warning' ? 'Watch spend' : 'Healthy';
-          budgetAllocationMeta.textContent = `${formatCurrency(projectedMonthly)} projected this month against ${formatCurrency(combinedBudget)} allocated caps.`;
-
-          budgetAllocationList.innerHTML = byAgent.length ? byAgent.map((row) => {
-            const ratio = row.budget ? row.cost / row.budget : 0;
-            const tone = classifyBudgetState(ratio);
-            return `
-              <div class="budget-progress__row">
-                <div class="budget-progress__top">
-                  <span class="budget-progress__name">${escapeHtml(row.label)}</span>
-                  <span>${escapeHtml(formatCurrency(row.cost))} / ${escapeHtml(formatCurrency(row.budget))}</span>
-                </div>
-                <div class="budget-progress__track">
-                  <div class="budget-progress__fill${tone === 'warning' ? ' is-warning' : tone === 'danger' ? ' is-danger' : ''}" style="width:${Math.min(ratio * 100, 100)}%"></div>
-                </div>
-              </div>
-            `;
-          }).join('') : '<div class="task-empty">No usage allocations found yet.</div>';
-
-          const alerts = [];
-          if (!events.length) {
-            alerts.push({ tone: '', title: 'No matching usage', copy: 'There are no synced OpenClaw usage events for the current filter set yet.' });
-          }
-          if (topAgent && totalCost > 0 && topAgent.cost > totalCost * 0.55) {
-            alerts.push({ tone: 'warning', title: 'Spend concentration', copy: `${topAgent.label} is carrying ${Math.round((topAgent.cost / totalCost) * 100)}% of spend. Check whether that is intentional.` });
-          }
-          if (byModel[0] && byModel[0].cost > totalCost * 0.6) {
-            alerts.push({ tone: 'warning', title: 'Model concentration', copy: `${byModel[0].label} is responsible for most cost in this slice.` });
-          }
-          if (state === 'danger') {
-            alerts.push({ tone: 'danger', title: 'Projected overrun', copy: `Projected monthly burn is ${formatCurrency(projectedMonthly)}, which exceeds the current budget envelope.` });
-          } else if (state === 'warning') {
-            alerts.push({ tone: 'warning', title: 'Approaching cap', copy: `Projected monthly burn is at ${Math.round(budgetRatio * 100)}% of configured budget caps.` });
-          }
-          if (!alerts.length) {
-            alerts.push({ tone: '', title: 'Spend posture looks controlled', copy: 'No major outliers in the selected slice. This is a good base to build task-level attribution on top of.' });
-          }
-          budgetAlerts.innerHTML = alerts.map((alert) => `
-            <article class="budget-alert${alert.tone ? ` is-${alert.tone}` : ''}">
-              <h3 class="budget-alert__title">${escapeHtml(alert.title)}</h3>
-              <p class="budget-alert__copy">${escapeHtml(alert.copy)}</p>
-            </article>
-          `).join('');
-
-          renderBudgetBars(
-            budgetAgentBars,
-            byAgent,
-            (row) => focusOnTokens ? row.tokens : row.cost,
-            (value) => focusOnTokens ? `${compactNumber.format(value)} tok` : formatCurrency(value),
-          );
-          renderBudgetBars(
-            budgetModelBars,
-            byModel,
-            (row) => focusOnTokens ? row.tokens : row.cost,
-            (value) => focusOnTokens ? `${compactNumber.format(value)} tok` : formatCurrency(value),
-          );
-
-          budgetEventsBody.innerHTML = events.length ? events.map((event) => `
-            <tr>
-              <td>${escapeHtml(new Date(event.ts).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }))}</td>
-              <td>${escapeHtml(event.agent_id)}</td>
-              <td>${escapeHtml(event.model || event.provider || 'unknown')}</td>
-              <td>${escapeHtml(numberFormat.format(event.total_tokens || 0))}</td>
-              <td>${escapeHtml(formatCurrency(event.total_cost || 0))}</td>
-            </tr>
-          `).join('') : '<tr><td colspan="5" class="text-muted">No events in this slice.</td></tr>';
-          const costTasks = tasksPayload.tasks || [];
-          budgetTaskCostsBody.innerHTML = costTasks.length ? costTasks.map((task) => `
-            <tr>
-              <td>${escapeHtml(task.title)}</td>
-              <td>${escapeHtml(task.assignee || 'unassigned')}</td>
-              <td>${escapeHtml(task.status || '-')}</td>
-              <td>${escapeHtml(String(task.run_count || 0))}</td>
-              <td>${escapeHtml(formatCurrency(task.estimated_cost || 0))}</td>
-            </tr>
-          `).join('') : '<tr><td colspan="5" class="text-muted">No task cost estimates yet.</td></tr>';
-
-          budgetPolicyNotes.innerHTML = budgetPolicyTemplates.map((note) => `
-            <article class="budget-alert${note.tone ? ` is-${note.tone}` : ''}">
-              <h3 class="budget-alert__title">${escapeHtml(note.title)}</h3>
-              <p class="budget-alert__copy">${escapeHtml(note.copy)}</p>
-            </article>
-          `).join('');
-        } catch (error) {
-          budgetProjectedSpend.textContent = '$0.00';
-          budgetActualSpend.textContent = '$0.00';
-          budgetTotalTokens.textContent = '0';
-          budgetTopAgent.textContent = '-';
-          budgetProjectedDetail.textContent = error.message || 'Could not load usage telemetry.';
-          budgetActualDetail.textContent = 'Usage sync failed.';
-          budgetTokenDetail.textContent = 'No live usage data available.';
-          budgetTopAgentDetail.textContent = 'Budget page is waiting on synced usage events.';
-          budgetAllocationMeta.textContent = 'Unable to compute allocations.';
-          budgetAllocationList.innerHTML = '<div class="task-empty">Could not load usage telemetry.</div>';
-          budgetAlerts.innerHTML = `
-            <article class="budget-alert is-danger">
-              <h3 class="budget-alert__title">Usage sync failed</h3>
-              <p class="budget-alert__copy">${escapeHtml(error.message || 'Could not load usage telemetry.')}</p>
-            </article>
-          `;
-          budgetAgentBars.innerHTML = '<div class="task-empty">No live usage data available.</div>';
-          budgetModelBars.innerHTML = '<div class="task-empty">No live usage data available.</div>';
-          budgetTaskCostsBody.innerHTML = '<tr><td colspan="5" class="text-muted">Could not load task cost estimates.</td></tr>';
-          budgetEventsBody.innerHTML = '<tr><td colspan="5" class="text-muted">Could not load usage telemetry.</td></tr>';
-          budgetPolicyNotes.innerHTML = budgetPolicyTemplates.map((note) => `
-            <article class="budget-alert${note.tone ? ` is-${note.tone}` : ''}">
-              <h3 class="budget-alert__title">${escapeHtml(note.title)}</h3>
-              <p class="budget-alert__copy">${escapeHtml(note.copy)}</p>
-            </article>
-          `).join('');
-        }
-      };
-
-      const populateAssignees = (agents) => {
-        const current = taskAssigneeSelect.value;
-        const ids = Object.keys(agents || {});
-        const names = ids.length ? ids : ['syntella'];
-        taskAssigneeSelect.innerHTML = ['<option value="">unassigned</option>']
-          .concat(names.sort().map((agentId) => `<option value="${escapeHtml(agentId)}">${escapeHtml(agentId)}</option>`))
-          .join('');
-        if (names.includes(current)) taskAssigneeSelect.value = current;
-        fillSelectOptions(budgetAgentFilter, names, 'All agents');
-      };
-
-      const updateTaskStatus = async (taskId, status) => {
-        const response = await fetch(`/api/tasks/${taskId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status }),
-        });
-        if (!response.ok) {
-          const payload = await response.json().catch(() => ({}));
-          throw new Error(payload.error || 'Could not update task status');
-        }
-        return response.json();
-      };
-
-      document.querySelectorAll('.kanban-items').forEach((items) => {
-        items.addEventListener('dragover', (event) => {
-          event.preventDefault();
-          items.classList.add('is-drop-target');
-        });
-        items.addEventListener('dragleave', () => {
-          items.classList.remove('is-drop-target');
-        });
-        items.addEventListener('drop', async (event) => {
-          event.preventDefault();
-          items.classList.remove('is-drop-target');
-          const dragging = document.querySelector('.task-card.is-dragging');
-          if (!dragging) return;
-          const column = items.closest('.kanban-column');
-          const status = column.dataset.status;
-          const previousColumn = dragging.closest('.kanban-items');
-          if (dragging.dataset.taskStatus === status) return;
-          items.appendChild(dragging);
-          updateKanbanCounts();
-          try {
-            await updateTaskStatus(dragging.dataset.taskId, status);
-            dragging.dataset.taskStatus = status;
-            setTaskFeedback('Task updated.', 'success');
-            await loadTasks();
-          } catch (error) {
-            previousColumn.appendChild(dragging);
-            updateKanbanCounts();
-            setTaskFeedback(error.message || 'Could not update task', 'error');
-          }
-        });
-      });
-
-      taskNewButton.addEventListener('click', () => {
-        toggleTaskForm(taskForm.classList.contains('is-hidden'));
-        if (!taskForm.classList.contains('is-hidden')) setTaskFeedback('');
-      });
-
-      taskCancelButton.addEventListener('click', () => {
-        taskForm.reset();
-        taskPrioritySelect.value = 'medium';
-        toggleTaskForm(false);
-        setTaskFeedback('');
-      });
-
-      taskForm.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        setTaskFeedback('Creating task...');
-        try {
-          const response = await fetch('/api/tasks', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              title: taskTitleInput.value.trim(),
-              description: taskDescriptionInput.value.trim(),
-              assignee: taskAssigneeSelect.value,
-              priority: taskPrioritySelect.value,
-              status: 'backlog',
-            }),
-          });
-          const payload = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(payload.error || 'Could not create task');
-          taskForm.reset();
-          taskPrioritySelect.value = 'medium';
-          toggleTaskForm(false);
-          setTaskFeedback('Task created.', 'success');
-          await loadTasks();
-        } catch (error) {
-          setTaskFeedback(error.message || 'Could not create task', 'error');
-        }
-      });
-
-      [budgetRange, budgetAgentFilter, budgetModelFilter, budgetView].forEach((element) => {
-        element.addEventListener('change', renderBudget);
-      });
-
-      [modelsSearch, modelsProviderFilter, modelsStatusFilter].forEach((element) => {
-        element.addEventListener('input', renderModels);
-        element.addEventListener('change', renderModels);
-      });
-
-      modelsNewButton.addEventListener('click', () => {
-        setModelsFeedback('');
-        resetModelsForm(null);
-        setModelsDrawerOpen(true);
-      });
-
-      teamNewAgentButton.addEventListener('click', () => {
-        resetAgentForm();
-        setAgentDrawerOpen(true);
-        agentNameInput.focus();
-      });
-
-      modelsCancelButton.addEventListener('click', () => {
-        setModelsFeedback('');
-        setModelsDrawerOpen(false);
-      });
-
-      modelsDrawerBackdrop.addEventListener('click', () => setModelsDrawerOpen(false));
-      modelsDrawerClose.addEventListener('click', () => setModelsDrawerOpen(false));
-      agentDrawerBackdrop.addEventListener('click', () => setAgentDrawerOpen(false));
-      agentDrawerClose.addEventListener('click', () => setAgentDrawerOpen(false));
-      agentCancelButton.addEventListener('click', () => setAgentDrawerOpen(false));
-
-      modelsResetButton.addEventListener('click', async () => {
-        const selected = currentModelSelection();
-        if (!selected || !selected.has_override) {
-          setModelsFeedback('No saved override to clear for this model.', 'error');
-          return;
-        }
-        setModelsFeedback('Clearing override...');
-        try {
-          const response = await fetch('/api/models/overrides', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ provider: selected.provider, model_id: selected.model_id }),
-          });
-          const payload = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(payload.error || 'Could not clear model override');
-          modelsCatalog = payload.models || [];
-          const refreshed = modelsCatalog.find((item) => modelKey(item.provider, item.model_id) === modelKey(selected.provider, selected.model_id)) || null;
-          resetModelsForm(refreshed);
-          renderModels();
-          setModelsFeedback('Override cleared.', 'success');
-        } catch (error) {
-          setModelsFeedback(error.message || 'Could not clear override.', 'error');
-        }
-      });
-
-      modelsForm.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        setModelsFeedback('Saving override...');
-        try {
-          const body = {
-            provider: modelProviderInput.value.trim(),
-            model_id: modelIdInput.value.trim(),
-            display_name: modelDisplayNameInput.value.trim(),
-            provider_base_url: modelProviderBaseUrlInput.value.trim(),
-            provider_api_adapter: modelProviderApiAdapterInput.value.trim(),
-            provider_api_key: modelProviderApiKeyInput.value,
-            enabled: modelEnabledInput.checked,
-            reasoning: modelReasoningInput.checked,
-            input_modalities: modelModalitiesInput.value.trim(),
-            context_window: parseFormNumber(modelContextWindowInput.value.trim()),
-            max_tokens: parseFormNumber(modelMaxTokensInput.value.trim()),
-            cost_input: parseFormNumber(modelCostInputInput.value.trim()),
-            cost_output: parseFormNumber(modelCostOutputInput.value.trim()),
-            cost_cache_read: parseFormNumber(modelCostCacheReadInput.value.trim()),
-            cost_cache_write: parseFormNumber(modelCostCacheWriteInput.value.trim()),
-            notes: modelNotesInput.value.trim(),
-          };
-          const response = await fetch('/api/models/overrides', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          });
-          const payload = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(payload.error || 'Could not save model override');
-          modelsCatalog = payload.models || [];
-          const refreshed = modelsCatalog.find((item) => modelKey(item.provider, item.model_id) === modelKey(body.provider, body.model_id)) || null;
-          resetModelsForm(refreshed);
-          renderModels();
-          modelProviderApiKeyInput.value = '';
-          setModelsFeedback('Model saved to the shared OpenClaw catalog.', 'success');
-        } catch (error) {
-          setModelsFeedback(error.message || 'Could not save model.', 'error');
-        }
-      });
-
-      agentForm.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        setAgentFeedback('Creating agent...');
-        try {
-          const body = {
-            agent_id: agentNameInput.value.trim(),
-            role: agentRoleInput.value.trim(),
-            description: agentDescriptionInput.value.trim(),
-            model_primary: agentModelSelect.value,
-            port: agentPortInput.value.trim(),
-            discord_token: agentDiscordTokenInput.value.trim(),
-            channel_id: agentChannelIdInput.value.trim(),
-          };
-          const response = await fetch('/api/spawn-agent', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          });
-          const payload = await response.json().catch(() => ({}));
-          if (!response.ok || payload.ok === false) {
-            throw new Error(payload.detail || payload.error || payload.stderr || 'Could not create agent');
-          }
-          setAgentFeedback('Agent created.', 'success');
-          resetAgentForm();
-          setAgentDrawerOpen(false);
-          await Promise.all([loadDepartments(), loadTasks()]);
-        } catch (error) {
-          setAgentFeedback(error.message || 'Could not create agent.', 'error');
-        }
-      });
-
-      teamChartPanelBackdrop.addEventListener('click', clearOrgPanel);
-      teamChartPanelClose.addEventListener('click', clearOrgPanel);
-
-      const bindOrgNode = (node) => {
-        if (node.dataset.orgBound === 'true') return;
-        node.dataset.orgBound = 'true';
-        node.addEventListener('click', () => renderOrgPanel(node));
-      };
-
-      const applyNodeData = (node, data) => {
-        node.dataset.agentName = data.name;
-        node.dataset.agentRole = data.role;
-        node.dataset.agentStatus = data.status;
-        node.dataset.agentFocus = data.focus;
-        node.dataset.agentDesc = data.description;
-        node.dataset.agentResponsibilities = data.responsibilities.join('|');
-        const eyebrowDot = data.status === 'Running' ? 'status-dot--online' : 'status-dot--offline';
-        node.innerHTML = `
-          <span class="org-node__eyebrow"><span class="status-dot ${eyebrowDot}"></span> ${escapeHtml(data.eyebrow)}</span>
-          <div class="org-node__title-row">
-            <h3 class="org-node__name">${escapeHtml(data.name)}</h3>
-            <span class="org-pill">${escapeHtml(data.department)}</span>
-          </div>
-          <p class="org-node__role">${escapeHtml(data.summary)}</p>
-          <p class="org-node__desc">${escapeHtml(data.description)}</p>
-          ${data.meta.length ? `<div class="org-node__meta">${data.meta.map((item) => `<span class="org-pill">${escapeHtml(item)}</span>`).join('')}</div>` : ''}
-        `;
-      };
-
-      const normalizeAgent = (agentId, agent, isRoot) => {
-        const status = agent && agent.status ? agent.status : (agent && agent.pid ? 'Running' : 'Discovered');
-        const role = agent && agent.role ? agent.role : (isRoot ? 'Main Agent' : 'Team Member');
-        const description = agent && agent.description
-          ? agent.description
-          : (isRoot ? 'Primary local OpenClaw profile.' : 'Discovered local agent.');
-        const titleName = isRoot ? agentId : agentId;
-        const focus = isRoot
-          ? 'System orchestration, delegation, oversight'
-          : description;
-        const responsibilities = isRoot
-          ? ['Routes and coordinates local work', 'Owns the primary profile', 'Acts as root for the team view']
-          : [
-            'Handles assigned work',
-            'Operates as an independent agent',
-            agent && agent.channel_id ? `Listens only on inbox channel ${agent.channel_id}` : 'Should be assigned a dedicated inbox channel',
-          ];
-        return {
-          name: titleName,
-          role,
-          status,
-          focus,
-          description,
-          responsibilities,
-          eyebrow: isRoot ? 'Root Agent' : 'Team Member',
-          department: isRoot ? 'Primary profile' : role,
-          summary: isRoot ? role : description,
-          meta: [
-            status === 'Running' ? 'Active now' : status,
-            agent && agent.port ? `Port ${agent.port}` : null,
-            agent && agent.channel_id ? `Inbox ${agent.channel_id}` : null,
-            agent && agent.session_count ? `${agent.session_count} sessions` : null,
-          ].filter(Boolean),
-        };
-      };
-
-      const createBranchNode = (agentId, agent) => {
-        const branch = document.createElement('div');
-        branch.className = 'team-chart__member';
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'org-node';
-        applyNodeData(button, normalizeAgent(agentId, agent, false));
-        bindOrgNode(button);
-        branch.appendChild(button);
-        return branch;
-      };
-
-      const loadDepartments = async () => {
-        try {
-          const response = await fetch('/api/departments', { signal: AbortSignal.timeout(5000) });
-          if (!response.ok) return;
-          const payload = await response.json();
-          const agents = payload.agents || {};
-          populateAssignees(agents);
-          const rootId = agents.main ? 'main' : (Object.keys(agents)[0] || 'main');
-          const rootAgent = agents[rootId] || {};
-          applyNodeData(orgRootNode, normalizeAgent(rootId, rootAgent, true));
-          bindOrgNode(orgRootNode);
-
-          const entries = Object.entries(agents).filter(([agentId]) => agentId !== rootId);
-          if (!entries.length) {
-            orgBranches.innerHTML = '';
-            clearOrgPanel();
-            return;
-          }
-          orgBranches.innerHTML = '';
-          entries
-            .sort(([left], [right]) => left.localeCompare(right))
-            .forEach(([agentId, agent]) => {
-              orgBranches.appendChild(createBranchNode(agentId, agent));
-            });
-          clearOrgPanel();
-        } catch {
-          bindOrgNode(orgRootNode);
-          clearOrgPanel();
-        }
-      };
-
-      orgNodes().forEach(bindOrgNode);
-      loadTasks();
-      loadModels();
-      loadDepartments();
-      renderBudget();
-    });
-  </script>
+  <script src="admin-core.js"></script>
+  <script src="admin-work.js"></script>
+  <script src="admin-models.js"></script>
+  <script src="admin-budget.js"></script>
+  <script src="admin-team.js"></script>
 </body>
 </html>

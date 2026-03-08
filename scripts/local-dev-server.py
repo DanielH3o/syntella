@@ -136,6 +136,62 @@ def init_db():
     )
     cursor.execute(
         """
+        CREATE TABLE IF NOT EXISTS routines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            agent_id TEXT NOT NULL,
+            schedule_type TEXT NOT NULL DEFAULT 'daily',
+            schedule_value TEXT NOT NULL DEFAULT '',
+            schedule_summary TEXT NOT NULL DEFAULT '',
+            timezone TEXT NOT NULL DEFAULT 'UTC',
+            prompt TEXT NOT NULL DEFAULT '',
+            output_mode TEXT NOT NULL DEFAULT 'report_if_needed',
+            report_channel_id TEXT,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            last_run_at TEXT,
+            next_run_at TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS routine_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            routine_id INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'completed',
+            started_at TEXT NOT NULL,
+            ended_at TEXT,
+            output_summary TEXT,
+            task_id INTEGER,
+            estimated_cost REAL DEFAULT 0,
+            estimated_tokens INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (routine_id) REFERENCES routines(id)
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            agent_id TEXT,
+            routine_id INTEGER,
+            routine_run_id INTEGER,
+            report_type TEXT NOT NULL DEFAULT 'routine',
+            summary TEXT NOT NULL DEFAULT '',
+            body TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'published',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (routine_id) REFERENCES routines(id),
+            FOREIGN KEY (routine_run_id) REFERENCES routine_runs(id)
+        )
+        """
+    )
+    cursor.execute(
+        """
         CREATE INDEX IF NOT EXISTS idx_usage_events_agent_ts
         ON usage_events (agent_id, ts)
         """
@@ -162,6 +218,24 @@ def init_db():
         """
         CREATE INDEX IF NOT EXISTS idx_model_overrides_provider_model
         ON model_overrides (provider, model_id)
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_routines_agent_enabled
+        ON routines (agent_id, enabled)
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_routine_runs_routine_started
+        ON routine_runs (routine_id, started_at DESC)
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_reports_created_at
+        ON reports (created_at DESC)
         """
     )
     conn.commit()
@@ -1075,6 +1149,273 @@ def fetch_tasks():
     return tasks
 
 
+def normalize_routine(row):
+    if not row:
+        return None
+    item = dict(row)
+    item["enabled"] = bool(item.get("enabled"))
+    item["run_count"] = int(item.get("run_count") or 0)
+    item["report_count"] = int(item.get("report_count") or 0)
+    item["latest_run_status"] = item.get("latest_run_status") or ""
+    item["latest_run_summary"] = item.get("latest_run_summary") or ""
+    return item
+
+
+def fetch_routines():
+    rows = run_query(
+        """
+        SELECT
+            r.*,
+            COALESCE(run_stats.run_count, 0) AS run_count,
+            run_stats.latest_run_status,
+            run_stats.latest_run_summary,
+            COALESCE(report_stats.report_count, 0) AS report_count
+        FROM routines r
+        LEFT JOIN (
+            SELECT
+                rr.routine_id,
+                COUNT(*) AS run_count,
+                (
+                    SELECT status
+                    FROM routine_runs latest
+                    WHERE latest.routine_id = rr.routine_id
+                    ORDER BY latest.started_at DESC, latest.id DESC
+                    LIMIT 1
+                ) AS latest_run_status,
+                (
+                    SELECT output_summary
+                    FROM routine_runs latest
+                    WHERE latest.routine_id = rr.routine_id
+                    ORDER BY latest.started_at DESC, latest.id DESC
+                    LIMIT 1
+                ) AS latest_run_summary
+            FROM routine_runs rr
+            GROUP BY rr.routine_id
+        ) run_stats ON run_stats.routine_id = r.id
+        LEFT JOIN (
+            SELECT routine_id, COUNT(*) AS report_count
+            FROM reports
+            WHERE routine_id IS NOT NULL
+            GROUP BY routine_id
+        ) report_stats ON report_stats.routine_id = r.id
+        ORDER BY r.enabled DESC, r.updated_at DESC, r.id DESC
+        """,
+        fetchall=True,
+    ) or []
+    return [normalize_routine(row) for row in rows]
+
+
+def fetch_routine_detail(routine_id):
+    routine = run_query(
+        """
+        SELECT
+            r.*,
+            COALESCE(report_stats.report_count, 0) AS report_count
+        FROM routines r
+        LEFT JOIN (
+            SELECT routine_id, COUNT(*) AS report_count
+            FROM reports
+            WHERE routine_id IS NOT NULL
+            GROUP BY routine_id
+        ) report_stats ON report_stats.routine_id = r.id
+        WHERE r.id = ?
+        """,
+        (routine_id,),
+        fetchone=True,
+    )
+    if not routine:
+        return None
+    routine = normalize_routine(routine)
+    routine["runs"] = run_query(
+        """
+        SELECT id, routine_id, status, started_at, ended_at, output_summary, task_id, estimated_cost, estimated_tokens
+        FROM routine_runs
+        WHERE routine_id = ?
+        ORDER BY started_at DESC, id DESC
+        LIMIT 20
+        """,
+        (routine_id,),
+        fetchall=True,
+    ) or []
+    routine["reports"] = run_query(
+        """
+        SELECT id, title, report_type, summary, status, created_at
+        FROM reports
+        WHERE routine_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT 20
+        """,
+        (routine_id,),
+        fetchall=True,
+    ) or []
+    return routine
+
+
+def upsert_routine(body, routine_id=None):
+    name = (body.get("name") or "").strip()
+    agent_id = (body.get("agent_id") or "").strip()
+    if not name or not agent_id:
+        raise ValueError("name and agent_id are required")
+    schedule_type = (body.get("schedule_type") or "daily").strip()
+    schedule_value = (body.get("schedule_value") or "").strip()
+    schedule_summary = (body.get("schedule_summary") or "").strip()
+    timezone_name = (body.get("timezone") or "UTC").strip() or "UTC"
+    prompt = (body.get("prompt") or "").strip()
+    output_mode = (body.get("output_mode") or "report_if_needed").strip()
+    report_channel_id = (body.get("report_channel_id") or "").strip() or None
+    enabled = int(parse_bool(body.get("enabled", True)))
+    if routine_id is None:
+        routine_id = run_query(
+            """
+            INSERT INTO routines (
+                name, agent_id, schedule_type, schedule_value, schedule_summary,
+                timezone, prompt, output_mode, report_channel_id, enabled
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                name,
+                agent_id,
+                schedule_type,
+                schedule_value,
+                schedule_summary,
+                timezone_name,
+                prompt,
+                output_mode,
+                report_channel_id,
+                enabled,
+            ),
+            commit=True,
+        )
+    else:
+        run_query(
+            """
+            UPDATE routines
+            SET
+                name = ?,
+                agent_id = ?,
+                schedule_type = ?,
+                schedule_value = ?,
+                schedule_summary = ?,
+                timezone = ?,
+                prompt = ?,
+                output_mode = ?,
+                report_channel_id = ?,
+                enabled = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (
+                name,
+                agent_id,
+                schedule_type,
+                schedule_value,
+                schedule_summary,
+                timezone_name,
+                prompt,
+                output_mode,
+                report_channel_id,
+                enabled,
+                routine_id,
+            ),
+            commit=True,
+        )
+    return fetch_routine_detail(int(routine_id))
+
+
+def run_routine_now(routine_id):
+    routine = fetch_routine_detail(routine_id)
+    if not routine:
+        return None
+    started_at = utc_now_iso()
+    summary = f"Manual routine run queued for {routine['name']}."
+    run_id = run_query(
+        """
+        INSERT INTO routine_runs (routine_id, status, started_at, ended_at, output_summary)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (routine_id, "completed", started_at, started_at, summary),
+        commit=True,
+    )
+    if routine.get("output_mode") in {"report_only", "report_if_needed", "report_and_task_if_needed"}:
+        run_query(
+            """
+            INSERT INTO reports (title, agent_id, routine_id, routine_run_id, report_type, summary, body, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                f"{routine['name']} Report",
+                routine.get("agent_id") or "",
+                routine_id,
+                run_id,
+                "routine",
+                summary,
+                routine.get("prompt") or "Routine executed manually. Full automated report generation is not wired yet.",
+                "published",
+            ),
+            commit=True,
+        )
+    run_query(
+        """
+        UPDATE routines
+        SET last_run_at = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (started_at, routine_id),
+        commit=True,
+    )
+    return fetch_routine_detail(routine_id)
+
+
+def fetch_reports(limit=50):
+    rows = run_query(
+        """
+        SELECT
+            rep.id,
+            rep.title,
+            rep.agent_id,
+            rep.routine_id,
+            rep.routine_run_id,
+            rep.report_type,
+            rep.summary,
+            rep.body,
+            rep.status,
+            rep.created_at,
+            rut.name AS routine_name
+        FROM reports rep
+        LEFT JOIN routines rut ON rut.id = rep.routine_id
+        ORDER BY rep.created_at DESC, rep.id DESC
+        LIMIT ?
+        """,
+        (limit,),
+        fetchall=True,
+    ) or []
+    return rows
+
+
+def fetch_report_detail(report_id):
+    return run_query(
+        """
+        SELECT
+            rep.id,
+            rep.title,
+            rep.agent_id,
+            rep.routine_id,
+            rep.routine_run_id,
+            rep.report_type,
+            rep.summary,
+            rep.body,
+            rep.status,
+            rep.created_at,
+            rut.name AS routine_name
+        FROM reports rep
+        LEFT JOIN routines rut ON rut.id = rep.routine_id
+        WHERE rep.id = ?
+        """,
+        (report_id,),
+        fetchone=True,
+    )
+
+
 def backfill_active_task_runs():
     conn = get_conn()
     rows = conn.execute(
@@ -1218,6 +1559,34 @@ class Handler(BaseHTTPRequestHandler):
             sync = sync_usage_events()
             return self._send_json(200, {"ok": True, "sync": sync, "models": list_models()})
 
+        if path == "/api/routines":
+            return self._send_json(200, {"ok": True, "routines": fetch_routines()})
+
+        if path.startswith("/api/routines/"):
+            parts = [part for part in path.split("/") if part]
+            if len(parts) == 3 and parts[1] == "routines" and parts[2].isdigit():
+                routine = fetch_routine_detail(int(parts[2]))
+                if not routine:
+                    return self._send_json(404, {"error": "not_found"})
+                return self._send_json(200, {"ok": True, "routine": routine})
+
+        if path == "/api/reports":
+            limit = params.get("limit", ["50"])[0]
+            try:
+                limit_value = max(1, min(int(limit), 100))
+            except ValueError:
+                limit_value = 50
+            return self._send_json(200, {"ok": True, "reports": fetch_reports(limit_value)})
+
+        if path.startswith("/api/reports/"):
+            report_id = path.rsplit("/", 1)[-1]
+            if not report_id.isdigit():
+                return self._send_json(400, {"error": "Invalid report ID"})
+            report = fetch_report_detail(int(report_id))
+            if not report:
+                return self._send_json(404, {"error": "not_found"})
+            return self._send_json(200, {"ok": True, "report": report})
+
         if path == "/api/operator-bridge/health":
             try:
                 status, payload = bridge_request("/health", method="GET")
@@ -1284,6 +1653,26 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 return self._send_json(502, {"ok": False, "error": str(exc)})
 
+        if path == "/api/routines":
+            body = self._parse_body()
+            try:
+                return self._send_json(201, {"ok": True, "routine": upsert_routine(body)})
+            except ValueError as exc:
+                return self._send_json(400, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                return self._send_json(500, {"ok": False, "error": str(exc)})
+
+        if path.startswith("/api/routines/") and path.endswith("/run"):
+            parts = [part for part in path.split("/") if part]
+            if len(parts) == 4 and parts[1] == "routines" and parts[2].isdigit():
+                try:
+                    routine = run_routine_now(int(parts[2]))
+                    if not routine:
+                        return self._send_json(404, {"error": "not_found"})
+                    return self._send_json(200, {"ok": True, "routine": routine})
+                except Exception as exc:
+                    return self._send_json(500, {"ok": False, "error": str(exc)})
+
         if path != "/api/tasks":
             return self._send_json(404, {"error": "not_found"})
 
@@ -1313,6 +1702,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_PUT(self):
         path = urlparse(self.path).path
+        if path.startswith("/api/routines/"):
+            routine_id = path.rsplit("/", 1)[-1]
+            if not routine_id.isdigit():
+                return self._send_json(400, {"error": "Invalid routine ID"})
+            body = self._parse_body()
+            try:
+                routine = upsert_routine(body, int(routine_id))
+                if not routine:
+                    return self._send_json(404, {"error": "not_found"})
+                return self._send_json(200, {"ok": True, "routine": routine})
+            except ValueError as exc:
+                return self._send_json(400, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                return self._send_json(500, {"ok": False, "error": str(exc)})
         if not path.startswith("/api/tasks/"):
             return self._send_json(404, {"error": "not_found"})
 
