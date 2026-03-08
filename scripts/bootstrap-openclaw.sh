@@ -145,7 +145,7 @@ install_syntella_api() {
   local api_py="$api_dir/local-dev-server.py"
 
   mkdir -p "$api_dir" "$HOME/.openclaw/logs"
-  sudo mkdir -p "$env_dir"
+  sudo install -d -m 750 -o root -g openclaw "$env_dir"
 
   cp "$SCRIPT_DIR/local-dev-server.py" "$api_py"
   chmod 755 "$api_py"
@@ -156,7 +156,8 @@ SYNTELLA_WORKSPACE=${HOME}/.openclaw/workspace
 OPENCLAW_STATE_DIR=${HOME}/.openclaw
 SYNTELLA_OPERATOR_BRIDGE_URL=http://127.0.0.1:${OPERATOR_BRIDGE_PORT}
 EOF
-  sudo chmod 600 "$env_file"
+  sudo chown root:openclaw "$env_file"
+  sudo chmod 640 "$env_file"
 
   pkill -f "syntella-api/local-dev-server.py" >/dev/null 2>&1 || true
   sleep 1
