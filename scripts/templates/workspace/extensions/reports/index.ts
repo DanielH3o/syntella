@@ -56,7 +56,7 @@ function summarize(result: any): string {
   return "Reports tool completed.";
 }
 
-async function runReportsDb(args: ToolArgs) {
+function runReportsDb(args: ToolArgs) {
   const payload = {
     ...args,
     __agent_id: deriveAgentId(),
@@ -70,7 +70,7 @@ async function runReportsDb(args: ToolArgs) {
   return JSON.parse(stdout || "{}");
 }
 
-export default async function register(api: any) {
+export default function register(api: any) {
   api.registerTool(
     {
       name: "reports",
@@ -134,8 +134,8 @@ export default async function register(api: any) {
           },
         },
       },
-      async execute(_callId: string, args: ToolArgs) {
-        const result = await runReportsDb(args);
+      execute(_callId: string, args: ToolArgs) {
+        const result = runReportsDb(args);
         return {
           content: [
             {

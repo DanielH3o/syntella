@@ -384,31 +384,62 @@ def is_internal_model(model_id):
 
 def discover_openclaw_agents():
     registry = read_registry()
-    agents_root = OPENCLAW_STATE_DIR / "agents"
     discovered = {}
-    if not agents_root.exists():
-        return discovered
+    agent_sources = {}
+    agents_root = OPENCLAW_STATE_DIR / "agents"
 
-    for agent_dir in sorted(path for path in agents_root.iterdir() if path.is_dir()):
-        agent_id = agent_dir.name
-        session_files = sorted((agent_dir / "sessions").glob("*.jsonl")) if (agent_dir / "sessions").exists() else []
+    if agents_root.exists():
+        for agent_dir in sorted(path for path in agents_root.iterdir() if path.is_dir()):
+            agent_sources[agent_dir.name] = {
+                "agent_id": agent_dir.name,
+                "session_dir": agent_dir / "sessions",
+                "registry_meta": registry.get(agent_dir.name, {}) if isinstance(registry, dict) else {},
+            }
+
+    if isinstance(registry, dict):
+        for agent_id, registry_meta in registry.items():
+            if not isinstance(registry_meta, dict):
+                registry_meta = {}
+            if agent_id in agent_sources:
+                agent_sources[agent_id]["registry_meta"] = registry_meta
+                continue
+            child_home = Path(str(registry_meta.get("home") or "")).expanduser()
+            child_session_dir = child_home / "agents" / "main" / "sessions"
+            agent_sources[agent_id] = {
+                "agent_id": agent_id,
+                "session_dir": child_session_dir,
+                "registry_meta": registry_meta,
+            }
+
+    for agent_id in sorted(agent_sources):
+        source = agent_sources[agent_id]
+        session_dir = source["session_dir"]
+        registry_meta = source["registry_meta"]
+        session_files = sorted(session_dir.glob("*.jsonl")) if session_dir.exists() else []
         latest_ts = None
         event_count = 0
         if session_files:
             latest_file = max(session_files, key=lambda path: path.stat().st_mtime)
             latest_ts = datetime.fromtimestamp(latest_file.stat().st_mtime, tz=timezone.utc).isoformat()
             event_count = len(session_files)
-        registry_meta = registry.get(agent_id, {}) if isinstance(registry, dict) else {}
+        pid = registry_meta.get("pid")
+        is_running = False
+        if isinstance(pid, int) and pid > 0:
+            try:
+                os.kill(pid, 0)
+                is_running = True
+            except OSError:
+                is_running = False
         discovered[agent_id] = {
             "id": agent_id,
             "role": registry_meta.get("role") or ("Main Orchestrator" if agent_id == "main" else "OpenClaw Agent"),
             "description": registry_meta.get("description") or registry_meta.get("personality") or ("Primary root agent for the local OpenClaw profile." if agent_id == "main" else f"Discovered from local OpenClaw state for `{agent_id}`."),
-            "pid": registry_meta.get("pid"),
+            "pid": pid,
             "port": registry_meta.get("port"),
             "channel_id": registry_meta.get("channel_id"),
             "monthly_budget": parse_optional_number(registry_meta.get("monthly_budget"), float),
             "specialty": registry_meta.get("specialty"),
-            "status": "Running" if latest_ts else "Discovered",
+            "status": "Running" if is_running or latest_ts else "Discovered",
             "latest_activity": latest_ts,
             "session_count": event_count,
         }

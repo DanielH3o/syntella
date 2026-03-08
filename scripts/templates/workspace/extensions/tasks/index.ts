@@ -55,7 +55,7 @@ function summarize(result: any): string {
   return "Task tool completed.";
 }
 
-async function runTaskDb(args: ToolArgs) {
+function runTaskDb(args: ToolArgs) {
   const payload = {
     ...args,
     __agent_id: deriveAgentId(),
@@ -69,7 +69,7 @@ async function runTaskDb(args: ToolArgs) {
   return JSON.parse(stdout || "{}");
 }
 
-export default async function register(api: any) {
+export default function register(api: any) {
   api.registerTool(
     {
       name: "tasks",
@@ -123,8 +123,8 @@ export default async function register(api: any) {
           },
         },
       },
-      async execute(_callId: string, args: ToolArgs) {
-        const result = await runTaskDb(args);
+      execute(_callId: string, args: ToolArgs) {
+        const result = runTaskDb(args);
         return {
           content: [
             {

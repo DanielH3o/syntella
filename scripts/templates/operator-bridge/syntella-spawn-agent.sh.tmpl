@@ -276,10 +276,10 @@ config_set tools.fs.workspaceOnly false
 config_set tools.exec.applyPatch.workspaceOnly false
 
 # Write all JSON config (model, arrays, guilds) in a single Python pass.
-python3 - "$HOME/.openclaw/openclaw.json" "$CHILD_HOME" "$MODEL_PRIMARY" "__DISCORD_HUMAN_ID__" "__DISCORD_GUILD_ID__" "$DISCORD_CHANNEL_ID_AGENT" "$SPAWN_LOG" "$AGENT_WS" "${SYNTELLA_AGENT_SPECIALTY:-}" <<'PYSCRIPT'
+python3 - "$HOME/.openclaw/openclaw.json" "$CHILD_HOME" "$MODEL_PRIMARY" "__DISCORD_HUMAN_ID__" "__DISCORD_GUILD_ID__" "$DISCORD_CHANNEL_ID_AGENT" "$SPAWN_LOG" "$AGENT_WS" "${SYNTELLA_AGENT_SPECIALTY:-}" "$DISCORD_BOT_TOKEN_AGENT" <<'PYSCRIPT'
 import json, os, sys
 
-global_cfg_path, home, model_primary, human_id, guild_id, channel_id, log_path, agent_ws, specialty = sys.argv[1:10]
+global_cfg_path, home, model_primary, human_id, guild_id, channel_id, log_path, agent_ws, specialty, discord_bot_token = sys.argv[1:11]
 cfg_path = os.path.join(home, ".openclaw-main", "openclaw.json")
 os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
 
@@ -309,10 +309,14 @@ try:
     # Discord config with proper array values.
     channels = cfg.setdefault("channels", {})
     discord = channels.setdefault("discord", {})
+    discord["enabled"] = True
+    discord["allowBots"] = True
+    discord["token"] = discord_bot_token
     discord["allowFrom"] = [human_id]
 
     dm = discord.setdefault("dm", {})
-    dm["allowFrom"] = [human_id]
+    dm["enabled"] = True
+    dm["groupEnabled"] = False
     dm["policy"] = "allowlist"
 
     discord["guilds"] = {

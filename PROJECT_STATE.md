@@ -121,6 +121,7 @@ Local data sources:
 - Team metadata now surfaces each agent's inbox channel.
 - Team page now lets the user set an optional `monthly_budget` during agent creation.
 - Selected-agent drawer now lets the user edit an agent's monthly budget in place.
+- Team discovery now merges the root OpenClaw state with Syntella registry entries so spawned agents living in separate homes like `~/.openclaw-<agent_id>` still appear in the Team UI.
 
 ### Models page
 
@@ -226,6 +227,7 @@ Local data sources:
 - Added a companion `tasks-tool` skill that tells agents to use the tool instead of manual curl/API walkthroughs.
 - Plugin registration now uses the OpenClaw optional-tool pattern and includes an explicit manifest `configSchema`.
 - Bootstrap and spawned-agent config now explicitly enable the plugin under `plugins.allow` and `plugins.entries.syntella-tasks.enabled`.
+- Fixed a runtime registration bug where the tasks/reports plugins exported `async register(...)`; OpenClaw ignores async plugin registration promises, so the tools were never actually exposed. Both plugins now register synchronously.
 - The tool currently supports:
   - `list`
   - `list_mine`
@@ -242,6 +244,7 @@ Local data sources:
 - Bootstrap and spawned-agent config now explicitly enable the plugin under `tools.allow`, `plugins.allow`, and `plugins.entries.syntella-reports.enabled`.
 - Fixed a droplet/runtime plugin discovery bug where spawned agents were copying the task/report extensions into `tasks` and `reports` folder names instead of the plugin ID folder names OpenClaw expected. Spawn now copies them into `syntella-tasks` and `syntella-reports`, with a fallback for older template stores.
 - Hardened child plugin discovery further by copying the task/report extensions into both the agent workspace extension path and the child runtime extension path, and by writing explicit plugin load paths into the child config during spawn.
+- Fixed child Discord token wiring during spawn. The child JSON config was inheriting the main bot token from the root `openclaw.json` because the CLI `config set channels.discord.token ...` call was failing non-fatally and the JSON pass did not override it. Spawn now writes the child bot token directly into the child config.
 - The tool currently supports:
   - `list_recent`
   - `list_mine`
