@@ -42,6 +42,7 @@ SYNTELLA_EXEC_TIMEOUT_SECONDS="${SYNTELLA_EXEC_TIMEOUT_SECONDS:-60}"
 SYNTELLA_EXEC_MAX_OUTPUT_BYTES="${SYNTELLA_EXEC_MAX_OUTPUT_BYTES:-16384}"
 OPERATOR_BRIDGE_PORT="${OPERATOR_BRIDGE_PORT:-8787}"
 OPERATOR_BRIDGE_TOKEN=""
+SYNTELLA_API_PORT="${SYNTELLA_API_PORT:-3001}"
 
 # OPENCLAW_HOME should point to the user home base (e.g. /home/openclaw), not ~/.openclaw.
 # If inherited incorrectly from the environment, normalize it before any `openclaw config` calls.
@@ -135,6 +136,52 @@ assert_templates_exist() {
   for f in "${required[@]}"; do
     [[ -f "$f" ]] || { echo "Missing template file: $f"; exit 1; }
   done
+}
+
+install_syntella_api() {
+  local api_dir="$HOME/.openclaw/syntella-api"
+  local env_dir="/etc/openclaw"
+  local env_file="$env_dir/syntella-api.env"
+  local api_py="$api_dir/local-dev-server.py"
+
+  mkdir -p "$api_dir" "$HOME/.openclaw/logs"
+  sudo mkdir -p "$env_dir"
+
+  cp "$SCRIPT_DIR/local-dev-server.py" "$api_py"
+  chmod 755 "$api_py"
+
+  sudo tee "$env_file" >/dev/null <<EOF
+SYNTELLA_DEV_PORT=${SYNTELLA_API_PORT}
+SYNTELLA_WORKSPACE=${HOME}/.openclaw/workspace
+OPENCLAW_STATE_DIR=${HOME}/.openclaw
+SYNTELLA_OPERATOR_BRIDGE_URL=http://127.0.0.1:${OPERATOR_BRIDGE_PORT}
+EOF
+  sudo chmod 600 "$env_file"
+
+  pkill -f "syntella-api/local-dev-server.py" >/dev/null 2>&1 || true
+  sleep 1
+  pkill -9 -f "syntella-api/local-dev-server.py" >/dev/null 2>&1 || true
+
+  nohup bash -lc "set -a; source '$env_file'; set +a; exec python3 '$api_py'" > "$HOME/.openclaw/logs/syntella-api.log" 2>&1 &
+  local api_pid=$!
+
+  local waited=0
+  while (( waited < 10 )); do
+    if curl -fsS --max-time 2 "http://127.0.0.1:${SYNTELLA_API_PORT}/api/health" >/dev/null 2>&1; then
+      echo "Syntella API started (pid=$api_pid, port=${SYNTELLA_API_PORT})"
+      return 0
+    fi
+    if ! kill -0 "$api_pid" 2>/dev/null; then
+      echo "ERROR: Syntella API process died during startup."
+      tail -n 20 "$HOME/.openclaw/logs/syntella-api.log" 2>/dev/null || true
+      return 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+
+  echo "Warning: Syntella API did not respond to health check within 10s (pid=$api_pid)."
+  echo "It may still be starting. Check: curl http://127.0.0.1:${SYNTELLA_API_PORT}/api/health"
 }
 
 ensure_node_and_npm() {
@@ -628,6 +675,7 @@ configure_openclaw_runtime() {
   setup_openclaw_global_dotenv
   install_syntella_exec_wrapper
   install_operator_bridge
+  install_syntella_api
 
   oc config set agents.defaults.model.primary "moonshot/kimi-k2.5"
   oc config set agents.defaults.workspace "~/.openclaw/workspace/syntella"
@@ -743,8 +791,7 @@ http {
     }
 
     location /api/ {
-      proxy_pass http://127.0.0.1:${OPERATOR_BRIDGE_PORT}/;
-      proxy_set_header Authorization "Bearer ${OPERATOR_BRIDGE_TOKEN}";
+      proxy_pass http://127.0.0.1:${SYNTELLA_API_PORT};
       proxy_set_header Host \$host;
       proxy_set_header X-Real-IP \$remote_addr;
       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;

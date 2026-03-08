@@ -87,6 +87,8 @@ Local data sources:
   - `/api/usage/summary`
   - `/api/usage/sync`
   - `/api/costs/by-task`
+- Droplet bootstrap now needs to run a dedicated Syntella API process in addition to nginx and the operator bridge.
+- Public `/api/*` traffic on droplet should terminate at the Syntella API, which then proxies bridge-specific calls internally.
 
 ### Team page
 
