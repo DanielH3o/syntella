@@ -2,6 +2,57 @@
   window.SyntellaAdminRegister((app) => {
     const { refs, state, constants, utils, ui, actions } = app;
 
+    const syncRoutineScheduleFields = () => {
+      const type = refs.routineScheduleType.value || 'daily';
+      const showDaily = ['daily', 'weekdays'].includes(type);
+      const showWeekly = type === 'weekly';
+      const showHourly = type === 'hourly';
+      const showDate = type === 'date';
+      const showCustom = type === 'custom';
+      refs.routineScheduleDailySection.hidden = !showDaily;
+      refs.routineScheduleWeeklySection.hidden = !showWeekly;
+      refs.routineScheduleHourlySection.hidden = !showHourly;
+      refs.routineScheduleDateSection.hidden = !showDate;
+      refs.routineScheduleCustomSection.hidden = !showCustom;
+      refs.routineScheduleDailySection.style.display = showDaily ? 'grid' : 'none';
+      refs.routineScheduleWeeklySection.style.display = showWeekly ? 'grid' : 'none';
+      refs.routineScheduleHourlySection.style.display = showHourly ? 'grid' : 'none';
+      refs.routineScheduleDateSection.style.display = showDate ? 'grid' : 'none';
+      refs.routineScheduleCustomSection.style.display = showCustom ? 'grid' : 'none';
+      refs.routineScheduleHelper.textContent = {
+        daily: 'Runs every day at a specific local time.',
+        weekdays: 'Runs Monday to Friday at a specific local time.',
+        weekly: 'Runs once a week on the selected day and time.',
+        hourly: 'Runs repeatedly at a fixed hour interval.',
+        date: 'Runs once on the selected date and time.',
+        custom: 'Advanced mode for full cron expressions.',
+      }[type] || 'Configure when this routine should run.';
+    };
+
+    const updateRoutineSchedulePreview = () => {
+      syncRoutineScheduleFields();
+      try {
+        const type = refs.routineScheduleType.value;
+        const scheduleTime = type === 'weekly'
+          ? refs.routineScheduleWeeklyTime.value
+          : type === 'date'
+            ? refs.routineScheduleDateTime.value
+          : refs.routineScheduleTime.value;
+        const compiled = utils.compileRoutineSchedule({
+          scheduleType: type,
+          scheduleTime,
+          scheduleDay: refs.routineScheduleDay.value,
+          scheduleHours: refs.routineScheduleHours.value,
+          scheduleDate: refs.routineScheduleDate.value,
+          customCron: refs.routineCustomCron.value,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        });
+        refs.routineSchedulePreview.value = `${compiled.schedule_summary} • ${compiled.cron_expression}`;
+      } catch (error) {
+        refs.routineSchedulePreview.value = error.message || 'Invalid schedule';
+      }
+    };
+
     const renderTaskDetail = (task) => {
       if (!task) {
         refs.taskDetailTitle.textContent = 'Select a task';
@@ -165,11 +216,19 @@
         refs.routineDetailTitle.textContent = 'No routine selected';
         refs.routineDetailDescription.textContent = 'The drawer stays closed until you click a routine or create a new one.';
         refs.routineForm.reset();
-        refs.routineTimezoneInput.value = 'Europe/London';
+        refs.routineScheduleType.value = 'daily';
+        refs.routineScheduleTime.value = '09:00';
+        refs.routineScheduleWeeklyTime.value = '09:00';
+        refs.routineScheduleDay.value = '1';
+        refs.routineScheduleHours.value = '4';
+        refs.routineScheduleDate.value = '';
+        refs.routineScheduleDateTime.value = '09:00';
+        refs.routineCustomCron.value = '';
         refs.routineEnabledInput.checked = true;
         refs.routineRunsList.innerHTML = '<li><span>No routine selected.</span></li>';
         refs.routineReportsList.innerHTML = '<li><span>No routine selected.</span></li>';
         ui.setRoutineFeedback('');
+        updateRoutineSchedulePreview();
         ui.setRoutinesDrawerOpen(false);
         return;
       }
@@ -179,8 +238,13 @@
       refs.routineNameInput.value = routine.name || '';
       refs.routineAgentSelect.value = routine.agent_id || '';
       refs.routineScheduleType.value = routine.schedule_type || 'daily';
-      refs.routineScheduleValue.value = routine.schedule_value || '';
-      refs.routineTimezoneInput.value = routine.timezone || 'Europe/London';
+      refs.routineScheduleTime.value = routine.schedule_time || '09:00';
+      refs.routineScheduleWeeklyTime.value = routine.schedule_time || '09:00';
+      refs.routineScheduleDay.value = String(routine.schedule_day ?? '1');
+      refs.routineScheduleHours.value = routine.schedule_interval_hours || '4';
+      refs.routineScheduleDate.value = routine.schedule_date || '';
+      refs.routineScheduleDateTime.value = routine.schedule_time || '09:00';
+      refs.routineCustomCron.value = routine.cron_expression || '';
       refs.routineOutputMode.value = routine.output_mode || 'report_if_needed';
       refs.routineReportChannelInput.value = routine.report_channel_id || '';
       refs.routinePromptInput.value = routine.prompt || '';
@@ -192,6 +256,7 @@
         ? routine.reports.map((report) => `<li data-report-id="${report.id}"><strong>${utils.escapeHtml(report.title)}</strong><br><span>${utils.escapeHtml(report.summary || 'No summary')}</span></li>`).join('')
         : '<li><span>No reports linked yet.</span></li>';
       ui.setRoutineFeedback('');
+      updateRoutineSchedulePreview();
       ui.setRoutinesDrawerOpen(true);
     };
 
@@ -385,7 +450,14 @@
     refs.routineResetButton.addEventListener('click', () => resetRoutineForm(null));
     refs.routinesNewButton.addEventListener('click', () => {
       refs.routineForm.reset();
-      refs.routineTimezoneInput.value = 'Europe/London';
+      refs.routineScheduleType.value = 'daily';
+      refs.routineScheduleTime.value = '09:00';
+      refs.routineScheduleWeeklyTime.value = '09:00';
+      refs.routineScheduleDay.value = '1';
+      refs.routineScheduleHours.value = '4';
+      refs.routineScheduleDate.value = '';
+      refs.routineScheduleDateTime.value = '09:00';
+      refs.routineCustomCron.value = '';
       refs.routineEnabledInput.checked = true;
       refs.routineRunsList.innerHTML = '<li><span>No routine selected.</span></li>';
       refs.routineReportsList.innerHTML = '<li><span>No routine selected.</span></li>';
@@ -393,8 +465,22 @@
       refs.routineDetailDescription.textContent = 'Create recurring work for an agent. Tasks are one-off; routines are scheduled loops.';
       state.selectedRoutineId = null;
       ui.setRoutineFeedback('');
+      updateRoutineSchedulePreview();
       ui.setRoutinesDrawerOpen(true);
       refs.routineNameInput.focus();
+    });
+    [
+      refs.routineScheduleType,
+      refs.routineScheduleTime,
+      refs.routineScheduleWeeklyTime,
+      refs.routineScheduleDay,
+      refs.routineScheduleHours,
+      refs.routineScheduleDate,
+      refs.routineScheduleDateTime,
+      refs.routineCustomCron,
+    ].forEach((element) => {
+      element.addEventListener('input', updateRoutineSchedulePreview);
+      element.addEventListener('change', updateRoutineSchedulePreview);
     });
     refs.routinesDrawerBackdrop.addEventListener('click', () => resetRoutineForm(null));
     refs.routinesDrawerClose.addEventListener('click', () => resetRoutineForm(null));
@@ -422,13 +508,33 @@
       event.preventDefault();
       ui.setRoutineFeedback('Saving routine...');
       try {
+        const type = refs.routineScheduleType.value;
+        const scheduleTime = type === 'weekly'
+          ? refs.routineScheduleWeeklyTime.value
+          : type === 'date'
+            ? refs.routineScheduleDateTime.value
+          : refs.routineScheduleTime.value;
+        const compiled = utils.compileRoutineSchedule({
+          scheduleType: type,
+          scheduleTime,
+          scheduleDay: refs.routineScheduleDay.value,
+          scheduleHours: refs.routineScheduleHours.value,
+          scheduleDate: refs.routineScheduleDate.value,
+          customCron: refs.routineCustomCron.value,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        });
         const body = {
           name: refs.routineNameInput.value.trim(),
           agent_id: refs.routineAgentSelect.value,
-          schedule_type: refs.routineScheduleType.value,
-          schedule_value: refs.routineScheduleValue.value.trim(),
-          schedule_summary: `${refs.routineScheduleType.value}: ${refs.routineScheduleValue.value.trim() || 'not specified'}`,
-          timezone: refs.routineTimezoneInput.value.trim() || 'Europe/London',
+          schedule_type: type,
+          schedule_value: compiled.schedule_value,
+          schedule_summary: compiled.schedule_summary,
+          schedule_time: scheduleTime,
+          schedule_day: refs.routineScheduleDay.value,
+          schedule_interval_hours: refs.routineScheduleHours.value,
+          schedule_date: refs.routineScheduleDate.value,
+          cron_expression: compiled.cron_expression,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
           prompt: refs.routinePromptInput.value.trim(),
           output_mode: refs.routineOutputMode.value,
           report_channel_id: refs.routineReportChannelInput.value.trim(),
@@ -450,5 +556,7 @@
         ui.setRoutineFeedback(error.message || 'Could not save routine.', 'error');
       }
     });
+
+    updateRoutineSchedulePreview();
   });
 })();

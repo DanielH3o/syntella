@@ -42,7 +42,7 @@ SYNTELLA_EXEC_TIMEOUT_SECONDS="${SYNTELLA_EXEC_TIMEOUT_SECONDS:-60}"
 SYNTELLA_EXEC_MAX_OUTPUT_BYTES="${SYNTELLA_EXEC_MAX_OUTPUT_BYTES:-16384}"
 OPERATOR_BRIDGE_PORT="${OPERATOR_BRIDGE_PORT:-8787}"
 OPERATOR_BRIDGE_TOKEN=""
-SYNTELLA_API_PORT="${SYNTELLA_API_PORT:-3001}"
+SYNTELLA_API_PORT="${SYNTELLA_API_PORT:-8788}"
 
 # OPENCLAW_HOME should point to the user home base (e.g. /home/openclaw), not ~/.openclaw.
 # If inherited incorrectly from the environment, normalize it before any `openclaw config` calls.
@@ -135,6 +135,12 @@ assert_templates_exist() {
     "$TEMPLATE_DIR/frontend/admin-budget.js"
     "$TEMPLATE_DIR/frontend/admin-team.js"
     "$TEMPLATE_DIR/frontend/README.md"
+    "$TEMPLATE_DIR/workspace/extensions/tasks/openclaw.plugin.json"
+    "$TEMPLATE_DIR/workspace/extensions/tasks/index.ts"
+    "$TEMPLATE_DIR/workspace/extensions/tasks/tasks_db.py"
+    "$TEMPLATE_DIR/workspace/extensions/reports/openclaw.plugin.json"
+    "$TEMPLATE_DIR/workspace/extensions/reports/index.ts"
+    "$TEMPLATE_DIR/workspace/extensions/reports/reports_db.py"
     "$TEMPLATE_DIR/operator-bridge/syntella-spawn-agent.sh.tmpl"
     "$TEMPLATE_DIR/operator-bridge/server.py"
   )
@@ -149,8 +155,9 @@ install_syntella_api() {
   local env_dir="/etc/openclaw"
   local env_file="$env_dir/syntella-api.env"
   local api_py="$api_dir/local-dev-server.py"
+  local service_file="/etc/systemd/system/syntella-api.service"
 
-  mkdir -p "$api_dir" "$HOME/.openclaw/logs"
+  mkdir -p "$api_dir"
   sudo install -d -m 750 -o root -g openclaw "$env_dir"
 
   cp "$SCRIPT_DIR/local-dev-server.py" "$api_py"
@@ -165,30 +172,52 @@ EOF
   sudo chown root:openclaw "$env_file"
   sudo chmod 640 "$env_file"
 
-  pkill -f "syntella-api/local-dev-server.py" >/dev/null 2>&1 || true
-  sleep 1
-  pkill -9 -f "syntella-api/local-dev-server.py" >/dev/null 2>&1 || true
+  # Stop any existing systemd service
+  sudo systemctl stop syntella-api 2>/dev/null || true
 
-  nohup bash -lc "set -a; source '$env_file'; set +a; exec python3 '$api_py'" > "$HOME/.openclaw/logs/syntella-api.log" 2>&1 &
-  local api_pid=$!
+  # Create systemd service file
+  sudo tee "$service_file" >/dev/null <<EOF
+[Unit]
+Description=Syntella API Server
+After=network.target
 
+[Service]
+Type=simple
+User=openclaw
+WorkingDirectory=$api_dir
+EnvironmentFile=$env_file
+ExecStart=/usr/bin/python3 $api_py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=syntella-api
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  sudo chmod 644 "$service_file"
+
+  # Reload systemd and enable/start service
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now syntella-api
+
+  # Wait for service to be healthy (up to 15 seconds)
   local waited=0
-  while (( waited < 10 )); do
+  while (( waited < 15 )); do
     if curl -fsS --max-time 2 "http://127.0.0.1:${SYNTELLA_API_PORT}/api/health" >/dev/null 2>&1; then
-      echo "Syntella API started (pid=$api_pid, port=${SYNTELLA_API_PORT})"
+      echo "Syntella API started (systemd service, port=${SYNTELLA_API_PORT})"
       return 0
-    fi
-    if ! kill -0 "$api_pid" 2>/dev/null; then
-      echo "ERROR: Syntella API process died during startup."
-      tail -n 20 "$HOME/.openclaw/logs/syntella-api.log" 2>/dev/null || true
-      return 1
     fi
     sleep 1
     waited=$((waited + 1))
   done
 
-  echo "Warning: Syntella API did not respond to health check within 10s (pid=$api_pid)."
-  echo "It may still be starting. Check: curl http://127.0.0.1:${SYNTELLA_API_PORT}/api/health"
+  echo "Warning: Syntella API did not respond to health check within 15s."
+  echo "Check status: sudo systemctl status syntella-api"
+  echo "Check logs: sudo journalctl -u syntella-api -n 50"
+  echo "Health check: curl http://127.0.0.1:${SYNTELLA_API_PORT}/api/health"
 }
 
 ensure_node_and_npm() {
@@ -422,9 +451,15 @@ seed_workspace_context_files() {
   cp "$ws_tmpl/MEMORY.md" "$syntella_ws/MEMORY.md"
   cp "$ws_tmpl/TEAM.md" "$shared_ws/TEAM.md"
   cp "$ws_tmpl/TASKS.md" "$shared_ws/TASKS.md"
-  rm -rf "$syntella_ws/.openclaw/extensions/tasks" "$template_extensions_root/tasks"
+  rm -rf \
+    "$syntella_ws/.openclaw/extensions/tasks" \
+    "$syntella_ws/.openclaw/extensions/reports" \
+    "$template_extensions_root/tasks" \
+    "$template_extensions_root/reports"
   cp -R "$ws_tmpl/extensions/tasks" "$syntella_ws/.openclaw/extensions/tasks"
   cp -R "$ws_tmpl/extensions/tasks" "$template_extensions_root/tasks"
+  cp -R "$ws_tmpl/extensions/reports" "$syntella_ws/.openclaw/extensions/reports"
+  cp -R "$ws_tmpl/extensions/reports" "$template_extensions_root/reports"
 
   local today yesterday
   today="$(date +%F)"
@@ -711,6 +746,8 @@ if not isinstance(allow, list):
     allow = []
 if 'syntella-tasks' not in allow:
     allow.append('syntella-tasks')
+if 'syntella-reports' not in allow:
+    allow.append('syntella-reports')
 tools['allow'] = allow
 plugins = cfg.setdefault('plugins', {})
 plugin_allow = plugins.get('allow')
@@ -718,6 +755,8 @@ if not isinstance(plugin_allow, list):
     plugin_allow = []
 if 'syntella-tasks' not in plugin_allow:
     plugin_allow.append('syntella-tasks')
+if 'syntella-reports' not in plugin_allow:
+    plugin_allow.append('syntella-reports')
 plugins['allow'] = plugin_allow
 entries = plugins.get('entries')
 if not isinstance(entries, dict):
@@ -727,6 +766,11 @@ if not isinstance(entry, dict):
     entry = {}
 entry['enabled'] = True
 entries['syntella-tasks'] = entry
+entry = entries.get('syntella-reports')
+if not isinstance(entry, dict):
+    entry = {}
+entry['enabled'] = True
+entries['syntella-reports'] = entry
 plugins['entries'] = entries
 with open(config_path, 'w') as f:
     json.dump(cfg, f, indent=2)

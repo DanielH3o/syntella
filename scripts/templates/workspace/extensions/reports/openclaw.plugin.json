@@ -1,0 +1,14 @@
+{
+  "id": "syntella-reports",
+  "name": "Syntella Reports",
+  "version": "0.1.0",
+  "description": "Durable reporting tool for Syntella agents backed by the shared OpenClaw workspace report database.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "skills": [
+    "skills"
+  ]
+}

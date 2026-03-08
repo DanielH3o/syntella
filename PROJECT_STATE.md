@@ -138,6 +138,8 @@ Local data sources:
 - Task cards now show estimated cost and run status.
 - Task detail panel now shows estimated tokens/cost and run history.
 - Workspace templates now instruct agents to interact with tasks through the real task system instead of maintaining a parallel ledger in `shared/TASKS.md`.
+- Added a matching `reports` plugin/tool so agents can create durable routine outputs and longer findings instead of only posting summaries in chat.
+- Simplified both seeded `AGENTS.md` communication sections to match the inbox-channel model and removed the old shared-channel reply/debounce rules.
 
 ### Routines and Reports
 
@@ -152,13 +154,16 @@ Local data sources:
 - Routines currently support:
   - create/edit
   - enable/disable
-  - schedule metadata
+  - structured schedule input in the admin UI
+  - compiled cron expressions
   - assigned agent
   - output mode
   - manual `Run Now`
 - Routine create/edit/detail now uses a right-side drawer instead of a permanent inline card, matching the Team and Models interaction pattern.
-- `Run Now` records a `routine_run` and creates a placeholder durable report when the routine output mode expects one.
-- Full scheduler execution is not wired yet; this is the control-plane and reporting surface first.
+- Routine save now attempts to sync a real OpenClaw cron job, storing `cron_job_id` and `cron_expression` on the routine.
+- `Run Now` now attempts to execute the synced OpenClaw cron job instead of creating a placeholder report directly in the backend.
+- Full runtime verification of the exact OpenClaw cron CLI flags is still pending on a real running environment.
+- Agents are now being updated to use a `reports` tool for durable output, but full routine execution still needs to call that path automatically.
 
 ### Frontend refactor
 

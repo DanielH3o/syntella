@@ -78,8 +78,20 @@
       routineNameInput: document.getElementById('routine-name-input'),
       routineAgentSelect: document.getElementById('routine-agent-select'),
       routineScheduleType: document.getElementById('routine-schedule-type'),
-      routineScheduleValue: document.getElementById('routine-schedule-value'),
-      routineTimezoneInput: document.getElementById('routine-timezone-input'),
+      routineScheduleHelper: document.getElementById('routine-schedule-helper'),
+      routineScheduleDailySection: document.getElementById('routine-schedule-daily-section'),
+      routineScheduleWeeklySection: document.getElementById('routine-schedule-weekly-section'),
+      routineScheduleHourlySection: document.getElementById('routine-schedule-hourly-section'),
+      routineScheduleDateSection: document.getElementById('routine-schedule-date-section'),
+      routineScheduleCustomSection: document.getElementById('routine-schedule-custom-section'),
+      routineScheduleTime: document.getElementById('routine-schedule-time'),
+      routineScheduleDay: document.getElementById('routine-schedule-day'),
+      routineScheduleWeeklyTime: document.getElementById('routine-schedule-weekly-time'),
+      routineScheduleHours: document.getElementById('routine-schedule-hours'),
+      routineScheduleDate: document.getElementById('routine-schedule-date'),
+      routineScheduleDateTime: document.getElementById('routine-schedule-date-time'),
+      routineCustomCron: document.getElementById('routine-custom-cron'),
+      routineSchedulePreview: document.getElementById('routine-schedule-preview'),
       routineOutputMode: document.getElementById('routine-output-mode'),
       routineReportChannelInput: document.getElementById('routine-report-channel-input'),
       routinePromptInput: document.getElementById('routine-prompt-input'),
@@ -220,6 +232,90 @@
           .join('');
         select.value = values.includes(selected) ? selected : 'all';
       },
+      compileRoutineSchedule({
+        scheduleType,
+        scheduleTime,
+        scheduleDay,
+        scheduleHours,
+        scheduleDate,
+        customCron,
+        timezone,
+      }) {
+        const time = (scheduleTime || '09:00').trim();
+        const [hourRaw = '9', minuteRaw = '0'] = time.split(':');
+        const hour = Number(hourRaw);
+        const minute = Number(minuteRaw);
+        const tz = (timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC').trim() || 'UTC';
+        if (!Number.isInteger(hour) || hour < 0 || hour > 23 || !Number.isInteger(minute) || minute < 0 || minute > 59) {
+          throw new Error('Enter a valid time.');
+        }
+        if (scheduleType === 'daily') {
+          return {
+            cron_expression: `${minute} ${hour} * * *`,
+            schedule_value: time,
+            schedule_summary: `Runs daily at ${time} ${tz}`,
+          };
+        }
+        if (scheduleType === 'weekdays') {
+          return {
+            cron_expression: `${minute} ${hour} * * 1-5`,
+            schedule_value: time,
+            schedule_summary: `Runs weekdays at ${time} ${tz}`,
+          };
+        }
+        if (scheduleType === 'weekly') {
+          const dayMap = {
+            '0': 'Sunday',
+            '1': 'Monday',
+            '2': 'Tuesday',
+            '3': 'Wednesday',
+            '4': 'Thursday',
+            '5': 'Friday',
+            '6': 'Saturday',
+          };
+          const day = String(scheduleDay || '1');
+          return {
+            cron_expression: `${minute} ${hour} * * ${day}`,
+            schedule_value: `${day}@${time}`,
+            schedule_summary: `Runs every ${dayMap[day] || 'Monday'} at ${time} ${tz}`,
+          };
+        }
+        if (scheduleType === 'hourly') {
+          const interval = Number(scheduleHours || 4);
+          if (!Number.isInteger(interval) || interval < 1 || interval > 24) {
+            throw new Error('Hourly routines must run every 1 to 24 hours.');
+          }
+          return {
+            cron_expression: `0 */${interval} * * *`,
+            schedule_value: String(interval),
+            schedule_summary: `Runs every ${interval} hour${interval === 1 ? '' : 's'}`,
+          };
+        }
+        if (scheduleType === 'date') {
+          const date = (scheduleDate || '').trim();
+          if (!date) {
+            throw new Error('Select a run date.');
+          }
+          const localDate = new Date(`${date}T${time}`);
+          if (Number.isNaN(localDate.getTime())) {
+            throw new Error('Enter a valid run date and time.');
+          }
+          return {
+            cron_expression: localDate.toISOString(),
+            schedule_value: `${date}@${time}`,
+            schedule_summary: `Runs once on ${date} at ${time} ${tz}`,
+          };
+        }
+        const cron = (customCron || '').trim();
+        if (!cron) {
+          throw new Error('Enter a cron expression for custom schedules.');
+        }
+        return {
+          cron_expression: cron,
+          schedule_value: cron,
+          schedule_summary: `Custom cron (${cron}) in ${tz}`,
+        };
+      },
       classifyBudgetState(ratio) {
         if (ratio >= 1) return 'danger';
         if (ratio >= 0.8) return 'warning';
@@ -289,6 +385,22 @@
     window.SyntellaAdminApp = app;
 
     featureRegistry.forEach((feature) => feature(app));
+    app.actions.init = async () => {
+      const tasksPromise = typeof app.actions.loadTasks === 'function' ? app.actions.loadTasks() : Promise.resolve();
+      const routinesPromise = typeof app.actions.loadRoutines === 'function' ? app.actions.loadRoutines() : Promise.resolve();
+      const reportsPromise = typeof app.actions.loadReports === 'function' ? app.actions.loadReports() : Promise.resolve();
+      const modelsPromise = typeof app.actions.loadModels === 'function' ? app.actions.loadModels() : Promise.resolve();
+      const budgetPromise = typeof app.actions.renderBudget === 'function' ? app.actions.renderBudget() : Promise.resolve();
+      const teamPromise = typeof app.actions.loadDepartments === 'function' ? app.actions.loadDepartments() : Promise.resolve();
+      await Promise.all([
+        tasksPromise,
+        routinesPromise,
+        reportsPromise,
+        modelsPromise,
+        budgetPromise,
+        teamPromise,
+      ]);
+    };
     if (typeof app.actions.init === 'function') {
       app.actions.init();
     }

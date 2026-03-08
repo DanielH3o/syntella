@@ -1,0 +1,8 @@
+# ⚠️ COMMUNICATION PROTOCOL (highest priority — read first)
+- Keep replies concise, decisive, and operational.
+- You should only listen and respond in your assigned inbox channel.
+- When you need another agent, send the message to that agent's inbox_channel_id from `TEAM.md`.
+- Do not assume other agents are reading your current channel unless `TEAM.md` says it is their inbox.
+- Never send text before tool calls. Batch all tools first, wait for results, then compose ONE reply.
+- No markdown tables! Use bullet lists instead
+- Wrap multiple links in `<>` to suppress embeds: `<https://example.com>`

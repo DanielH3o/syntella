@@ -234,20 +234,66 @@
                     <option value="daily">Daily</option>
                     <option value="weekdays">Weekdays</option>
                     <option value="weekly">Weekly</option>
-                    <option value="hourly">Hourly</option>
+                    <option value="hourly">Every X Hours</option>
+                    <option value="date">Date</option>
                     <option value="custom">Custom</option>
                   </select>
                 </div>
                 <div class="task-form__field">
-                  <label class="form-label" for="routine-schedule-value">Schedule Value</label>
-                  <input id="routine-schedule-value" placeholder="09:00 or Every 4 hours" />
+                  <label class="form-label" for="routine-schedule-preview">Schedule Preview</label>
+                  <input id="routine-schedule-preview" readonly />
+                </div>
+              </div>
+              <p id="routine-schedule-helper" class="models-helper">Runs every day at a specific local time.</p>
+              <div id="routine-schedule-daily-section" class="models-form__grid">
+                <div class="task-form__field">
+                  <label class="form-label" for="routine-schedule-time">Run Time</label>
+                  <input id="routine-schedule-time" type="time" value="09:00" />
+                </div>
+              </div>
+              <div id="routine-schedule-weekly-section" class="models-form__grid" hidden>
+                <div class="task-form__field">
+                  <label class="form-label" for="routine-schedule-day">Day</label>
+                  <select id="routine-schedule-day">
+                    <option value="1">Monday</option>
+                    <option value="2">Tuesday</option>
+                    <option value="3">Wednesday</option>
+                    <option value="4">Thursday</option>
+                    <option value="5">Friday</option>
+                    <option value="6">Saturday</option>
+                    <option value="0">Sunday</option>
+                  </select>
+                </div>
+                <div class="task-form__field">
+                  <label class="form-label" for="routine-schedule-weekly-time">Run Time</label>
+                  <input id="routine-schedule-weekly-time" type="time" value="09:00" />
+                </div>
+              </div>
+              <div id="routine-schedule-hourly-section" class="models-form__grid" hidden>
+                <div class="task-form__field">
+                  <label class="form-label" for="routine-schedule-hours">Interval</label>
+                  <input id="routine-schedule-hours" type="number" min="1" max="24" step="1" value="4" />
+                  <p class="models-helper">Runs every N hours from the top of the hour.</p>
+                </div>
+              </div>
+              <div id="routine-schedule-date-section" class="models-form__grid" hidden>
+                <div class="task-form__field">
+                  <label class="form-label" for="routine-schedule-date">Date</label>
+                  <input id="routine-schedule-date" type="date" />
+                </div>
+                <div class="task-form__field">
+                  <label class="form-label" for="routine-schedule-date-time">Run Time</label>
+                  <input id="routine-schedule-date-time" type="time" value="09:00" />
+                </div>
+              </div>
+              <div id="routine-schedule-custom-section" class="models-form__grid" hidden>
+                <div class="task-form__field">
+                  <label class="form-label" for="routine-custom-cron">Cron Expression</label>
+                  <input id="routine-custom-cron" placeholder="0 9 * * 1-5" />
+                  <p class="models-helper">Advanced mode only. Use standard five-part cron syntax.</p>
                 </div>
               </div>
               <div class="models-form__grid">
-                <div class="task-form__field">
-                  <label class="form-label" for="routine-timezone-input">Timezone</label>
-                  <input id="routine-timezone-input" value="Europe/London" />
-                </div>
                 <div class="task-form__field">
                   <label class="form-label" for="routine-output-mode">Output Mode</label>
                   <select id="routine-output-mode">
@@ -261,6 +307,7 @@
                 <label class="form-label" for="routine-report-channel-input">Report Channel ID (optional)</label>
                 <input id="routine-report-channel-input" placeholder="Send short summaries here later" />
               </div>
+              <p class="models-helper">Schedules use the browser machine timezone automatically.</p>
               <div class="task-form__field">
                 <label class="form-label" for="routine-prompt-input">Instruction</label>
                 <textarea id="routine-prompt-input" placeholder="Check Search Console performance, summarize wins/issues, and propose next changes."></textarea>

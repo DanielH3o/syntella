@@ -3,12 +3,15 @@
 
 import json
 import os
+import re
 import sqlite3
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from socketserver import ThreadingMixIn
+from zoneinfo import ZoneInfo
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from urllib.parse import parse_qs, urlparse
@@ -19,6 +22,7 @@ OPENCLAW_STATE_DIR = Path(
     os.environ.get("OPENCLAW_STATE_DIR", os.path.expanduser("~/.openclaw"))
 )
 OPENCLAW_CONFIG = OPENCLAW_STATE_DIR / "openclaw.json"
+OPENCLAW_CRON_JOBS = OPENCLAW_STATE_DIR / "cron" / "jobs.json"
 OPERATOR_BRIDGE_ENV = Path("/etc/openclaw/operator-bridge.env")
 OPERATOR_BRIDGE_URL = os.environ.get("SYNTELLA_OPERATOR_BRIDGE_URL", "http://127.0.0.1:8787")
 DB_PATH = WORKSPACE / "tasks.db"
@@ -46,6 +50,15 @@ def get_conn():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def ensure_column(cursor, table_name, column_name, definition):
+    columns = {
+        row[1]
+        for row in cursor.execute(f"PRAGMA table_info({table_name})").fetchall()
+    }
+    if column_name not in columns:
+        cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
 
 
 def init_db():
@@ -142,7 +155,13 @@ def init_db():
             agent_id TEXT NOT NULL,
             schedule_type TEXT NOT NULL DEFAULT 'daily',
             schedule_value TEXT NOT NULL DEFAULT '',
+            schedule_time TEXT,
+            schedule_day INTEGER,
+            schedule_interval_hours INTEGER,
+            schedule_date TEXT,
             schedule_summary TEXT NOT NULL DEFAULT '',
+            cron_expression TEXT,
+            cron_job_id TEXT,
             timezone TEXT NOT NULL DEFAULT 'UTC',
             prompt TEXT NOT NULL DEFAULT '',
             output_mode TEXT NOT NULL DEFAULT 'report_if_needed',
@@ -155,6 +174,12 @@ def init_db():
         )
         """
     )
+    ensure_column(cursor, "routines", "schedule_time", "TEXT")
+    ensure_column(cursor, "routines", "schedule_day", "INTEGER")
+    ensure_column(cursor, "routines", "schedule_interval_hours", "INTEGER")
+    ensure_column(cursor, "routines", "schedule_date", "TEXT")
+    ensure_column(cursor, "routines", "cron_expression", "TEXT")
+    ensure_column(cursor, "routines", "cron_job_id", "TEXT")
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS routine_runs (
@@ -383,6 +408,252 @@ def parse_optional_number(value, cast_type=float):
         return cast_type(value)
     except (TypeError, ValueError):
         return None
+
+
+def parse_schedule_time(value, default="09:00"):
+    raw = (value or default).strip()
+    match = re.fullmatch(r"(\d{1,2}):(\d{2})", raw)
+    if not match:
+        raise ValueError("Enter a valid schedule time in HH:MM format.")
+    hour = int(match.group(1))
+    minute = int(match.group(2))
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        raise ValueError("Enter a valid schedule time in HH:MM format.")
+    return f"{hour:02d}:{minute:02d}", hour, minute
+
+
+def compile_routine_schedule(body):
+    schedule_type = (body.get("schedule_type") or "daily").strip() or "daily"
+    timezone_name = (body.get("timezone") or "UTC").strip() or "UTC"
+    schedule_day = parse_optional_number(body.get("schedule_day"), int)
+    schedule_interval_hours = parse_optional_number(body.get("schedule_interval_hours"), int)
+    schedule_date = (body.get("schedule_date") or "").strip()
+    custom_cron = (body.get("cron_expression") or "").strip()
+    schedule_time, hour, minute = parse_schedule_time(body.get("schedule_time"))
+
+    if schedule_type == "daily":
+        return {
+            "schedule_type": schedule_type,
+            "schedule_time": schedule_time,
+            "schedule_day": None,
+            "schedule_interval_hours": None,
+            "schedule_date": None,
+            "schedule_value": schedule_time,
+            "schedule_summary": f"Runs daily at {schedule_time} {timezone_name}",
+            "cron_expression": f"{minute} {hour} * * *",
+        }
+    if schedule_type == "weekdays":
+        return {
+            "schedule_type": schedule_type,
+            "schedule_time": schedule_time,
+            "schedule_day": None,
+            "schedule_interval_hours": None,
+            "schedule_date": None,
+            "schedule_value": schedule_time,
+            "schedule_summary": f"Runs weekdays at {schedule_time} {timezone_name}",
+            "cron_expression": f"{minute} {hour} * * 1-5",
+        }
+    if schedule_type == "weekly":
+        if schedule_day is None or schedule_day not in {0, 1, 2, 3, 4, 5, 6}:
+            raise ValueError("Weekly routines need a valid weekday.")
+        day_name = {
+            0: "Sunday",
+            1: "Monday",
+            2: "Tuesday",
+            3: "Wednesday",
+            4: "Thursday",
+            5: "Friday",
+            6: "Saturday",
+        }[schedule_day]
+        return {
+            "schedule_type": schedule_type,
+            "schedule_time": schedule_time,
+            "schedule_day": schedule_day,
+            "schedule_interval_hours": None,
+            "schedule_date": None,
+            "schedule_value": f"{schedule_day}@{schedule_time}",
+            "schedule_summary": f"Runs every {day_name} at {schedule_time} {timezone_name}",
+            "cron_expression": f"{minute} {hour} * * {schedule_day}",
+        }
+    if schedule_type == "hourly":
+        if schedule_interval_hours is None or schedule_interval_hours < 1 or schedule_interval_hours > 24:
+            raise ValueError("Hourly routines must run every 1 to 24 hours.")
+        return {
+            "schedule_type": schedule_type,
+            "schedule_time": None,
+            "schedule_day": None,
+            "schedule_interval_hours": schedule_interval_hours,
+            "schedule_date": None,
+            "schedule_value": str(schedule_interval_hours),
+            "schedule_summary": f"Runs every {schedule_interval_hours} hour{'s' if schedule_interval_hours != 1 else ''}",
+            "cron_expression": f"0 */{schedule_interval_hours} * * *",
+        }
+    if schedule_type == "date":
+        if not schedule_date:
+            raise ValueError("Date routines need a run date.")
+        try:
+            scheduled_at = datetime.fromisoformat(f"{schedule_date}T{schedule_time}").replace(
+                tzinfo=ZoneInfo(timezone_name)
+            )
+        except Exception as exc:
+            raise ValueError("Date routines need a valid date and time.") from exc
+        return {
+            "schedule_type": schedule_type,
+            "schedule_time": schedule_time,
+            "schedule_day": None,
+            "schedule_interval_hours": None,
+            "schedule_date": schedule_date,
+            "schedule_value": f"{schedule_date}@{schedule_time}",
+            "schedule_summary": f"Runs once on {schedule_date} at {schedule_time} {timezone_name}",
+            "cron_expression": scheduled_at.astimezone(timezone.utc).isoformat(),
+        }
+    if schedule_type == "custom":
+        if not custom_cron:
+            raise ValueError("Custom routines need a cron expression.")
+        return {
+            "schedule_type": schedule_type,
+            "schedule_time": None,
+            "schedule_day": None,
+            "schedule_interval_hours": None,
+            "schedule_date": None,
+            "schedule_value": custom_cron,
+            "schedule_summary": f"Custom cron ({custom_cron}) in {timezone_name}",
+            "cron_expression": custom_cron,
+        }
+    raise ValueError("Unsupported schedule type.")
+
+
+def run_openclaw_command(args):
+    result = subprocess.run(
+        ["openclaw", *args],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        env=os.environ.copy(),
+    )
+    if result.returncode != 0:
+        stderr = (result.stderr or result.stdout or "").strip()
+        raise RuntimeError(stderr or "OpenClaw cron command failed")
+    return (result.stdout or "").strip()
+
+
+def read_openclaw_cron_jobs():
+    if not OPENCLAW_CRON_JOBS.exists():
+        return []
+    try:
+        payload = json.loads(OPENCLAW_CRON_JOBS.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if isinstance(payload, dict):
+        jobs = payload.get("jobs")
+        if isinstance(jobs, list):
+            return [item for item in jobs if isinstance(item, dict)]
+    return []
+
+
+def routine_cron_job_name(routine_id, routine_name):
+    return f"Syntella Routine #{routine_id}: {routine_name}"
+
+
+def build_routine_cron_message(routine):
+    lines = [
+        f"Run the routine \"{routine['name']}\".",
+        f"Assigned agent: {routine['agent_id']}.",
+        routine.get("prompt") or "No explicit routine prompt was configured.",
+        "Use the reports tool for durable output.",
+    ]
+    output_mode = routine.get("output_mode") or "report_if_needed"
+    if output_mode == "report_only":
+        lines.append("Create a durable report. Do not create a task unless explicitly instructed.")
+    elif output_mode == "report_if_needed":
+        lines.append("Create a durable report if there is something meaningful to report.")
+    elif output_mode == "report_and_task_if_needed":
+        lines.append("Create a durable report and create a task if follow-up work is needed.")
+    report_channel_id = routine.get("report_channel_id")
+    if report_channel_id:
+        lines.append(f"If you send a short Discord summary, use report channel {report_channel_id}.")
+    return "\n".join(line for line in lines if line)
+
+
+def sync_routine_cron_job(routine):
+    if not routine:
+        return routine
+    routine_id = int(routine["id"])
+    job_name = routine_cron_job_name(routine_id, routine["name"])
+    cron_expression = routine.get("cron_expression") or ""
+    timezone_name = routine.get("timezone") or "UTC"
+    agent_id = routine.get("agent_id") or ""
+    message = build_routine_cron_message(routine)
+    existing_job_id = (routine.get("cron_job_id") or "").strip()
+
+    if not cron_expression:
+        raise RuntimeError("Routine is missing a compiled cron expression.")
+
+    if existing_job_id:
+        args = [
+            "cron", "edit", existing_job_id,
+            "--name", job_name,
+            "--tz", timezone_name,
+            "--session", "isolated",
+            "--agent", agent_id,
+            "--message", message,
+        ]
+        if routine.get("schedule_type") == "date":
+            args.extend(["--at", cron_expression, "--delete-after-run"])
+        else:
+            args.extend(["--cron", cron_expression])
+        run_openclaw_command(args)
+    else:
+        args = [
+            "cron", "add",
+            "--name", job_name,
+            "--tz", timezone_name,
+            "--session", "isolated",
+            "--agent", agent_id,
+            "--message", message,
+        ]
+        if routine.get("schedule_type") == "date":
+            args.extend(["--at", cron_expression, "--delete-after-run"])
+        else:
+            args.extend(["--cron", cron_expression])
+        run_openclaw_command(args)
+
+    jobs = read_openclaw_cron_jobs()
+    matched = next(
+        (
+            job for job in jobs
+            if str(job.get("id") or "") == existing_job_id
+            or job.get("name") == job_name
+        ),
+        None,
+    )
+    cron_job_id = str((matched or {}).get("id") or existing_job_id or "")
+    next_run_at = (matched or {}).get("nextRunAt") or (matched or {}).get("next_run_at")
+
+    if cron_job_id:
+        if routine.get("enabled"):
+            try:
+                run_openclaw_command(["cron", "enable", cron_job_id])
+            except RuntimeError:
+                pass
+        else:
+            try:
+                run_openclaw_command(["cron", "disable", cron_job_id])
+            except RuntimeError:
+                pass
+
+    run_query(
+        """
+        UPDATE routines
+        SET cron_job_id = ?, next_run_at = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (cron_job_id or None, next_run_at, routine_id),
+        commit=True,
+    )
+    return fetch_routine_detail(routine_id)
 
 
 def normalize_modalities(value):
@@ -1154,6 +1425,8 @@ def normalize_routine(row):
         return None
     item = dict(row)
     item["enabled"] = bool(item.get("enabled"))
+    item["schedule_day"] = parse_optional_number(item.get("schedule_day"), int)
+    item["schedule_interval_hours"] = parse_optional_number(item.get("schedule_interval_hours"), int)
     item["run_count"] = int(item.get("run_count") or 0)
     item["report_count"] = int(item.get("report_count") or 0)
     item["latest_run_status"] = item.get("latest_run_status") or ""
@@ -1256,10 +1529,8 @@ def upsert_routine(body, routine_id=None):
     agent_id = (body.get("agent_id") or "").strip()
     if not name or not agent_id:
         raise ValueError("name and agent_id are required")
-    schedule_type = (body.get("schedule_type") or "daily").strip()
-    schedule_value = (body.get("schedule_value") or "").strip()
-    schedule_summary = (body.get("schedule_summary") or "").strip()
     timezone_name = (body.get("timezone") or "UTC").strip() or "UTC"
+    compiled_schedule = compile_routine_schedule(body)
     prompt = (body.get("prompt") or "").strip()
     output_mode = (body.get("output_mode") or "report_if_needed").strip()
     report_channel_id = (body.get("report_channel_id") or "").strip() or None
@@ -1268,16 +1539,22 @@ def upsert_routine(body, routine_id=None):
         routine_id = run_query(
             """
             INSERT INTO routines (
-                name, agent_id, schedule_type, schedule_value, schedule_summary,
+                name, agent_id, schedule_type, schedule_value, schedule_time, schedule_day,
+                schedule_interval_hours, schedule_date, schedule_summary, cron_expression,
                 timezone, prompt, output_mode, report_channel_id, enabled
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 name,
                 agent_id,
-                schedule_type,
-                schedule_value,
-                schedule_summary,
+                compiled_schedule["schedule_type"],
+                compiled_schedule["schedule_value"],
+                compiled_schedule["schedule_time"],
+                compiled_schedule["schedule_day"],
+                compiled_schedule["schedule_interval_hours"],
+                compiled_schedule["schedule_date"],
+                compiled_schedule["schedule_summary"],
+                compiled_schedule["cron_expression"],
                 timezone_name,
                 prompt,
                 output_mode,
@@ -1295,7 +1572,12 @@ def upsert_routine(body, routine_id=None):
                 agent_id = ?,
                 schedule_type = ?,
                 schedule_value = ?,
+                schedule_time = ?,
+                schedule_day = ?,
+                schedule_interval_hours = ?,
+                schedule_date = ?,
                 schedule_summary = ?,
+                cron_expression = ?,
                 timezone = ?,
                 prompt = ?,
                 output_mode = ?,
@@ -1307,9 +1589,14 @@ def upsert_routine(body, routine_id=None):
             (
                 name,
                 agent_id,
-                schedule_type,
-                schedule_value,
-                schedule_summary,
+                compiled_schedule["schedule_type"],
+                compiled_schedule["schedule_value"],
+                compiled_schedule["schedule_time"],
+                compiled_schedule["schedule_day"],
+                compiled_schedule["schedule_interval_hours"],
+                compiled_schedule["schedule_date"],
+                compiled_schedule["schedule_summary"],
+                compiled_schedule["cron_expression"],
                 timezone_name,
                 prompt,
                 output_mode,
@@ -1319,41 +1606,29 @@ def upsert_routine(body, routine_id=None):
             ),
             commit=True,
         )
-    return fetch_routine_detail(int(routine_id))
+    return sync_routine_cron_job(fetch_routine_detail(int(routine_id)))
 
 
 def run_routine_now(routine_id):
     routine = fetch_routine_detail(routine_id)
     if not routine:
         return None
+    if not routine.get("cron_job_id"):
+        routine = sync_routine_cron_job(routine)
+    cron_job_id = (routine.get("cron_job_id") or "").strip()
+    if not cron_job_id:
+        raise RuntimeError("Routine is missing an OpenClaw cron job id.")
     started_at = utc_now_iso()
-    summary = f"Manual routine run queued for {routine['name']}."
-    run_id = run_query(
+    summary = f"Manual cron run requested for {routine['name']}."
+    run_openclaw_command(["cron", "run", cron_job_id])
+    run_query(
         """
-        INSERT INTO routine_runs (routine_id, status, started_at, ended_at, output_summary)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO routine_runs (routine_id, status, started_at, output_summary)
+        VALUES (?, ?, ?, ?)
         """,
-        (routine_id, "completed", started_at, started_at, summary),
+        (routine_id, "queued", started_at, summary),
         commit=True,
     )
-    if routine.get("output_mode") in {"report_only", "report_if_needed", "report_and_task_if_needed"}:
-        run_query(
-            """
-            INSERT INTO reports (title, agent_id, routine_id, routine_run_id, report_type, summary, body, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                f"{routine['name']} Report",
-                routine.get("agent_id") or "",
-                routine_id,
-                run_id,
-                "routine",
-                summary,
-                routine.get("prompt") or "Routine executed manually. Full automated report generation is not wired yet.",
-                "published",
-            ),
-            commit=True,
-        )
     run_query(
         """
         UPDATE routines

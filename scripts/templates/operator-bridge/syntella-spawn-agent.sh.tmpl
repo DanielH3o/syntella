@@ -200,6 +200,10 @@ if [[ -d "$SHARED_WS_ROOT/templates/extensions/tasks" ]]; then
   rm -rf "$AGENT_WS/.openclaw/extensions/tasks"
   cp -R "$SHARED_WS_ROOT/templates/extensions/tasks" "$AGENT_WS/.openclaw/extensions/tasks"
 fi
+if [[ -d "$SHARED_WS_ROOT/templates/extensions/reports" ]]; then
+  rm -rf "$AGENT_WS/.openclaw/extensions/reports"
+  cp -R "$SHARED_WS_ROOT/templates/extensions/reports" "$AGENT_WS/.openclaw/extensions/reports"
+fi
 DISPLAY_NAME="$(python3 -c "
 import sys
 s='$AGENT_ID'.replace('-', ' ').strip()
@@ -311,6 +315,8 @@ try:
         allow = []
     if "syntella-tasks" not in allow:
         allow.append("syntella-tasks")
+    if "syntella-reports" not in allow:
+        allow.append("syntella-reports")
     tools["allow"] = allow
 
     plugins = cfg.setdefault("plugins", {})
@@ -319,6 +325,8 @@ try:
         plugin_allow = []
     if "syntella-tasks" not in plugin_allow:
         plugin_allow.append("syntella-tasks")
+    if "syntella-reports" not in plugin_allow:
+        plugin_allow.append("syntella-reports")
     plugins["allow"] = plugin_allow
 
     entries = plugins.get("entries")
@@ -329,6 +337,11 @@ try:
         entry = {}
     entry["enabled"] = True
     entries["syntella-tasks"] = entry
+    entry = entries.get("syntella-reports")
+    if not isinstance(entry, dict):
+        entry = {}
+    entry["enabled"] = True
+    entries["syntella-reports"] = entry
     plugins["entries"] = entries
 
     with open(cfg_path, "w", encoding="utf-8") as f:
