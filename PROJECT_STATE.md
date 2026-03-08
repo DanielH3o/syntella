@@ -58,6 +58,9 @@ Local data sources:
 - Model pricing should default from OpenClaw/local model metadata when available.
 - Missing or zero-cost model pricing should be overridable locally by the user.
 - `~/.openclaw/openclaw.json` is the canonical base catalog for models in this environment.
+- Agent workspace instructions should treat `~/.openclaw/workspace/tasks.db` and `/api/tasks` as the canonical task system.
+- `~/.openclaw/workspace/shared/TASKS.md` is now legacy compatibility context, not the source of truth.
+- Task workflow is moving out of prompt text and into a real OpenClaw plugin tool plus companion skill.
 
 ### Budget tracking
 
@@ -126,6 +129,20 @@ Local data sources:
 - Drag-and-drop status updates persist via API.
 - Task cards now show estimated cost and run status.
 - Task detail panel now shows estimated tokens/cost and run history.
+- Workspace templates now instruct agents to interact with tasks through the real task system instead of maintaining a parallel ledger in `shared/TASKS.md`.
+
+### Tasks plugin
+
+- Added a seeded workspace plugin `syntella-tasks` under the workspace extension templates.
+- Added a companion `tasks-tool` skill that tells agents to use the tool instead of manual curl/API walkthroughs.
+- The tool currently supports:
+  - `list`
+  - `list_mine`
+  - `get`
+  - `create`
+  - `update_status`
+  - `update_description`
+- The helper updates `task_runs` when status transitions happen so task-cost attribution still works.
 
 ### Task attribution
 
@@ -212,9 +229,10 @@ Harden the Team-side agent creation path and then improve attribution accuracy.
 
 Immediate direction:
 
-1. Make Team-page agent creation robust when the operator bridge is unavailable or misconfigured.
-2. Add clearer bridge health / spawn failure visibility in the UI.
-3. Then improve attribution accuracy by attaching exact `session_id` to task runs when possible.
+1. Verify the seeded `syntella-tasks` plugin loads correctly in real OpenClaw workspaces.
+2. Make Team-page agent creation robust when the operator bridge is unavailable or misconfigured.
+3. Add clearer bridge health / spawn failure visibility in the UI.
+4. Then improve attribution accuracy by attaching exact `session_id` to task runs when possible.
 
 ## Planned Next Work
 

@@ -1,16 +1,25 @@
-# Task Ledger
+# TASKS.md (Legacy)
 
-## Active
-- [IN_PROGRESS (P1)] Syntella - And we're off: Send a message in the server confirming the first HEARTBEAT has triggered and move this task to completed.
+This file is no longer the operational source of truth for Syntella tasks.
 
-## Todo
-- (none)
+Use the real task system instead:
 
-## Last update
+- DB: `~/.openclaw/workspace/tasks.db`
+- Admin UI: `http://127.0.0.1:3000/admin#tasks`
+- API: `http://127.0.0.1:3000/api/tasks`
 
-## Completed
+Canonical statuses:
 
-## Format
-- [STATUS] Owner — Deliverable
-  - acceptance: <how we know it's done>
-  - context: <links/files/notes>
+- `backlog`
+- `in_progress`
+- `review`
+- `done`
+
+Notes:
+
+- Starting work should move a task to `in_progress`.
+- Finishing implementation should usually move it to `review`.
+- Accepted work should move to `done`.
+- Task runs and estimated cost attribution are driven off these status transitions.
+
+Keep this file only for compatibility with older workspace setups. Do not maintain a parallel manual ledger here.

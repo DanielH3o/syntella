@@ -356,7 +356,9 @@ seed_workspace_context_files() {
   local ws_tmpl="$TEMPLATE_DIR/workspace"
   local syntella_ws="$ws_root/syntella"
   local shared_ws="$ws_root/shared"
+  local template_extensions_root="$ws_root/templates/extensions"
   mkdir -p "$syntella_ws" "$syntella_ws/memory" "$shared_ws"
+  mkdir -p "$syntella_ws/.openclaw/extensions" "$template_extensions_root"
 
   render_template "$ws_tmpl/AGENTS.SYNTELLA.md.tmpl" "$syntella_ws/AGENTS.md"
   render_template "$ws_tmpl/AGENTS.SPAWNED.md.tmpl" "$ws_root/AGENTS.SPAWNED.md"
@@ -366,6 +368,9 @@ seed_workspace_context_files() {
   cp "$ws_tmpl/MEMORY.md" "$syntella_ws/MEMORY.md"
   cp "$ws_tmpl/TEAM.md" "$shared_ws/TEAM.md"
   cp "$ws_tmpl/TASKS.md" "$shared_ws/TASKS.md"
+  rm -rf "$syntella_ws/.openclaw/extensions/tasks" "$template_extensions_root/tasks"
+  cp -R "$ws_tmpl/extensions/tasks" "$syntella_ws/.openclaw/extensions/tasks"
+  cp -R "$ws_tmpl/extensions/tasks" "$template_extensions_root/tasks"
 
   local today yesterday
   today="$(date +%F)"
@@ -645,6 +650,13 @@ agents = cfg.setdefault('agents', {})
 defs = agents.setdefault('defaults', {})
 hb = defs.setdefault('heartbeat', {})
 hb['to'] = channel_id  # Explicitly set as string
+tools = cfg.setdefault('tools', {})
+allow = tools.get('allow')
+if not isinstance(allow, list):
+    allow = []
+if 'syntella-tasks' not in allow:
+    allow.append('syntella-tasks')
+tools['allow'] = allow
 with open(config_path, 'w') as f:
     json.dump(cfg, f, indent=2)
 PY

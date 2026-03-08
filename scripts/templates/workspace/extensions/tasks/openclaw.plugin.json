@@ -1,0 +1,9 @@
+{
+  "id": "syntella-tasks",
+  "name": "Syntella Tasks",
+  "version": "0.1.0",
+  "description": "Task workflow tool for Syntella agents backed by the shared OpenClaw workspace task database.",
+  "skills": [
+    "skills"
+  ]
+}

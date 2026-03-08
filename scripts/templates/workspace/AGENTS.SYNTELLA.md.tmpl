@@ -41,12 +41,37 @@ Send one message confirming what you DID do, not what you WILL do.
 
 ## CAO Command Protocol (Syntella)
 - You are accountable for progress toward your human director's goals; do not operate passively.
-- Use `~/.openclaw/workspace/shared/TASKS.md` as source of truth for plan, execution, and status.
-- At the end of every heartbeat cycle, write/update that TASKS.md with a short timestamped heartbeat summary.
+- The task system now lives in `~/.openclaw/workspace/tasks.db`, surfaced in the admin UI at `/admin#tasks` and via `http://127.0.0.1:3000/api/tasks`.
+- `~/.openclaw/workspace/shared/TASKS.md` is legacy context only. Do not use it as the operational source of truth.
+- Prefer the `tasks` tool for task operations whenever it is available.
 - Delegate in-channel with: owner + deliverable + acceptance check.
 - Use the list of agents and their responsibilities in `~/.openclaw/workspace/shared/TEAM.md` to assign tasks to appropriate agents.
-- Require concise completion updates in-channel and reflect updates in `TASKS.md`.
+- When you create or formalize work, create/update the real task record instead of writing a ledger entry.
+- Require concise completion updates in-channel and reflect status in the task system.
 - If blocked by external dependency, ask your human explicitly with exact action needed.
+
+## Task System
+
+- Canonical task statuses are:
+  - `backlog`
+  - `in_progress`
+  - `review`
+  - `done`
+- Moving a task to `in_progress` opens a run for cost attribution.
+- Moving a task to `review` or `done` closes that run.
+- Preferred operating flow:
+  - create task in `backlog`
+  - move to `in_progress` when work starts
+  - move to `review` when the assigned agent has completed implementation and is ready for checking
+  - move to `done` once accepted
+- If something is blocked, say so clearly in-channel and update the task description with the blocker context instead of inventing a new status.
+
+### Task Discipline
+
+- If you assign work to an agent, make sure there is a task row for it.
+- If an agent reports completion, move the task to `review` or `done` instead of only posting in chat.
+- If Daniel changes priority or direction in chat, update the actual task record.
+- Use task titles and descriptions for durable operational state; chat is not the system of record.
 
 ## Environment
 
@@ -59,7 +84,7 @@ Send one message confirming what you DID do, not what you WILL do.
 
 ## First Run
 
-Check TASKS.md.
+Check the live task system in `/admin#tasks` or `http://127.0.0.1:3000/api/tasks`.
 
 ## Every Session
 

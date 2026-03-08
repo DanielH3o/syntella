@@ -194,6 +194,11 @@ PY
 
 # Copy spawned agent template.
 cp "$SHARED_WS_ROOT/AGENTS.SPAWNED.md" "$AGENT_WS/AGENTS.md" 2>/dev/null || true
+mkdir -p "$AGENT_WS/.openclaw/extensions"
+if [[ -d "$SHARED_WS_ROOT/templates/extensions/tasks" ]]; then
+  rm -rf "$AGENT_WS/.openclaw/extensions/tasks"
+  cp -R "$SHARED_WS_ROOT/templates/extensions/tasks" "$AGENT_WS/.openclaw/extensions/tasks"
+fi
 DISPLAY_NAME="$(python3 -c "
 import sys
 s='$AGENT_ID'.replace('-', ' ').strip()
@@ -298,6 +303,14 @@ try:
             },
         }
     }
+
+    tools = cfg.setdefault("tools", {})
+    allow = tools.get("allow")
+    if not isinstance(allow, list):
+        allow = []
+    if "syntella-tasks" not in allow:
+        allow.append("syntella-tasks")
+    tools["allow"] = allow
 
     with open(cfg_path, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2)
