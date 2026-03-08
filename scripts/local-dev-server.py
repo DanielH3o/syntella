@@ -9,6 +9,8 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from socketserver import ThreadingMixIn
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 from urllib.parse import parse_qs, urlparse
 
 PORT = int(os.environ.get("SYNTELLA_DEV_PORT", "3000"))
@@ -16,11 +18,15 @@ WORKSPACE = Path(os.environ.get("SYNTELLA_WORKSPACE", os.path.expanduser("~/.ope
 OPENCLAW_STATE_DIR = Path(
     os.environ.get("OPENCLAW_STATE_DIR", os.path.expanduser("~/.openclaw"))
 )
+OPENCLAW_CONFIG = OPENCLAW_STATE_DIR / "openclaw.json"
+OPERATOR_BRIDGE_ENV = Path("/etc/openclaw/operator-bridge.env")
+OPERATOR_BRIDGE_URL = os.environ.get("SYNTELLA_OPERATOR_BRIDGE_URL", "http://127.0.0.1:8787")
 DB_PATH = WORKSPACE / "tasks.db"
 REGISTRY = WORKSPACE / "agents" / "registry.json"
 FRONTEND_ROOT = Path(__file__).resolve().parent / "templates" / "frontend"
 USAGE_SYNC_MAX_EVENTS = int(os.environ.get("SYNTELLA_USAGE_SYNC_MAX_EVENTS", "20000"))
 TERMINAL_RUN_STATUSES = {"review", "done", "cancelled", "failed"}
+INTERNAL_MODEL_IDS = {"delivery-mirror", "gateway-injected"}
 
 CONTENT_TYPES = {
     ".css": "text/css; charset=utf-8",
@@ -107,6 +113,29 @@ def init_db():
     )
     cursor.execute(
         """
+        CREATE TABLE IF NOT EXISTS model_overrides (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider TEXT NOT NULL,
+            model_id TEXT NOT NULL,
+            display_name TEXT,
+            enabled INTEGER,
+            input_cost REAL,
+            output_cost REAL,
+            cache_read_cost REAL,
+            cache_write_cost REAL,
+            context_window INTEGER,
+            max_tokens INTEGER,
+            reasoning INTEGER,
+            input_modalities TEXT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(provider, model_id)
+        )
+        """
+    )
+    cursor.execute(
+        """
         CREATE INDEX IF NOT EXISTS idx_usage_events_agent_ts
         ON usage_events (agent_id, ts)
         """
@@ -127,6 +156,12 @@ def init_db():
         """
         CREATE INDEX IF NOT EXISTS idx_task_runs_agent_started
         ON task_runs (agent_id, started_at DESC)
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_model_overrides_provider_model
+        ON model_overrides (provider, model_id)
         """
     )
     conn.commit()
@@ -160,6 +195,72 @@ def read_registry():
         return {}
 
 
+def read_openclaw_config():
+    try:
+        with OPENCLAW_CONFIG.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def write_openclaw_config(data):
+    OPENCLAW_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    with OPENCLAW_CONFIG.open("w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=2)
+        handle.write("\n")
+
+
+def read_operator_bridge_token():
+    token = os.environ.get("OPERATOR_BRIDGE_TOKEN", "").strip()
+    if token:
+        return token
+    try:
+        for line in OPERATOR_BRIDGE_ENV.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            if key.strip() == "OPERATOR_BRIDGE_TOKEN":
+                return value.strip().strip('"').strip("'")
+    except OSError:
+        return ""
+    return ""
+
+
+def bridge_request(path, method="GET", payload=None):
+    token = read_operator_bridge_token()
+    if not token:
+        raise RuntimeError("Operator bridge token is not configured")
+    url = f"{OPERATOR_BRIDGE_URL.rstrip('/')}{path}"
+    data = None
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    }
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    request = Request(url, data=data, headers=headers, method=method)
+    try:
+        with urlopen(request, timeout=30) as response:
+            body = response.read().decode("utf-8")
+            return response.status, json.loads(body) if body else {}
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8")
+        try:
+            payload = json.loads(body) if body else {}
+        except json.JSONDecodeError:
+            payload = {"error": "bridge_error", "detail": body}
+        return exc.code, payload
+    except URLError as exc:
+        raise RuntimeError(f"Could not reach operator bridge: {exc.reason}") from exc
+
+
+def is_internal_model(model_id):
+    return (model_id or "").strip() in INTERNAL_MODEL_IDS
+
+
 def discover_openclaw_agents():
     registry = read_registry()
     agents_root = OPENCLAW_STATE_DIR / "agents"
@@ -188,6 +289,398 @@ def discover_openclaw_agents():
             "session_count": event_count,
         }
     return discovered
+
+
+def parse_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return False
+
+
+def parse_optional_number(value, cast_type=float):
+    if value in (None, ""):
+        return None
+    try:
+        return cast_type(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def normalize_modalities(value):
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    return []
+
+
+def load_openclaw_model_catalog():
+    catalog = {}
+    payload = read_openclaw_config()
+    models = payload.get("models") if isinstance(payload, dict) else None
+    providers = models.get("providers") if isinstance(models, dict) else None
+    if not isinstance(providers, dict):
+        return catalog
+
+    for provider_name, provider_meta in providers.items():
+        provider_models = provider_meta.get("models") or []
+        if not isinstance(provider_models, list):
+            continue
+        for model in provider_models:
+            if not isinstance(model, dict):
+                continue
+            model_id = (model.get("id") or "").strip()
+            if not model_id:
+                continue
+            cost = model.get("cost") or {}
+            modalities = model.get("input") or []
+            catalog[(provider_name, model_id)] = {
+                "provider": provider_name,
+                "model_id": model_id,
+                "display_name": model.get("name") or model_id,
+                "enabled": True,
+                "provider_base_url": provider_meta.get("baseUrl") or "",
+                "provider_api_adapter": provider_meta.get("api") or "",
+                "provider_has_api_key": bool(provider_meta.get("apiKey")),
+                "reasoning": bool(model.get("reasoning")),
+                "input_modalities": [str(item) for item in modalities if item],
+                "context_window": int(model.get("contextWindow") or 0) or None,
+                "max_tokens": int(model.get("maxTokens") or 0) or None,
+                "cost_input": float(cost.get("input") or 0),
+                "cost_output": float(cost.get("output") or 0),
+                "cost_cache_read": float(cost.get("cacheRead") or 0),
+                "cost_cache_write": float(cost.get("cacheWrite") or 0),
+                "source": "openclaw",
+                "sources": [str(OPENCLAW_CONFIG)],
+                "observed": False,
+            }
+    return catalog
+
+
+def load_model_overrides():
+    rows = run_query(
+        """
+        SELECT
+            provider,
+            model_id,
+            display_name,
+            enabled,
+            input_cost,
+            output_cost,
+            cache_read_cost,
+            cache_write_cost,
+            context_window,
+            max_tokens,
+            reasoning,
+            input_modalities,
+            notes,
+            updated_at
+        FROM model_overrides
+        ORDER BY provider, model_id
+        """,
+        fetchall=True,
+    ) or []
+    overrides = {}
+    for row in rows:
+        key = (row["provider"], row["model_id"])
+        overrides[key] = {
+            "provider": row["provider"],
+            "model_id": row["model_id"],
+            "display_name": row.get("display_name"),
+            "enabled": None if row.get("enabled") is None else bool(row.get("enabled")),
+            "cost_input": row.get("input_cost"),
+            "cost_output": row.get("output_cost"),
+            "cost_cache_read": row.get("cache_read_cost"),
+            "cost_cache_write": row.get("cache_write_cost"),
+            "context_window": row.get("context_window"),
+            "max_tokens": row.get("max_tokens"),
+            "reasoning": None if row.get("reasoning") is None else bool(row.get("reasoning")),
+            "input_modalities": json.loads(row["input_modalities"]) if row.get("input_modalities") else None,
+            "notes": row.get("notes") or "",
+            "updated_at": row.get("updated_at"),
+        }
+    return overrides
+
+
+def apply_model_to_openclaw_config(body):
+    provider = (body.get("provider") or "").strip()
+    model_id = (body.get("model_id") or "").strip()
+    if not provider or not model_id:
+        raise ValueError("provider and model_id are required")
+
+    config = read_openclaw_config()
+    models_cfg = config.setdefault("models", {})
+    providers = models_cfg.setdefault("providers", {})
+    provider_cfg = providers.setdefault(provider, {})
+    provider_models = provider_cfg.setdefault("models", [])
+    if not isinstance(provider_models, list):
+        provider_models = []
+        provider_cfg["models"] = provider_models
+
+    base_url = (body.get("provider_base_url") or "").strip()
+    api_adapter = (body.get("provider_api_adapter") or "").strip()
+    api_key = body.get("provider_api_key")
+    if base_url:
+        provider_cfg["baseUrl"] = base_url
+    if api_adapter:
+        provider_cfg["api"] = api_adapter
+    if isinstance(api_key, str) and api_key.strip():
+        provider_cfg["apiKey"] = api_key.strip()
+
+    input_modalities = normalize_modalities(body.get("input_modalities"))
+    model_entry = {
+        "id": model_id,
+        "name": (body.get("display_name") or "").strip() or model_id,
+        "reasoning": parse_bool(body.get("reasoning")),
+        "input": input_modalities,
+        "cost": {
+            "input": float(body.get("cost_input") or 0),
+            "output": float(body.get("cost_output") or 0),
+            "cacheRead": float(body.get("cost_cache_read") or 0),
+            "cacheWrite": float(body.get("cost_cache_write") or 0),
+        },
+        "contextWindow": parse_optional_number(body.get("context_window"), int),
+        "maxTokens": parse_optional_number(body.get("max_tokens"), int),
+    }
+    model_entry = {key: value for key, value in model_entry.items() if value not in (None, []) or key in {"input", "cost"}}
+
+    replaced = False
+    for index, existing in enumerate(provider_models):
+        if isinstance(existing, dict) and (existing.get("id") or "").strip() == model_id:
+            provider_models[index] = model_entry
+            replaced = True
+            break
+    if not replaced:
+        provider_models.append(model_entry)
+
+    write_openclaw_config(config)
+
+
+def observed_model_usage():
+    placeholders = ",".join("?" for _ in INTERNAL_MODEL_IDS)
+    rows = run_query(
+        f"""
+        SELECT
+            provider,
+            model,
+            COUNT(*) AS event_count,
+            COALESCE(SUM(input_tokens), 0) AS input_tokens,
+            COALESCE(SUM(output_tokens), 0) AS output_tokens,
+            COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+            COALESCE(SUM(cache_write_tokens), 0) AS cache_write_tokens,
+            COALESCE(SUM(cost_input), 0) AS cost_input,
+            COALESCE(SUM(cost_output), 0) AS cost_output,
+            COALESCE(SUM(cost_cache_read), 0) AS cost_cache_read,
+            COALESCE(SUM(cost_cache_write), 0) AS cost_cache_write,
+            COALESCE(SUM(total_tokens), 0) AS total_tokens,
+            COALESCE(SUM(total_cost), 0) AS total_cost,
+            MAX(ts) AS last_seen
+        FROM usage_events
+        WHERE model IS NOT NULL
+          AND TRIM(model) != ''
+          AND model NOT IN ({placeholders})
+        GROUP BY provider, model
+        ORDER BY total_cost DESC, total_tokens DESC
+        """,
+        tuple(sorted(INTERNAL_MODEL_IDS)),
+        fetchall=True,
+    ) or []
+    usage = {}
+    for row in rows:
+        input_tokens = int(row.get("input_tokens") or 0)
+        output_tokens = int(row.get("output_tokens") or 0)
+        cache_read_tokens = int(row.get("cache_read_tokens") or 0)
+        cache_write_tokens = int(row.get("cache_write_tokens") or 0)
+        cost_input = float(row.get("cost_input") or 0)
+        cost_output = float(row.get("cost_output") or 0)
+        cost_cache_read = float(row.get("cost_cache_read") or 0)
+        cost_cache_write = float(row.get("cost_cache_write") or 0)
+        usage[(row.get("provider") or "", row["model"])] = {
+            "provider": row.get("provider") or "",
+            "model_id": row["model"],
+            "event_count": int(row.get("event_count") or 0),
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cache_read_tokens": cache_read_tokens,
+            "cache_write_tokens": cache_write_tokens,
+            "cost_input": cost_input,
+            "cost_output": cost_output,
+            "cost_cache_read": cost_cache_read,
+            "cost_cache_write": cost_cache_write,
+            "derived_cost_input": (cost_input / input_tokens * 1_000_000) if input_tokens and cost_input > 0 else 0.0,
+            "derived_cost_output": (cost_output / output_tokens * 1_000_000) if output_tokens and cost_output > 0 else 0.0,
+            "derived_cost_cache_read": (cost_cache_read / cache_read_tokens * 1_000_000) if cache_read_tokens and cost_cache_read > 0 else 0.0,
+            "derived_cost_cache_write": (cost_cache_write / cache_write_tokens * 1_000_000) if cache_write_tokens and cost_cache_write > 0 else 0.0,
+            "total_tokens": int(row.get("total_tokens") or 0),
+            "total_cost": float(row.get("total_cost") or 0),
+            "last_seen": row.get("last_seen"),
+        }
+    return usage
+
+
+def list_models():
+    catalog = load_openclaw_model_catalog()
+    overrides = load_model_overrides()
+    usage = observed_model_usage()
+    keys = set(catalog) | set(overrides) | set(usage)
+    models = []
+
+    for provider, model_id in sorted(keys):
+        if is_internal_model(model_id):
+            continue
+        base = catalog.get((provider, model_id), {
+            "provider": provider,
+            "model_id": model_id,
+            "display_name": model_id,
+            "enabled": True,
+            "provider_base_url": "",
+            "provider_api_adapter": "",
+            "provider_has_api_key": False,
+            "reasoning": False,
+            "input_modalities": [],
+            "context_window": None,
+            "max_tokens": None,
+            "cost_input": 0.0,
+            "cost_output": 0.0,
+            "cost_cache_read": 0.0,
+            "cost_cache_write": 0.0,
+            "source": "observed",
+            "sources": [],
+            "observed": True,
+        })
+        override = overrides.get((provider, model_id), {})
+        seen = usage.get((provider, model_id), {})
+        catalog_has_pricing = any(
+            float(base.get(field) or 0) > 0
+            for field in ("cost_input", "cost_output", "cost_cache_read", "cost_cache_write")
+        )
+        observed_has_pricing = any(
+            float(seen.get(field) or 0) > 0
+            for field in ("derived_cost_input", "derived_cost_output", "derived_cost_cache_read", "derived_cost_cache_write")
+        )
+        base_cost_input = base.get("cost_input") if catalog_has_pricing else float(seen.get("derived_cost_input") or 0)
+        base_cost_output = base.get("cost_output") if catalog_has_pricing else float(seen.get("derived_cost_output") or 0)
+        base_cost_cache_read = base.get("cost_cache_read") if catalog_has_pricing else float(seen.get("derived_cost_cache_read") or 0)
+        base_cost_cache_write = base.get("cost_cache_write") if catalog_has_pricing else float(seen.get("derived_cost_cache_write") or 0)
+        effective = {
+            "provider": provider,
+            "model_id": model_id,
+            "display_name": override.get("display_name") or base.get("display_name") or model_id,
+            "enabled": base.get("enabled", True) if override.get("enabled") is None else bool(override.get("enabled")),
+            "provider_base_url": base.get("provider_base_url") or "",
+            "provider_api_adapter": base.get("provider_api_adapter") or "",
+            "provider_has_api_key": bool(base.get("provider_has_api_key")),
+            "reasoning": base.get("reasoning") if override.get("reasoning") is None else bool(override.get("reasoning")),
+            "input_modalities": override.get("input_modalities") or base.get("input_modalities") or [],
+            "context_window": override.get("context_window") or base.get("context_window"),
+            "max_tokens": override.get("max_tokens") or base.get("max_tokens"),
+            "cost_input": base_cost_input if override.get("cost_input") is None else float(override.get("cost_input")),
+            "cost_output": base_cost_output if override.get("cost_output") is None else float(override.get("cost_output")),
+            "cost_cache_read": base_cost_cache_read if override.get("cost_cache_read") is None else float(override.get("cost_cache_read")),
+            "cost_cache_write": base_cost_cache_write if override.get("cost_cache_write") is None else float(override.get("cost_cache_write")),
+            "source": "custom" if not catalog.get((provider, model_id)) else base.get("source", "openclaw"),
+            "sources": base.get("sources", []),
+            "observed": bool(seen),
+            "usage_event_count": int(seen.get("event_count") or 0),
+            "observed_tokens": int(seen.get("total_tokens") or 0),
+            "observed_cost": float(seen.get("total_cost") or 0),
+            "observed_cost_input": float(seen.get("cost_input") or 0),
+            "observed_cost_output": float(seen.get("cost_output") or 0),
+            "observed_cost_cache_read": float(seen.get("cost_cache_read") or 0),
+            "observed_cost_cache_write": float(seen.get("cost_cache_write") or 0),
+            "observed_input_tokens": int(seen.get("input_tokens") or 0),
+            "observed_output_tokens": int(seen.get("output_tokens") or 0),
+            "observed_cache_read_tokens": int(seen.get("cache_read_tokens") or 0),
+            "observed_cache_write_tokens": int(seen.get("cache_write_tokens") or 0),
+            "last_seen": seen.get("last_seen"),
+            "has_override": bool(override),
+            "notes": override.get("notes") or "",
+            "pricing_source": "override" if any(
+                override.get(field) is not None
+                for field in ("cost_input", "cost_output", "cost_cache_read", "cost_cache_write")
+            ) else ("openclaw" if catalog_has_pricing else "observed" if observed_has_pricing else ("openclaw" if catalog.get((provider, model_id)) else "observed")),
+        }
+        effective["pricing_complete"] = any(
+            float(effective.get(field) or 0) > 0
+            for field in ("cost_input", "cost_output", "cost_cache_read", "cost_cache_write")
+        )
+        models.append(effective)
+
+    return models
+
+
+def upsert_model_override(body):
+    provider = (body.get("provider") or "").strip()
+    model_id = (body.get("model_id") or "").strip()
+    if not provider or not model_id:
+        raise ValueError("provider and model_id are required")
+
+    display_name = (body.get("display_name") or "").strip() or None
+    enabled = body.get("enabled")
+    notes = (body.get("notes") or "").strip()
+    input_modalities = normalize_modalities(body.get("input_modalities"))
+
+    run_query(
+        """
+        INSERT INTO model_overrides (
+            provider,
+            model_id,
+            display_name,
+            enabled,
+            input_cost,
+            output_cost,
+            cache_read_cost,
+            cache_write_cost,
+            context_window,
+            max_tokens,
+            reasoning,
+            input_modalities,
+            notes,
+            updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(provider, model_id) DO UPDATE SET
+            display_name = excluded.display_name,
+            enabled = excluded.enabled,
+            input_cost = excluded.input_cost,
+            output_cost = excluded.output_cost,
+            cache_read_cost = excluded.cache_read_cost,
+            cache_write_cost = excluded.cache_write_cost,
+            context_window = excluded.context_window,
+            max_tokens = excluded.max_tokens,
+            reasoning = excluded.reasoning,
+            input_modalities = excluded.input_modalities,
+            notes = excluded.notes,
+            updated_at = CURRENT_TIMESTAMP
+        """,
+        (
+            provider,
+            model_id,
+            display_name,
+            None if enabled is None else int(parse_bool(enabled)),
+            parse_optional_number(body.get("cost_input")),
+            parse_optional_number(body.get("cost_output")),
+            parse_optional_number(body.get("cost_cache_read")),
+            parse_optional_number(body.get("cost_cache_write")),
+            parse_optional_number(body.get("context_window"), int),
+            parse_optional_number(body.get("max_tokens"), int),
+            None if body.get("reasoning") is None else int(parse_bool(body.get("reasoning"))),
+            json.dumps(input_modalities or []),
+            notes,
+        ),
+        commit=True,
+    )
+
+
+def delete_model_override(provider, model_id):
+    run_query(
+        "DELETE FROM model_overrides WHERE provider = ? AND model_id = ?",
+        (provider, model_id),
+        commit=True,
+    )
 
 
 def normalize_usage_record(agent_id, source_file, line_no, payload):
@@ -302,6 +795,9 @@ def build_usage_filters(params):
     model = params.get("model", ["all"])[0]
     days = params.get("days", [None])[0]
 
+    clauses.append(f"model NOT IN ({','.join('?' for _ in INTERNAL_MODEL_IDS)})")
+    args.extend(sorted(INTERNAL_MODEL_IDS))
+
     if agent and agent != "all":
         clauses.append("agent_id = ?")
         args.append(agent)
@@ -321,78 +817,36 @@ def build_usage_filters(params):
     return where, args
 
 
-def usage_summary(params):
-    where, args = build_usage_filters(params)
-    totals = run_query(
-        f"""
-        SELECT
-            COUNT(*) AS event_count,
-            COALESCE(SUM(input_tokens), 0) AS input_tokens,
-            COALESCE(SUM(output_tokens), 0) AS output_tokens,
-            COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
-            COALESCE(SUM(cache_write_tokens), 0) AS cache_write_tokens,
-            COALESCE(SUM(total_tokens), 0) AS total_tokens,
-            COALESCE(SUM(total_cost), 0) AS total_cost,
-            MIN(ts) AS first_ts,
-            MAX(ts) AS last_ts
-        FROM usage_events
-        {where}
-        """,
-        tuple(args),
-        fetchone=True,
-    ) or {}
-    by_agent = run_query(
-        f"""
-        SELECT
-            agent_id AS agent,
-            COUNT(*) AS event_count,
-            COALESCE(SUM(total_tokens), 0) AS total_tokens,
-            COALESCE(SUM(total_cost), 0) AS total_cost
-        FROM usage_events
-        {where}
-        GROUP BY agent_id
-        ORDER BY total_cost DESC, total_tokens DESC
-        """,
-        tuple(args),
-        fetchall=True,
-    ) or []
-    by_model = run_query(
-        f"""
-        SELECT
-            model,
-            provider,
-            COUNT(*) AS event_count,
-            COALESCE(SUM(total_tokens), 0) AS total_tokens,
-            COALESCE(SUM(total_cost), 0) AS total_cost
-        FROM usage_events
-        {where}
-        GROUP BY provider, model
-        ORDER BY total_cost DESC, total_tokens DESC
-        """,
-        tuple(args),
-        fetchall=True,
-    ) or []
+def model_pricing_index():
     return {
-        "totals": totals,
-        "by_agent": by_agent,
-        "by_model": by_model,
-        "filters": {
-            "agent": params.get("agent", ["all"])[0],
-            "model": params.get("model", ["all"])[0],
-            "days": params.get("days", ["30"])[0],
-        },
+        (row["provider"], row["model_id"]): row
+        for row in list_models()
     }
 
 
-def usage_events(params):
+def effective_event_cost(row, pricing_index):
+    raw_total = float(row.get("total_cost") or 0)
+    if raw_total > 0:
+        return raw_total
+
+    provider = row.get("provider") or ""
+    model = row.get("model") or ""
+    pricing = pricing_index.get((provider, model))
+    if not pricing:
+        return 0.0
+
+    return round(
+        (int(row.get("input_tokens") or 0) * float(pricing.get("cost_input") or 0) / 1_000_000)
+        + (int(row.get("output_tokens") or 0) * float(pricing.get("cost_output") or 0) / 1_000_000)
+        + (int(row.get("cache_read_tokens") or 0) * float(pricing.get("cost_cache_read") or 0) / 1_000_000)
+        + (int(row.get("cache_write_tokens") or 0) * float(pricing.get("cost_cache_write") or 0) / 1_000_000),
+        8,
+    )
+
+
+def usage_event_rows(params, limit=None):
     where, args = build_usage_filters(params)
-    limit = params.get("limit", ["50"])[0]
-    try:
-        limit_value = max(1, min(int(limit), 500))
-    except ValueError:
-        limit_value = 50
-    return run_query(
-        f"""
+    query = f"""
         SELECT
             agent_id,
             session_id,
@@ -411,35 +865,112 @@ def usage_events(params):
         FROM usage_events
         {where}
         ORDER BY ts DESC
-        LIMIT ?
-        """,
-        tuple(args + [limit_value]),
-        fetchall=True,
-    ) or []
+    """
+    if limit is not None:
+        query += "\nLIMIT ?"
+        args = args + [limit]
+    return run_query(query, tuple(args), fetchall=True) or []
+
+
+def usage_summary(params):
+    rows = usage_event_rows(params)
+    pricing_index = model_pricing_index()
+    totals = {
+        "event_count": len(rows),
+        "input_tokens": sum(int(row.get("input_tokens") or 0) for row in rows),
+        "output_tokens": sum(int(row.get("output_tokens") or 0) for row in rows),
+        "cache_read_tokens": sum(int(row.get("cache_read_tokens") or 0) for row in rows),
+        "cache_write_tokens": sum(int(row.get("cache_write_tokens") or 0) for row in rows),
+        "total_tokens": sum(int(row.get("total_tokens") or 0) for row in rows),
+        "total_cost": round(sum(effective_event_cost(row, pricing_index) for row in rows), 8),
+        "first_ts": min((row.get("ts") for row in rows), default=None),
+        "last_ts": max((row.get("ts") for row in rows), default=None),
+    }
+    by_agent_map = {}
+    by_model_map = {}
+    for row in rows:
+        effective_cost = effective_event_cost(row, pricing_index)
+        agent_key = row.get("agent_id") or ""
+        agent_bucket = by_agent_map.setdefault(agent_key, {
+            "agent": agent_key,
+            "event_count": 0,
+            "total_tokens": 0,
+            "total_cost": 0.0,
+        })
+        agent_bucket["event_count"] += 1
+        agent_bucket["total_tokens"] += int(row.get("total_tokens") or 0)
+        agent_bucket["total_cost"] = round(agent_bucket["total_cost"] + effective_cost, 8)
+
+        model_key = (row.get("provider") or "", row.get("model") or "")
+        model_bucket = by_model_map.setdefault(model_key, {
+            "model": row.get("model") or "",
+            "provider": row.get("provider") or "",
+            "event_count": 0,
+            "total_tokens": 0,
+            "total_cost": 0.0,
+        })
+        model_bucket["event_count"] += 1
+        model_bucket["total_tokens"] += int(row.get("total_tokens") or 0)
+        model_bucket["total_cost"] = round(model_bucket["total_cost"] + effective_cost, 8)
+
+    by_agent = sorted(by_agent_map.values(), key=lambda row: (row["total_cost"], row["total_tokens"]), reverse=True)
+    by_model = sorted(by_model_map.values(), key=lambda row: (row["total_cost"], row["total_tokens"]), reverse=True)
+    return {
+        "totals": totals,
+        "by_agent": by_agent,
+        "by_model": by_model,
+        "filters": {
+            "agent": params.get("agent", ["all"])[0],
+            "model": params.get("model", ["all"])[0],
+            "days": params.get("days", ["30"])[0],
+        },
+    }
+
+
+def usage_events(params):
+    limit = params.get("limit", ["50"])[0]
+    try:
+        limit_value = max(1, min(int(limit), 500))
+    except ValueError:
+        limit_value = 50
+    rows = usage_event_rows(params, limit=limit_value)
+    pricing_index = model_pricing_index()
+    for row in rows:
+        row["total_cost"] = effective_event_cost(row, pricing_index)
+    return rows
 
 
 def task_run_costs(conn, run_rows):
     costs = {}
     cursor = conn.cursor()
+    pricing_index = model_pricing_index()
     for row in run_rows:
         end_time = row["ended_at"] or utc_now_iso()
-        usage = cursor.execute(
+        usage_rows = [
+            dict(item)
+            for item in cursor.execute(
             """
             SELECT
-                COALESCE(SUM(total_cost), 0) AS total_cost,
-                COALESCE(SUM(total_tokens), 0) AS total_tokens,
-                COUNT(*) AS event_count
+                input_tokens,
+                output_tokens,
+                cache_read_tokens,
+                cache_write_tokens,
+                total_tokens,
+                total_cost,
+                provider,
+                model
             FROM usage_events
             WHERE agent_id = ?
               AND ts >= ?
               AND ts <= ?
             """,
             (row["agent_id"], row["started_at"], end_time),
-        ).fetchone()
+        ).fetchall()
+        ]
         costs[row["id"]] = {
-            "estimated_cost": float(usage["total_cost"] or 0),
-            "estimated_tokens": int(usage["total_tokens"] or 0),
-            "usage_event_count": int(usage["event_count"] or 0),
+            "estimated_cost": round(sum(effective_event_cost(item, pricing_index) for item in usage_rows), 8),
+            "estimated_tokens": sum(int(item["total_tokens"] or 0) for item in usage_rows),
+            "usage_event_count": len(usage_rows),
         }
     return costs
 
@@ -671,16 +1202,27 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json(200, {"ok": True, "service": "syntella-local-dev"})
 
         if path == "/api/health":
-            registry = read_registry()
+            agents = discover_openclaw_agents()
             return self._send_json(200, {
                 "ok": True,
                 "service": "syntella-local-dev",
                 "uptime_seconds": None,
-                "agents_total": len(registry),
+                "agents_total": len(agents),
             })
 
         if path in ("/api/agents", "/api/departments"):
             return self._send_json(200, {"ok": True, "agents": discover_openclaw_agents()})
+
+        if path == "/api/models":
+            sync = sync_usage_events()
+            return self._send_json(200, {"ok": True, "sync": sync, "models": list_models()})
+
+        if path == "/api/operator-bridge/health":
+            try:
+                status, payload = bridge_request("/health", method="GET")
+                return self._send_json(status, payload)
+            except Exception as exc:
+                return self._send_json(502, {"ok": False, "error": str(exc)})
 
         if path == "/api/tasks":
             try:
@@ -721,6 +1263,25 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/usage/sync":
             return self._send_json(200, {"ok": True, **sync_usage_events()})
+
+        if path == "/api/models/overrides":
+            body = self._parse_body()
+            try:
+                apply_model_to_openclaw_config(body)
+                upsert_model_override(body)
+                return self._send_json(200, {"ok": True, "models": list_models()})
+            except ValueError as exc:
+                return self._send_json(400, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                return self._send_json(500, {"ok": False, "error": str(exc)})
+
+        if path == "/api/spawn-agent":
+            body = self._parse_body()
+            try:
+                status, payload = bridge_request("/spawn-agent", method="POST", payload=body)
+                return self._send_json(status, payload)
+            except Exception as exc:
+                return self._send_json(502, {"ok": False, "error": str(exc)})
 
         if path != "/api/tasks":
             return self._send_json(404, {"error": "not_found"})
@@ -787,6 +1348,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self):
         path = urlparse(self.path).path
+        if path == "/api/models/overrides":
+            body = self._parse_body()
+            provider = (body.get("provider") or "").strip()
+            model_id = (body.get("model_id") or "").strip()
+            if not provider or not model_id:
+                return self._send_json(400, {"ok": False, "error": "provider and model_id are required"})
+            try:
+                delete_model_override(provider, model_id)
+                return self._send_json(200, {"ok": True, "models": list_models()})
+            except Exception as exc:
+                return self._send_json(500, {"ok": False, "error": str(exc)})
         if not path.startswith("/api/tasks/"):
             return self._send_json(404, {"error": "not_found"})
         task_id = path.rsplit("/", 1)[-1]

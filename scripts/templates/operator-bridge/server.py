@@ -65,6 +65,11 @@ def normalize_payload(body):
         or body.get("discord_bot_token")
     )
     port = body.get("port")
+    model_primary = (
+        body.get("model_primary")
+        or body.get("modelPrimary")
+        or body.get("model")
+    )
 
     missing = []
     if not agent_id:
@@ -75,6 +80,8 @@ def normalize_payload(body):
         missing.append("description")
     if not discord_token:
         missing.append("discord_token")
+    if not model_primary:
+        missing.append("model_primary")
     if missing:
         return None, {
             "error": "bad_request",
@@ -93,8 +100,11 @@ def normalize_payload(body):
     description = str(description).strip()
     discord_token = str(discord_token).strip()
     port = "" if port is None else str(port).strip()
+    model_primary = str(model_primary).strip()
     if port and not port.isdigit():
         return None, {"error": "bad_request", "detail": "port must be numeric when provided"}
+    if "/" not in model_primary:
+        return None, {"error": "bad_request", "detail": "model_primary must be in provider/model format"}
 
     return {
         "agent_id": agent_id,
@@ -102,6 +112,7 @@ def normalize_payload(body):
         "description": description,
         "discord_token": discord_token,
         "port": port,
+        "model_primary": model_primary,
     }, None
 
 
@@ -213,6 +224,7 @@ class Handler(BaseHTTPRequestHandler):
             full_role,
             payload["discord_token"],
         ]
+        cmd.append(payload["model_primary"])
         if payload["port"]:
             cmd.append(payload["port"])
 
@@ -226,6 +238,7 @@ class Handler(BaseHTTPRequestHandler):
             role=payload["role"],
             description=payload["description"],
             port=payload["port"],
+            model_primary=payload["model_primary"],
             token="***redacted***",
         )
 

@@ -9,7 +9,9 @@ Syntella is evolving into a local-first control plane for a multi-agent OpenClaw
 
 Primary goals:
 
-- manage agents/departments visually
+- manage agents visually
+- create new agents locally from the admin UI
+- configure which models are available to agents
 - create and track tasks locally
 - measure model usage and cost by agent
 - eventually connect spend to delivered outcomes, not just token volume
@@ -31,7 +33,8 @@ Local server:
 Local data sources:
 
 - task data in `~/.openclaw/workspace/tasks.db`
-- agent registry in `~/.openclaw/workspace/agents/registry.json`
+- agent discovery from `~/.openclaw/agents/*`
+- global model config from `~/.openclaw/openclaw.json`
 - usage telemetry from `~/.openclaw/agents/*/sessions/*.jsonl`
 
 ## Decisions Made
@@ -47,6 +50,14 @@ Local data sources:
 - Local-first workflow is required.
 - The droplet/bootstrap path is too slow for iterative UI and product work.
 - The local server is now the main dev loop for dashboard/admin work.
+
+### Agent and model management
+
+- Agent creation should be available from the Team page.
+- Model availability and pricing should have a dedicated Models page.
+- Model pricing should default from OpenClaw/local model metadata when available.
+- Missing or zero-cost model pricing should be overridable locally by the user.
+- `~/.openclaw/openclaw.json` is the canonical base catalog for models in this environment.
 
 ### Budget tracking
 
@@ -65,17 +76,47 @@ Local data sources:
   - `/api/tasks`
   - `/api/departments`
   - `/api/agents`
+  - `/api/models`
+  - `/api/models/overrides`
+  - `/api/spawn-agent`
+  - `/api/operator-bridge/health`
   - `/api/usage`
   - `/api/usage/summary`
   - `/api/usage/sync`
+  - `/api/costs/by-task`
 
-### Departments page
+### Team page
 
-- Reworked into an interactive org chart.
+- Reworked into an interactive Team view.
 - Root agent now comes from actual local OpenClaw state, preferring `main`.
 - Discovered local agents render beneath the root.
-- Details panel updates on click.
-- Org chart now hydrates from actual discovered OpenClaw agents, not just the stale workspace registry.
+- Details drawer updates on click.
+- Team page now hydrates from actual discovered OpenClaw agents, not the stale workspace registry.
+- Team page starts with no selected agent and the details drawer closed.
+- Selected agent details now open in a screen-edge sidenav overlay.
+- Added a Team-side New Agent drawer wired to the shared Models catalog.
+- Team agent creation now submits through the local dev server to the operator bridge.
+
+### Models page
+
+- Added a dedicated Models page to the admin UI.
+- Models are derived from `~/.openclaw/openclaw.json` plus observed usage history.
+- Provider credentials are not exposed through the Syntella model API.
+- Added a Syntella-managed `model_overrides` table for:
+  - enabled/disabled availability
+  - pricing overrides
+  - custom display metadata
+  - custom models not present in local OpenClaw metadata
+- Saving a model now patches the global OpenClaw catalog in `~/.openclaw/openclaw.json`.
+- Model creation/editing now uses a right-side drawer instead of an always-visible inline editor.
+- The model drawer now supports provider connection fields including base URL, adapter, and API key entry.
+- Clearing an override removes only the Syntella override layer, not the base OpenClaw model entry.
+- Models page supports:
+  - catalog listing
+  - provider/status/search filters
+  - editing pricing overrides
+  - creating custom models
+  - clearing overrides back to the base metadata
 
 ### Tasks page
 
@@ -151,6 +192,8 @@ Example:
 
 - `gemini-3.1-pro-preview` currently reports token usage but `cost.total = 0` in local OpenClaw records
 - this appears to come from OpenClaw model metadata, not from the Syntella UI
+- the Models page now provides the override layer needed to fix this locally without mutating OpenClaw files
+- the Budget pipeline now falls back to override/catalog pricing on a per-event basis when OpenClaw logged zero cost
 
 ### Token totals can be confusing
 
@@ -165,31 +208,46 @@ This means total accounted tokens can be much larger than just input + output.
 
 ## Immediate Next Step
 
-Improve attribution accuracy beyond pure time-window matching.
+Harden the Team-side agent creation path and then improve attribution accuracy.
 
 Immediate direction:
 
-1. Attach exact `session_id` to task runs when possible.
-2. Add richer task-level budget reporting and filtering.
-3. Decide how task assignment should map to real local agent IDs when old placeholder task data exists.
+1. Make Team-page agent creation robust when the operator bridge is unavailable or misconfigured.
+2. Add clearer bridge health / spawn failure visibility in the UI.
+3. Then improve attribution accuracy by attaching exact `session_id` to task runs when possible.
 
 ## Planned Next Work
 
-### V1.1 Task runs
+### V1.1 Agent creation
+
+- create new local agents from the Team page
+- allow name/role/description/model selection at creation time
+- persist new agents into the local OpenClaw-aware setup
+- refresh Team and Task assignee lists immediately after creation
+- current bridge still requires a Discord token for provisioning
+
+### V1.2 Models page follow-up
+
+- define default model choices for future agents
+- show stronger pricing provenance and warning states
+- decide whether disabled models should be hidden from all other UI surfaces by default
+
+### V1.3 Task runs
 
 - refine task run lifecycle rules
 - decide exact terminal statuses
 - support reopened tasks cleanly
 - improve task detail/run presentation
 
-### V1.2 Task-level budget visibility
+### V1.4 Task-level budget visibility
 
 - cost per task
 - cost per agent per task
 - recent expensive tasks
 - compare task cost vs task outcome/status
+- make task and budget views cross-link cleanly
 
-### V1.3 Attribution improvements
+### V1.5 Attribution improvements
 
 - attach exact `session_id` to task runs when possible
 - move from pure time-window attribution to session-aware attribution
@@ -203,7 +261,8 @@ Immediate direction:
 - pricing overrides for models with missing/zero OpenClaw costs
 - cost per shipped task/outcome
 - usage trends over time
-- filters by department, model family, task status
+- filters by team member, model family, task status
+- agent templates / presets
 
 ### V3
 
@@ -215,6 +274,7 @@ Immediate direction:
 
 ## Open Questions
 
+- Which model metadata source should be canonical: OpenClaw model config, ingested usage data, or a Syntella-managed catalog layered on top?
 - What should count as terminal for a task run: `review`, `done`, `cancelled`, all of them?
 - Should one task support multiple runs by default?
 - Should reopening a task create a new run automatically?
@@ -235,12 +295,14 @@ Useful local URLs:
 - `http://127.0.0.1:3000/admin`
 - `http://127.0.0.1:3000/admin#tasks`
 - `http://127.0.0.1:3000/admin#budget`
-- `http://127.0.0.1:3000/admin#agents`
+- `http://127.0.0.1:3000/admin#models`
+- `http://127.0.0.1:3000/admin#team`
 
 Useful API URLs:
 
 - `http://127.0.0.1:3000/api/tasks`
 - `http://127.0.0.1:3000/api/departments`
+- `http://127.0.0.1:3000/api/models`
 - `http://127.0.0.1:3000/api/usage`
 - `http://127.0.0.1:3000/api/usage/summary?days=30`
 

@@ -81,7 +81,45 @@
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
     .form-group { display: flex; flex-direction: column; gap: 6px; }
     .form-label { font-size: 0.875rem; font-weight: 500; }
-    input { width: 100%; padding: 10px 14px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); font-family: inherit; }
+    input,
+    select,
+    textarea {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      font-family: inherit;
+      font-size: 0.9375rem;
+      color: var(--text-primary);
+      background: var(--bg-input);
+      box-shadow: inset 0 1px 2px rgba(17, 24, 39, 0.02);
+      transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    textarea {
+      min-height: 96px;
+      resize: vertical;
+      line-height: 1.45;
+    }
+    select {
+      padding-right: 40px;
+      background-image:
+        linear-gradient(45deg, transparent 50%, #6b7280 50%),
+        linear-gradient(135deg, #6b7280 50%, transparent 50%);
+      background-position:
+        calc(100% - 18px) calc(50% - 2px),
+        calc(100% - 12px) calc(50% - 2px);
+      background-size: 6px 6px, 6px 6px;
+      background-repeat: no-repeat;
+    }
+    input:focus,
+    select:focus,
+    textarea:focus {
+      outline: none;
+      border-color: rgba(79, 70, 229, 0.55);
+      box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.12);
+    }
     
     .kanban-board { display: flex; gap: 24px; height: calc(100vh - 220px); overflow-x: auto; padding-bottom: 24px; }
     .tasks-layout {
@@ -498,6 +536,311 @@
       font-size: 0.84rem;
       line-height: 1.45;
     }
+    .models-shell {
+      display: grid;
+      gap: 24px;
+    }
+    .models-summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 18px;
+    }
+    .models-card {
+      border: 1px solid var(--border-card);
+      border-radius: 22px;
+      background: #fff;
+      box-shadow: var(--shadow-sm);
+      padding: 20px 22px;
+    }
+    .models-card__label {
+      margin: 0 0 10px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+    }
+    .models-card__value {
+      margin: 0;
+      font-size: 1.8rem;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+    }
+    .models-card__detail {
+      margin: 10px 0 0;
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+    }
+    .models-layout {
+      display: block;
+    }
+    .models-panel {
+      border: 1px solid var(--border-card);
+      border-radius: 24px;
+      background: #fff;
+      box-shadow: var(--shadow-sm);
+      padding: 24px;
+    }
+    .models-panel__header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .models-panel__title {
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .models-panel__meta {
+      margin: 6px 0 0;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+    }
+    .models-controls {
+      display: grid;
+      grid-template-columns: minmax(220px, 1.3fr) repeat(2, minmax(140px, 0.7fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .models-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .models-table th,
+    .models-table td {
+      text-align: left;
+      padding: 14px 0;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 0.9rem;
+      vertical-align: top;
+    }
+    .models-table th {
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+    }
+    .models-table tr {
+      cursor: pointer;
+    }
+    .models-table tr.is-selected td {
+      color: var(--accent-blue);
+    }
+    .models-table tr:hover td {
+      color: var(--accent-blue);
+    }
+    .models-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      background: #ecfdf5;
+      color: #166534;
+    }
+    .models-status.is-muted {
+      background: #f3f4f6;
+      color: #475569;
+    }
+    .models-status.is-warning {
+      background: #fffbeb;
+      color: #b45309;
+    }
+    .models-form {
+      display: grid;
+      gap: 14px;
+    }
+    .models-form__grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .models-form__toggles {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      padding-top: 4px;
+    }
+    .models-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+    }
+    .models-form__actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .models-feedback {
+      min-height: 22px;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+    .models-feedback.is-success { color: #166534; }
+    .models-feedback.is-error { color: #b91c1c; }
+    .models-empty {
+      padding: 22px;
+      border-radius: 18px;
+      background: #f8fafc;
+      color: var(--text-muted);
+      text-align: center;
+    }
+    .models-drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.24);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.22s ease;
+      z-index: 90;
+    }
+    .models-shell.is-drawer-open .models-drawer-backdrop {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .models-drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: min(460px, calc(100vw - 48px));
+      border-left: 1px solid var(--border-card);
+      background: rgba(255, 255, 255, 0.985);
+      box-shadow: -24px 0 60px rgba(15, 23, 42, 0.16);
+      padding: 32px 28px;
+      z-index: 91;
+      overflow-y: auto;
+      transform: translateX(100%);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.24s ease, opacity 0.24s ease;
+    }
+    .models-shell.is-drawer-open .models-drawer {
+      transform: translateX(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .models-drawer__header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 8px;
+    }
+    .models-drawer__close {
+      border: 0;
+      background: #eef2ff;
+      color: var(--accent-blue);
+      width: 38px;
+      height: 38px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font: inherit;
+      font-size: 1.1rem;
+      line-height: 1;
+    }
+    .models-drawer__eyebrow {
+      margin: 0 0 12px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+    }
+    .models-helper {
+      margin: 0;
+      font-size: 0.84rem;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+    .agent-drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.24);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.22s ease;
+      z-index: 92;
+    }
+    .team-chart.is-agent-drawer-open .agent-drawer-backdrop {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .agent-drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: min(460px, calc(100vw - 48px));
+      border-left: 1px solid var(--border-card);
+      background: rgba(255, 255, 255, 0.985);
+      box-shadow: -24px 0 60px rgba(15, 23, 42, 0.16);
+      padding: 32px 28px;
+      z-index: 93;
+      overflow-y: auto;
+      transform: translateX(100%);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.24s ease, opacity 0.24s ease;
+    }
+    .team-chart.is-agent-drawer-open .agent-drawer {
+      transform: translateX(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .agent-drawer__header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 8px;
+    }
+    .agent-drawer__eyebrow {
+      margin: 0 0 12px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+    }
+    .agent-drawer__close {
+      border: 0;
+      background: #eef2ff;
+      color: var(--accent-blue);
+      width: 38px;
+      height: 38px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font: inherit;
+      font-size: 1.1rem;
+      line-height: 1;
+    }
+    .agent-form {
+      display: grid;
+      gap: 14px;
+    }
+    .agent-feedback {
+      min-height: 22px;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+    .agent-feedback.is-success { color: #166534; }
+    .agent-feedback.is-error { color: #b91c1c; }
     
     .team-chart {
       position: relative;
@@ -748,10 +1091,13 @@
     }
     @media (max-width: 1100px) {
       .tasks-layout { grid-template-columns: 1fr; }
+      .models-summary,
+      .models-controls,
       .budget-controls,
       .budget-grid,
       .budget-layout,
       .budget-split { grid-template-columns: 1fr; }
+      .models-drawer { width: min(400px, calc(100vw - 32px)); }
       .team-chart__tree { min-height: auto; }
       .team-chart__panel { width: min(400px, calc(100vw - 32px)); }
     }
@@ -763,6 +1109,21 @@
       .budget-bar { grid-template-columns: 1fr; }
       .task-form { grid-template-columns: 1fr; }
       .task-form__actions { justify-content: stretch; }
+      .models-form__grid { grid-template-columns: 1fr; }
+      .models-drawer {
+        top: auto;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        max-height: min(82vh, 760px);
+        border-left: 0;
+        border-top: 1px solid var(--border-card);
+        border-radius: 24px 24px 0 0;
+        transform: translateY(calc(100% + 24px));
+      }
+      .models-shell.is-drawer-open .models-drawer {
+        transform: translateY(0);
+      }
       .team-chart__root { padding-bottom: 70px; }
       .team-chart__root::after { height: 52px; bottom: 14px; }
       .team-chart__members::before { left: 14%; right: 14%; }
@@ -805,6 +1166,10 @@
           <a href="#budget" class="nav-item">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
             Budget
+          </a>
+          <a href="#models" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M12 4h9"></path><path d="M4 9h16"></path><path d="M4 15h16"></path><path d="M8 4v16"></path></svg>
+            Models
           </a>
           <a href="#team" class="nav-item">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
@@ -1083,12 +1448,182 @@
         </div>
       </section>
 
+      <section id="models" class="view-section">
+        <header class="view-header">
+          <div>
+            <h1 class="view-title">Models</h1>
+            <p class="text-muted mt-1 text-sm">Manage the model catalog available to Syntella, with local pricing overrides layered on top of OpenClaw metadata</p>
+          </div>
+          <button id="models-new-button" class="btn btn-primary" type="button">New Model</button>
+        </header>
+        <div class="models-shell">
+          <div class="models-summary">
+            <article class="models-card">
+              <p class="models-card__label">Catalog Models</p>
+              <p id="models-count" class="models-card__value">0</p>
+              <p id="models-count-detail" class="models-card__detail">Known models across local metadata and observed usage.</p>
+            </article>
+            <article class="models-card">
+              <p class="models-card__label">Enabled</p>
+              <p id="models-enabled-count" class="models-card__value">0</p>
+              <p id="models-enabled-detail" class="models-card__detail">Models currently available for agent selection.</p>
+            </article>
+            <article class="models-card">
+              <p class="models-card__label">Missing Pricing</p>
+              <p id="models-missing-pricing" class="models-card__value">0</p>
+              <p id="models-missing-pricing-detail" class="models-card__detail">Models with zero or missing cost metadata.</p>
+            </article>
+            <article class="models-card">
+              <p class="models-card__label">Observed In Use</p>
+              <p id="models-observed-count" class="models-card__value">0</p>
+              <p id="models-observed-detail" class="models-card__detail">Models seen in imported OpenClaw usage events.</p>
+            </article>
+          </div>
+
+          <div class="models-layout">
+            <div class="models-panel">
+              <div class="models-panel__header">
+                <div>
+                  <h2 class="models-panel__title">Catalog</h2>
+                  <p class="models-panel__meta">OpenClaw metadata is the base layer. Syntella overrides can change availability and pricing without touching upstream files.</p>
+                </div>
+              </div>
+              <div class="models-controls">
+                <div class="task-form__field">
+                  <label class="form-label" for="models-search">Search</label>
+                  <input id="models-search" placeholder="Search provider, model, or label" />
+                </div>
+                <div class="task-form__field">
+                  <label class="form-label" for="models-provider-filter">Provider</label>
+                  <select id="models-provider-filter">
+                    <option value="all">All providers</option>
+                  </select>
+                </div>
+                <div class="task-form__field">
+                  <label class="form-label" for="models-status-filter">Status</label>
+                  <select id="models-status-filter">
+                    <option value="all">All models</option>
+                    <option value="enabled">Enabled only</option>
+                    <option value="disabled">Disabled only</option>
+                    <option value="missing_pricing">Missing pricing</option>
+                    <option value="observed">Observed in use</option>
+                  </select>
+                </div>
+              </div>
+              <table class="models-table">
+                <thead>
+                  <tr>
+                    <th>Model</th>
+                    <th>Provider</th>
+                    <th>Status</th>
+                    <th>Input</th>
+                    <th>Output</th>
+                  </tr>
+                </thead>
+                <tbody id="models-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+          <button type="button" id="models-drawer-backdrop" class="models-drawer-backdrop" aria-label="Close model editor"></button>
+          <aside class="models-drawer" aria-live="polite">
+            <div class="models-drawer__header">
+              <div>
+                <p class="models-drawer__eyebrow">Model Editor</p>
+                <h2 id="models-editor-title" class="models-panel__title">New Model</h2>
+                <p id="models-editor-meta" class="models-panel__meta">Add a model to the shared OpenClaw catalog or update an existing one.</p>
+              </div>
+              <button type="button" id="models-drawer-close" class="models-drawer__close" aria-label="Close model editor">×</button>
+            </div>
+            <form id="models-form" class="models-form">
+              <div class="models-form__grid">
+                <div class="task-form__field">
+                  <label class="form-label" for="model-provider-input">Provider</label>
+                  <input id="model-provider-input" name="provider" placeholder="google" required />
+                </div>
+                <div class="task-form__field">
+                  <label class="form-label" for="model-id-input">Model ID</label>
+                  <input id="model-id-input" name="model_id" placeholder="gemini-3.1-pro-preview" required />
+                </div>
+              </div>
+              <div class="task-form__field">
+                <label class="form-label" for="model-display-name-input">Display Name</label>
+                <input id="model-display-name-input" name="display_name" placeholder="Gemini 3.1 Pro Preview" />
+              </div>
+              <div class="models-form__grid">
+                <div class="task-form__field">
+                  <label class="form-label" for="model-provider-base-url-input">Provider Base URL</label>
+                  <input id="model-provider-base-url-input" name="provider_base_url" placeholder="https://generativelanguage.googleapis.com/v1beta" />
+                </div>
+                <div class="task-form__field">
+                  <label class="form-label" for="model-provider-api-adapter-input">Provider Adapter</label>
+                  <input id="model-provider-api-adapter-input" name="provider_api_adapter" placeholder="google-generative-ai" />
+                </div>
+              </div>
+              <div class="task-form__field">
+                <label class="form-label" for="model-provider-api-key-input">API Key</label>
+                <input id="model-provider-api-key-input" name="provider_api_key" placeholder="Leave blank to keep any existing provider key" />
+                <p id="model-provider-api-key-help" class="models-helper">Stored in OpenClaw config. Existing keys are never shown back in the UI.</p>
+              </div>
+              <div class="models-form__toggles">
+                <label class="models-toggle"><input id="model-enabled-input" type="checkbox" checked /> Enabled</label>
+                <label class="models-toggle"><input id="model-reasoning-input" type="checkbox" /> Reasoning Model</label>
+              </div>
+              <div class="task-form__field">
+                <label class="form-label" for="model-modalities-input">Input Modalities</label>
+                <input id="model-modalities-input" name="input_modalities" placeholder="text,image" />
+              </div>
+              <div class="models-form__grid">
+                <div class="task-form__field">
+                  <label class="form-label" for="model-context-window-input">Context Window</label>
+                  <input id="model-context-window-input" name="context_window" inputmode="numeric" placeholder="1000000" />
+                </div>
+                <div class="task-form__field">
+                  <label class="form-label" for="model-max-tokens-input">Max Tokens</label>
+                  <input id="model-max-tokens-input" name="max_tokens" inputmode="numeric" placeholder="8192" />
+                </div>
+              </div>
+              <div class="models-form__grid">
+                <div class="task-form__field">
+                  <label class="form-label" for="model-cost-input-input">Input Cost / 1M</label>
+                  <input id="model-cost-input-input" name="cost_input" inputmode="decimal" placeholder="0.00" />
+                </div>
+                <div class="task-form__field">
+                  <label class="form-label" for="model-cost-output-input">Output Cost / 1M</label>
+                  <input id="model-cost-output-input" name="cost_output" inputmode="decimal" placeholder="0.00" />
+                </div>
+              </div>
+              <div class="models-form__grid">
+                <div class="task-form__field">
+                  <label class="form-label" for="model-cost-cache-read-input">Cache Read Cost / 1M</label>
+                  <input id="model-cost-cache-read-input" name="cost_cache_read" inputmode="decimal" placeholder="0.00" />
+                </div>
+                <div class="task-form__field">
+                  <label class="form-label" for="model-cost-cache-write-input">Cache Write Cost / 1M</label>
+                  <input id="model-cost-cache-write-input" name="cost_cache_write" inputmode="decimal" placeholder="0.00" />
+                </div>
+              </div>
+              <div class="task-form__field">
+                <label class="form-label" for="model-notes-input">Notes</label>
+                <textarea id="model-notes-input" name="notes" placeholder="Explain why this override exists, or leave blank."></textarea>
+              </div>
+              <div id="models-feedback" class="models-feedback" aria-live="polite"></div>
+              <div class="models-form__actions">
+                <button class="btn btn-primary" type="submit">Save Model</button>
+                <button id="models-reset-button" class="btn btn-secondary" type="button">Clear Override</button>
+                <button id="models-cancel-button" class="btn btn-secondary" type="button">Close</button>
+              </div>
+            </form>
+          </aside>
+        </div>
+      </section>
+
       <section id="team" class="view-section">
         <header class="view-header">
           <div>
             <h1 class="view-title">Team</h1>
             <p class="text-muted mt-1 text-sm">Real local OpenClaw agents discovered from your machine, shown as a flat team under the main profile</p>
           </div>
+          <button id="team-new-agent-button" class="btn btn-primary" type="button">New Agent</button>
         </header>
         <div id="team-chart-shell" class="team-chart">
           <div class="team-chart__layout">
@@ -1097,7 +1632,7 @@
                 <button
                   type="button"
                   id="team-chart-root-node"
-                  class="org-node org-node--root is-selected"
+                  class="org-node org-node--root"
                   data-agent-name="main"
                   data-agent-role="Main Agent"
                   data-agent-status="Running"
@@ -1165,25 +1700,73 @@
             </div>
 
             <button type="button" id="team-chart-panel-backdrop" class="team-chart__panel-backdrop" aria-label="Close selected agent details"></button>
+            <button type="button" id="agent-drawer-backdrop" class="agent-drawer-backdrop" aria-label="Close agent creation"></button>
             <aside class="team-chart__panel" aria-live="polite">
               <div class="team-chart__panel-header">
                 <div>
                   <p class="team-chart__panel-label">Selected Agent</p>
-                  <h2 id="org-panel-name" class="team-chart__panel-title">main</h2>
-                  <p id="org-panel-role" class="team-chart__panel-role">Main Orchestrator</p>
+                  <h2 id="org-panel-name" class="team-chart__panel-title">No agent selected</h2>
+                  <p id="org-panel-role" class="team-chart__panel-role">Pick any node in the team chart</p>
                 </div>
                 <button type="button" id="team-chart-panel-close" class="team-chart__panel-close" aria-label="Close selected agent details">×</button>
               </div>
-              <p id="org-panel-desc" class="team-chart__panel-copy">Primary local OpenClaw profile.</p>
+              <p id="org-panel-desc" class="team-chart__panel-copy">The drawer stays closed until you click an agent.</p>
               <ul id="org-panel-responsibilities" class="team-chart__panel-list">
-                <li>Routes and coordinates local work</li>
-                <li>Owns the primary profile</li>
-                <li>Acts as root for the team view</li>
+                <li>Select an agent to inspect status, role, and responsibilities.</li>
               </ul>
               <div class="team-chart__panel-footer">
-                <span id="org-panel-status">Status: Running</span>
-                <span id="org-panel-focus">Focus: System orchestration, delegation, oversight</span>
+                <span id="org-panel-status">Status: -</span>
+                <span id="org-panel-focus">Focus: -</span>
               </div>
+            </aside>
+
+            <aside class="agent-drawer" aria-live="polite">
+              <div class="agent-drawer__header">
+                <div>
+                  <p class="agent-drawer__eyebrow">New Agent</p>
+                  <h2 class="team-chart__panel-title">Create Agent</h2>
+                  <p class="team-chart__panel-role">Provision a local OpenClaw agent from the Team page.</p>
+                </div>
+                <button type="button" id="agent-drawer-close" class="agent-drawer__close" aria-label="Close agent creation">×</button>
+              </div>
+              <form id="agent-form" class="agent-form">
+                <div class="models-form__grid">
+                  <div class="task-form__field">
+                    <label class="form-label" for="agent-name-input">Agent ID</label>
+                    <input id="agent-name-input" name="agent_id" placeholder="kiwi-ops" required />
+                  </div>
+                  <div class="task-form__field">
+                    <label class="form-label" for="agent-role-input">Role</label>
+                    <input id="agent-role-input" name="role" placeholder="Operations Analyst" required />
+                  </div>
+                </div>
+                <div class="task-form__field">
+                  <label class="form-label" for="agent-description-input">Description</label>
+                  <textarea id="agent-description-input" name="description" placeholder="What this agent is for and how it should behave." required></textarea>
+                </div>
+                <div class="models-form__grid">
+                  <div class="task-form__field">
+                    <label class="form-label" for="agent-model-select">Primary Model</label>
+                    <select id="agent-model-select" name="model_primary" required>
+                      <option value="">Select a model</option>
+                    </select>
+                  </div>
+                  <div class="task-form__field">
+                    <label class="form-label" for="agent-port-input">Port (optional)</label>
+                    <input id="agent-port-input" name="port" inputmode="numeric" placeholder="19007" />
+                  </div>
+                </div>
+                <div class="task-form__field">
+                  <label class="form-label" for="agent-discord-token-input">Discord Bot Token</label>
+                  <input id="agent-discord-token-input" name="discord_token" placeholder="Required by current spawn bridge" required />
+                  <p class="models-helper">The current operator bridge still requires a Discord token for provisioning.</p>
+                </div>
+                <div id="agent-feedback" class="agent-feedback" aria-live="polite"></div>
+                <div class="models-form__actions">
+                  <button class="btn btn-primary" type="submit">Create Agent</button>
+                  <button id="agent-cancel-button" class="btn btn-secondary" type="button">Close</button>
+                </div>
+              </form>
             </aside>
           </div>
         </div>
@@ -1221,6 +1804,18 @@
       const teamChartShell = document.getElementById('team-chart-shell');
       const teamChartPanelBackdrop = document.getElementById('team-chart-panel-backdrop');
       const teamChartPanelClose = document.getElementById('team-chart-panel-close');
+      const teamNewAgentButton = document.getElementById('team-new-agent-button');
+      const agentDrawerBackdrop = document.getElementById('agent-drawer-backdrop');
+      const agentDrawerClose = document.getElementById('agent-drawer-close');
+      const agentForm = document.getElementById('agent-form');
+      const agentFeedback = document.getElementById('agent-feedback');
+      const agentCancelButton = document.getElementById('agent-cancel-button');
+      const agentNameInput = document.getElementById('agent-name-input');
+      const agentRoleInput = document.getElementById('agent-role-input');
+      const agentDescriptionInput = document.getElementById('agent-description-input');
+      const agentModelSelect = document.getElementById('agent-model-select');
+      const agentPortInput = document.getElementById('agent-port-input');
+      const agentDiscordTokenInput = document.getElementById('agent-discord-token-input');
       const orgRootNode = document.getElementById('team-chart-root-node');
       const orgBranches = document.getElementById('team-chart-members');
       const taskForm = document.getElementById('task-form');
@@ -1261,6 +1856,44 @@
       const budgetTaskCostsBody = document.getElementById('budget-task-costs-body');
       const budgetEventsBody = document.getElementById('budget-events-body');
       const budgetPolicyNotes = document.getElementById('budget-policy-notes');
+      const modelsCount = document.getElementById('models-count');
+      const modelsCountDetail = document.getElementById('models-count-detail');
+      const modelsEnabledCount = document.getElementById('models-enabled-count');
+      const modelsEnabledDetail = document.getElementById('models-enabled-detail');
+      const modelsMissingPricing = document.getElementById('models-missing-pricing');
+      const modelsMissingPricingDetail = document.getElementById('models-missing-pricing-detail');
+      const modelsObservedCount = document.getElementById('models-observed-count');
+      const modelsObservedDetail = document.getElementById('models-observed-detail');
+      const modelsSearch = document.getElementById('models-search');
+      const modelsProviderFilter = document.getElementById('models-provider-filter');
+      const modelsStatusFilter = document.getElementById('models-status-filter');
+      const modelsTableBody = document.getElementById('models-table-body');
+      const modelsDrawerBackdrop = document.getElementById('models-drawer-backdrop');
+      const modelsDrawerClose = document.getElementById('models-drawer-close');
+      const modelsEditorTitle = document.getElementById('models-editor-title');
+      const modelsEditorMeta = document.getElementById('models-editor-meta');
+      const modelsForm = document.getElementById('models-form');
+      const modelsFeedback = document.getElementById('models-feedback');
+      const modelsNewButton = document.getElementById('models-new-button');
+      const modelsResetButton = document.getElementById('models-reset-button');
+      const modelsCancelButton = document.getElementById('models-cancel-button');
+      const modelProviderBaseUrlInput = document.getElementById('model-provider-base-url-input');
+      const modelProviderApiAdapterInput = document.getElementById('model-provider-api-adapter-input');
+      const modelProviderApiKeyInput = document.getElementById('model-provider-api-key-input');
+      const modelProviderApiKeyHelp = document.getElementById('model-provider-api-key-help');
+      const modelProviderInput = document.getElementById('model-provider-input');
+      const modelIdInput = document.getElementById('model-id-input');
+      const modelDisplayNameInput = document.getElementById('model-display-name-input');
+      const modelEnabledInput = document.getElementById('model-enabled-input');
+      const modelReasoningInput = document.getElementById('model-reasoning-input');
+      const modelModalitiesInput = document.getElementById('model-modalities-input');
+      const modelContextWindowInput = document.getElementById('model-context-window-input');
+      const modelMaxTokensInput = document.getElementById('model-max-tokens-input');
+      const modelCostInputInput = document.getElementById('model-cost-input-input');
+      const modelCostOutputInput = document.getElementById('model-cost-output-input');
+      const modelCostCacheReadInput = document.getElementById('model-cost-cache-read-input');
+      const modelCostCacheWriteInput = document.getElementById('model-cost-cache-write-input');
+      const modelNotesInput = document.getElementById('model-notes-input');
 
       const orgNodes = () => Array.from(document.querySelectorAll('.org-node'));
       const escapeHtml = (value) => String(value)
@@ -1273,9 +1906,189 @@
       const numberFormat = new Intl.NumberFormat('en-GB');
       const compactNumber = new Intl.NumberFormat('en-GB', { notation: 'compact', maximumFractionDigits: 1 });
       let selectedTaskId = null;
+      let modelsCatalog = [];
+      let selectedModelKey = null;
 
       const setTeamPanelOpen = (isOpen) => {
         teamChartShell.classList.toggle('is-panel-open', Boolean(isOpen));
+      };
+      const setAgentDrawerOpen = (isOpen) => {
+        teamChartShell.classList.toggle('is-agent-drawer-open', Boolean(isOpen));
+      };
+      const setAgentFeedback = (message, tone = '') => {
+        agentFeedback.textContent = message;
+        agentFeedback.className = `agent-feedback${tone ? ` is-${tone}` : ''}`;
+      };
+      const resetAgentForm = () => {
+        agentForm.reset();
+        setAgentFeedback('');
+      };
+
+      const modelKey = (provider, modelId) => `${provider}::${modelId}`;
+      const setModelsDrawerOpen = (isOpen) => {
+        document.querySelector('.models-shell').classList.toggle('is-drawer-open', Boolean(isOpen));
+      };
+      const formatPrice = (value) => value || value === 0 ? `$${Number(value).toFixed(2)}` : '-';
+      const setModelsFeedback = (message, tone = '') => {
+        modelsFeedback.textContent = message;
+        modelsFeedback.className = `models-feedback${tone ? ` is-${tone}` : ''}`;
+      };
+      const parseFormNumber = (value) => {
+        if (value === '' || value === null || value === undefined) return null;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+      };
+      const currentModelSelection = () => modelsCatalog.find((item) => modelKey(item.provider, item.model_id) === selectedModelKey) || null;
+      const resetModelsForm = (model = null) => {
+        if (!model) {
+          selectedModelKey = null;
+          modelsEditorTitle.textContent = 'New Model';
+          modelsEditorMeta.textContent = 'Add a model to the shared OpenClaw catalog so agents can actually use it.';
+          modelProviderBaseUrlInput.value = '';
+          modelProviderApiAdapterInput.value = '';
+          modelProviderApiKeyInput.value = '';
+          modelProviderApiKeyHelp.textContent = 'Stored in OpenClaw config. Existing keys are never shown back in the UI.';
+          modelProviderInput.value = '';
+          modelIdInput.value = '';
+          modelDisplayNameInput.value = '';
+          modelEnabledInput.checked = true;
+          modelReasoningInput.checked = false;
+          modelModalitiesInput.value = '';
+          modelContextWindowInput.value = '';
+          modelMaxTokensInput.value = '';
+          modelCostInputInput.value = '';
+          modelCostOutputInput.value = '';
+          modelCostCacheReadInput.value = '';
+          modelCostCacheWriteInput.value = '';
+          modelNotesInput.value = '';
+          return;
+        }
+        selectedModelKey = modelKey(model.provider, model.model_id);
+        modelsEditorTitle.textContent = model.display_name || model.model_id;
+        modelsEditorMeta.textContent = `${model.provider} • ${model.has_override ? 'Override active' : 'Using shared OpenClaw config'}`;
+        modelProviderBaseUrlInput.value = model.provider_base_url || '';
+        modelProviderApiAdapterInput.value = model.provider_api_adapter || '';
+        modelProviderApiKeyInput.value = '';
+        modelProviderApiKeyHelp.textContent = model.provider_has_api_key
+          ? 'An API key already exists for this provider. Enter a new one only if you want to replace it.'
+          : 'No provider API key detected yet. Add one here if this provider needs it.';
+        modelProviderInput.value = model.provider || '';
+        modelIdInput.value = model.model_id || '';
+        modelDisplayNameInput.value = model.display_name || '';
+        modelEnabledInput.checked = Boolean(model.enabled);
+        modelReasoningInput.checked = Boolean(model.reasoning);
+        modelModalitiesInput.value = (model.input_modalities || []).join(',');
+        modelContextWindowInput.value = model.context_window || '';
+        modelMaxTokensInput.value = model.max_tokens || '';
+        modelCostInputInput.value = model.cost_input ?? '';
+        modelCostOutputInput.value = model.cost_output ?? '';
+        modelCostCacheReadInput.value = model.cost_cache_read ?? '';
+        modelCostCacheWriteInput.value = model.cost_cache_write ?? '';
+        modelNotesInput.value = model.notes || '';
+        setModelsDrawerOpen(true);
+      };
+
+      const filteredModels = () => {
+        const search = (modelsSearch.value || '').trim().toLowerCase();
+        const provider = modelsProviderFilter.value || 'all';
+        const status = modelsStatusFilter.value || 'all';
+        return modelsCatalog.filter((model) => {
+          if (provider !== 'all' && model.provider !== provider) return false;
+          if (status === 'enabled' && !model.enabled) return false;
+          if (status === 'disabled' && model.enabled) return false;
+          if (status === 'missing_pricing' && model.pricing_complete) return false;
+          if (status === 'observed' && !model.observed) return false;
+          if (!search) return true;
+          return [model.display_name, model.model_id, model.provider]
+            .filter(Boolean)
+            .some((value) => value.toLowerCase().includes(search));
+        });
+      };
+
+      const renderModels = () => {
+        const providers = [...new Set(modelsCatalog.map((model) => model.provider).filter(Boolean))];
+        fillSelectOptions(modelsProviderFilter, providers, 'All providers');
+        const visible = filteredModels();
+        const enabledCount = modelsCatalog.filter((model) => model.enabled).length;
+        const missingPricingCount = modelsCatalog.filter((model) => !model.pricing_complete).length;
+        const observedCount = modelsCatalog.filter((model) => model.observed).length;
+        modelsCount.textContent = numberFormat.format(modelsCatalog.length);
+        modelsEnabledCount.textContent = numberFormat.format(enabledCount);
+        modelsMissingPricing.textContent = numberFormat.format(missingPricingCount);
+        modelsObservedCount.textContent = numberFormat.format(observedCount);
+        modelsCountDetail.textContent = `${numberFormat.format(visible.length)} visible with current filters.`;
+        modelsEnabledDetail.textContent = `${numberFormat.format(enabledCount)} enabled for future agent use.`;
+        modelsMissingPricingDetail.textContent = `${numberFormat.format(missingPricingCount)} need manual pricing help.`;
+        modelsObservedDetail.textContent = `${numberFormat.format(observedCount)} have already appeared in usage logs.`;
+
+        if (!visible.length) {
+          modelsTableBody.innerHTML = '<tr><td colspan="5"><div class="models-empty">No models match the current filter.</div></td></tr>';
+          return;
+        }
+        modelsTableBody.innerHTML = visible.map((model) => {
+          const key = modelKey(model.provider, model.model_id);
+          const statusClass = model.enabled ? (model.pricing_complete ? '' : ' is-warning') : ' is-muted';
+          const statusLabel = model.enabled ? (model.pricing_complete ? 'Enabled' : 'Needs pricing') : 'Disabled';
+          return `
+            <tr data-model-key="${escapeHtml(key)}" class="${selectedModelKey === key ? 'is-selected' : ''}">
+              <td>
+                <strong>${escapeHtml(model.display_name || model.model_id)}</strong><br />
+                <span class="text-muted">${escapeHtml(model.model_id)}</span>
+              </td>
+              <td>${escapeHtml(model.provider)}</td>
+              <td><span class="models-status${statusClass}">${escapeHtml(statusLabel)}</span></td>
+              <td>${escapeHtml(formatPrice(model.cost_input))}</td>
+              <td>${escapeHtml(formatPrice(model.cost_output))}</td>
+            </tr>
+          `;
+        }).join('');
+        modelsTableBody.querySelectorAll('tr[data-model-key]').forEach((row) => {
+          row.addEventListener('click', () => {
+            const model = modelsCatalog.find((item) => modelKey(item.provider, item.model_id) === row.dataset.modelKey);
+            if (!model) return;
+            resetModelsForm(model);
+            renderModels();
+          });
+        });
+      };
+
+      const loadModels = async () => {
+        try {
+          const response = await fetch('/api/models', { signal: AbortSignal.timeout(10000) });
+          if (!response.ok) throw new Error('Could not load model catalog');
+          const payload = await response.json();
+          modelsCatalog = payload.models || [];
+          const enabledModels = modelsCatalog
+            .filter((model) => model.enabled)
+            .sort((left, right) => (left.display_name || left.model_id).localeCompare(right.display_name || right.model_id));
+          agentModelSelect.innerHTML = ['<option value="">Select a model</option>']
+            .concat(enabledModels.map((model) => {
+              const label = `${model.display_name || model.model_id} (${model.provider}/${model.model_id})`;
+              return `<option value="${escapeHtml(`${model.provider}/${model.model_id}`)}">${escapeHtml(label)}</option>`;
+            }))
+            .join('');
+          const selected = currentModelSelection();
+          if (selected) {
+            resetModelsForm(selected);
+          } else {
+            resetModelsForm(null);
+          }
+          renderModels();
+        } catch (error) {
+          modelsTableBody.innerHTML = `<tr><td colspan="5"><div class="models-empty">${escapeHtml(error.message || 'Could not load models.')}</div></td></tr>`;
+          setModelsFeedback(error.message || 'Could not load models.', 'error');
+        }
+      };
+
+      const clearOrgPanel = () => {
+        orgNodes().forEach((item) => item.classList.remove('is-selected'));
+        panelName.textContent = 'No agent selected';
+        panelRole.textContent = 'Pick any node in the team chart';
+        panelDesc.textContent = 'The drawer stays closed until you click an agent.';
+        panelStatus.textContent = 'Status: -';
+        panelFocus.textContent = 'Focus: -';
+        panelResponsibilities.innerHTML = '<li>Select an agent to inspect status, role, and responsibilities.</li>';
+        setTeamPanelOpen(false);
       };
 
       const renderOrgPanel = (node) => {
@@ -1799,8 +2612,131 @@
         element.addEventListener('change', renderBudget);
       });
 
-      teamChartPanelBackdrop.addEventListener('click', () => setTeamPanelOpen(false));
-      teamChartPanelClose.addEventListener('click', () => setTeamPanelOpen(false));
+      [modelsSearch, modelsProviderFilter, modelsStatusFilter].forEach((element) => {
+        element.addEventListener('input', renderModels);
+        element.addEventListener('change', renderModels);
+      });
+
+      modelsNewButton.addEventListener('click', () => {
+        setModelsFeedback('');
+        resetModelsForm(null);
+        setModelsDrawerOpen(true);
+      });
+
+      teamNewAgentButton.addEventListener('click', () => {
+        resetAgentForm();
+        setAgentDrawerOpen(true);
+        agentNameInput.focus();
+      });
+
+      modelsCancelButton.addEventListener('click', () => {
+        setModelsFeedback('');
+        setModelsDrawerOpen(false);
+      });
+
+      modelsDrawerBackdrop.addEventListener('click', () => setModelsDrawerOpen(false));
+      modelsDrawerClose.addEventListener('click', () => setModelsDrawerOpen(false));
+      agentDrawerBackdrop.addEventListener('click', () => setAgentDrawerOpen(false));
+      agentDrawerClose.addEventListener('click', () => setAgentDrawerOpen(false));
+      agentCancelButton.addEventListener('click', () => setAgentDrawerOpen(false));
+
+      modelsResetButton.addEventListener('click', async () => {
+        const selected = currentModelSelection();
+        if (!selected || !selected.has_override) {
+          setModelsFeedback('No saved override to clear for this model.', 'error');
+          return;
+        }
+        setModelsFeedback('Clearing override...');
+        try {
+          const response = await fetch('/api/models/overrides', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: selected.provider, model_id: selected.model_id }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload.error || 'Could not clear model override');
+          modelsCatalog = payload.models || [];
+          const refreshed = modelsCatalog.find((item) => modelKey(item.provider, item.model_id) === modelKey(selected.provider, selected.model_id)) || null;
+          resetModelsForm(refreshed);
+          renderModels();
+          setModelsFeedback('Override cleared.', 'success');
+        } catch (error) {
+          setModelsFeedback(error.message || 'Could not clear override.', 'error');
+        }
+      });
+
+      modelsForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        setModelsFeedback('Saving override...');
+        try {
+          const body = {
+            provider: modelProviderInput.value.trim(),
+            model_id: modelIdInput.value.trim(),
+            display_name: modelDisplayNameInput.value.trim(),
+            provider_base_url: modelProviderBaseUrlInput.value.trim(),
+            provider_api_adapter: modelProviderApiAdapterInput.value.trim(),
+            provider_api_key: modelProviderApiKeyInput.value,
+            enabled: modelEnabledInput.checked,
+            reasoning: modelReasoningInput.checked,
+            input_modalities: modelModalitiesInput.value.trim(),
+            context_window: parseFormNumber(modelContextWindowInput.value.trim()),
+            max_tokens: parseFormNumber(modelMaxTokensInput.value.trim()),
+            cost_input: parseFormNumber(modelCostInputInput.value.trim()),
+            cost_output: parseFormNumber(modelCostOutputInput.value.trim()),
+            cost_cache_read: parseFormNumber(modelCostCacheReadInput.value.trim()),
+            cost_cache_write: parseFormNumber(modelCostCacheWriteInput.value.trim()),
+            notes: modelNotesInput.value.trim(),
+          };
+          const response = await fetch('/api/models/overrides', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload.error || 'Could not save model override');
+          modelsCatalog = payload.models || [];
+          const refreshed = modelsCatalog.find((item) => modelKey(item.provider, item.model_id) === modelKey(body.provider, body.model_id)) || null;
+          resetModelsForm(refreshed);
+          renderModels();
+          modelProviderApiKeyInput.value = '';
+          setModelsFeedback('Model saved to the shared OpenClaw catalog.', 'success');
+        } catch (error) {
+          setModelsFeedback(error.message || 'Could not save model.', 'error');
+        }
+      });
+
+      agentForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        setAgentFeedback('Creating agent...');
+        try {
+          const body = {
+            agent_id: agentNameInput.value.trim(),
+            role: agentRoleInput.value.trim(),
+            description: agentDescriptionInput.value.trim(),
+            model_primary: agentModelSelect.value,
+            port: agentPortInput.value.trim(),
+            discord_token: agentDiscordTokenInput.value.trim(),
+          };
+          const response = await fetch('/api/spawn-agent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || payload.ok === false) {
+            throw new Error(payload.detail || payload.error || payload.stderr || 'Could not create agent');
+          }
+          setAgentFeedback('Agent created.', 'success');
+          resetAgentForm();
+          setAgentDrawerOpen(false);
+          await Promise.all([loadDepartments(), loadTasks()]);
+        } catch (error) {
+          setAgentFeedback(error.message || 'Could not create agent.', 'error');
+        }
+      });
+
+      teamChartPanelBackdrop.addEventListener('click', clearOrgPanel);
+      teamChartPanelClose.addEventListener('click', clearOrgPanel);
 
       const bindOrgNode = (node) => {
         if (node.dataset.orgBound === 'true') return;
@@ -1886,7 +2822,7 @@
           const entries = Object.entries(agents).filter(([agentId]) => agentId !== rootId);
           if (!entries.length) {
             orgBranches.innerHTML = '';
-            renderOrgPanel(orgRootNode);
+            clearOrgPanel();
             return;
           }
           orgBranches.innerHTML = '';
@@ -1895,14 +2831,16 @@
             .forEach(([agentId, agent]) => {
               orgBranches.appendChild(createBranchNode(agentId, agent));
             });
-          renderOrgPanel(orgRootNode);
+          clearOrgPanel();
         } catch {
           bindOrgNode(orgRootNode);
+          clearOrgPanel();
         }
       };
 
       orgNodes().forEach(bindOrgNode);
       loadTasks();
+      loadModels();
       loadDepartments();
       renderBudget();
     });

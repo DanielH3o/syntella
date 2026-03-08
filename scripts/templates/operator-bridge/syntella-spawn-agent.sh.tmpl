@@ -14,10 +14,11 @@ set -euo pipefail
 AGENT_ID="${1:-}"
 ROLE="${2:-}"
 DISCORD_BOT_TOKEN_AGENT="${3:-}"
-PORT="${4:-}"
+MODEL_PRIMARY="${4:-moonshot/kimi-k2.5}"
+PORT="${5:-}"
 
-[[ -n "$AGENT_ID" && -n "$ROLE" && -n "$DISCORD_BOT_TOKEN_AGENT" ]] || {
-  echo "usage: syntella-spawn-agent <agent_id> <role> <discord_token> [port]"
+[[ -n "$AGENT_ID" && -n "$ROLE" && -n "$DISCORD_BOT_TOKEN_AGENT" && -n "$MODEL_PRIMARY" ]] || {
+  echo "usage: syntella-spawn-agent <agent_id> <role> <discord_token> <model_primary> [port]"
   exit 2
 }
 
@@ -231,7 +232,7 @@ config_set() {
 
 config_set agents.defaults.workspace "$AGENT_WS"
 config_set agents.defaults.sandbox.workspaceAccess "rw"
-config_set agents.defaults.model.primary "moonshot/kimi-k2.5"
+config_set agents.defaults.model.primary "$MODEL_PRIMARY"
 config_set agents.defaults.model.fallbacks '[]'
 config_set gateway.mode local
 config_set gateway.bind loopback
@@ -250,10 +251,10 @@ config_set tools.fs.workspaceOnly false
 config_set tools.exec.applyPatch.workspaceOnly false
 
 # Write all JSON config (model, arrays, guilds) in a single Python pass.
-python3 - "$CHILD_HOME" "__DISCORD_HUMAN_ID__" "__DISCORD_GUILD_ID__" "__DISCORD_CHANNEL_ID__" "$SPAWN_LOG" <<'PYSCRIPT'
+python3 - "$HOME/.openclaw/openclaw.json" "$CHILD_HOME" "$MODEL_PRIMARY" "__DISCORD_HUMAN_ID__" "__DISCORD_GUILD_ID__" "__DISCORD_CHANNEL_ID__" "$SPAWN_LOG" <<'PYSCRIPT'
 import json, os, sys
 
-home, human_id, guild_id, channel_id, log_path = sys.argv[1:6]
+global_cfg_path, home, model_primary, human_id, guild_id, channel_id, log_path = sys.argv[1:8]
 cfg_path = os.path.join(home, ".openclaw-main", "openclaw.json")
 os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
 
@@ -262,7 +263,10 @@ def log(msg):
         f.write(f"{msg}\n")
 
 try:
-    if os.path.exists(cfg_path):
+    if os.path.exists(global_cfg_path):
+        with open(global_cfg_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+    elif os.path.exists(cfg_path):
         with open(cfg_path, "r", encoding="utf-8") as f:
             cfg = json.load(f)
     else:
@@ -271,7 +275,7 @@ try:
     # Model config.
     agents = cfg.setdefault("agents", {})
     defs = agents.setdefault("defaults", {})
-    defs.setdefault("model", {})["primary"] = "moonshot/kimi-k2.5"
+    defs.setdefault("model", {})["primary"] = model_primary
     defs.setdefault("model", {})["fallbacks"] = []
     # Remove invalid key for older/newer schemas that reject agents.main.
     if isinstance(agents, dict) and "main" in agents:
@@ -318,12 +322,8 @@ if [[ "$child_group_policy" != "allowlist" || "$child_guild_allow" != "true" ]];
   oc_child config get channels.discord.guilds >&2 || true
   exit 1
 fi
-if [[ "$child_model_primary" != moonshot/* && "$child_model_primary" != "moonshot/kimi-k2.5" ]]; then
+if [[ "$child_model_primary" != "$MODEL_PRIMARY" ]]; then
   echo "ERROR: child model wiring failed (agents.defaults.model.primary=${child_model_primary:-<unset>})" >&2
-  exit 1
-fi
-if ! grep -q '^MOONSHOT_API_KEY=' "$CHILD_HOME/.openclaw-main/.env" 2>/dev/null; then
-  echo "ERROR: child Moonshot key missing in $CHILD_HOME/.openclaw-main/.env" >&2
   exit 1
 fi
 
@@ -339,7 +339,7 @@ log "Config validated, starting gateway on port $PORT"
 find "$CHILD_HOME" /tmp -name 'gateway.*.lock' -delete 2>/dev/null || true
 
 # Start the agent's gateway.
-nohup env OPENCLAW_HOME="$CHILD_HOME" OPENCLAW_PROFILE="$CHILD_PROFILE" MOONSHOT_API_KEY="${MOONSHOT_API_KEY:-}" \
+nohup env OPENCLAW_HOME="$CHILD_HOME" OPENCLAW_PROFILE="$CHILD_PROFILE" \
   openclaw --profile "$CHILD_PROFILE" gateway --allow-unconfigured --port "$PORT" \
   > "$AGENT_WS/gateway.log" 2>&1 &
 GATEWAY_PID=$!
