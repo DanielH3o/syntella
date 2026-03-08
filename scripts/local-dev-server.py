@@ -349,7 +349,7 @@ def read_operator_bridge_token():
     return ""
 
 
-def bridge_request(path, method="GET", payload=None):
+def bridge_request(path, method="GET", payload=None, timeout=30):
     token = read_operator_bridge_token()
     if not token:
         raise RuntimeError("Operator bridge token is not configured")
@@ -364,7 +364,7 @@ def bridge_request(path, method="GET", payload=None):
         headers["Content-Type"] = "application/json"
     request = Request(url, data=data, headers=headers, method=method)
     try:
-        with urlopen(request, timeout=30) as response:
+        with urlopen(request, timeout=timeout) as response:
             body = response.read().decode("utf-8")
             return response.status, json.loads(body) if body else {}
     except HTTPError as exc:
@@ -2186,7 +2186,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/spawn-agent":
             body = self._parse_body()
             try:
-                status, payload = bridge_request("/spawn-agent", method="POST", payload=body)
+                status, payload = bridge_request("/spawn-agent", method="POST", payload=body, timeout=300)
                 return self._send_json(status, payload)
             except Exception as exc:
                 return self._send_json(502, {"ok": False, "error": str(exc)})
