@@ -241,6 +241,7 @@ Local data sources:
 - Added a companion `reports-tool` skill for durable report creation guidance.
 - Bootstrap and spawned-agent config now explicitly enable the plugin under `tools.allow`, `plugins.allow`, and `plugins.entries.syntella-reports.enabled`.
 - Fixed a droplet/runtime plugin discovery bug where spawned agents were copying the task/report extensions into `tasks` and `reports` folder names instead of the plugin ID folder names OpenClaw expected. Spawn now copies them into `syntella-tasks` and `syntella-reports`, with a fallback for older template stores.
+- Hardened child plugin discovery further by copying the task/report extensions into both the agent workspace extension path and the child runtime extension path, and by writing explicit plugin load paths into the child config during spawn.
 - The tool currently supports:
   - `list_recent`
   - `list_mine`

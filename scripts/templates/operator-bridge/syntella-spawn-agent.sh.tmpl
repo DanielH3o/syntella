@@ -195,24 +195,29 @@ PY
 
 # Copy spawned agent template.
 cp "$SHARED_WS_ROOT/AGENTS.SPAWNED.md" "$AGENT_WS/AGENTS.md" 2>/dev/null || true
-mkdir -p "$AGENT_WS/.openclaw/extensions"
+mkdir -p "$AGENT_WS/.openclaw/extensions" "$CHILD_HOME/.openclaw/extensions"
 if [[ -d "$SHARED_WS_ROOT/templates/extensions/syntella-tasks" ]]; then
-  rm -rf "$AGENT_WS/.openclaw/extensions/tasks" "$AGENT_WS/.openclaw/extensions/syntella-tasks"
+  rm -rf "$AGENT_WS/.openclaw/extensions/tasks" "$AGENT_WS/.openclaw/extensions/syntella-tasks" "$CHILD_HOME/.openclaw/extensions/tasks" "$CHILD_HOME/.openclaw/extensions/syntella-tasks"
   cp -R "$SHARED_WS_ROOT/templates/extensions/syntella-tasks" "$AGENT_WS/.openclaw/extensions/syntella-tasks"
+  cp -R "$SHARED_WS_ROOT/templates/extensions/syntella-tasks" "$CHILD_HOME/.openclaw/extensions/syntella-tasks"
 elif [[ -d "$SHARED_WS_ROOT/templates/extensions/tasks" ]]; then
-  rm -rf "$AGENT_WS/.openclaw/extensions/tasks" "$AGENT_WS/.openclaw/extensions/syntella-tasks"
+  rm -rf "$AGENT_WS/.openclaw/extensions/tasks" "$AGENT_WS/.openclaw/extensions/syntella-tasks" "$CHILD_HOME/.openclaw/extensions/tasks" "$CHILD_HOME/.openclaw/extensions/syntella-tasks"
   cp -R "$SHARED_WS_ROOT/templates/extensions/tasks" "$AGENT_WS/.openclaw/extensions/syntella-tasks"
+  cp -R "$SHARED_WS_ROOT/templates/extensions/tasks" "$CHILD_HOME/.openclaw/extensions/syntella-tasks"
 fi
 if [[ -d "$SHARED_WS_ROOT/templates/extensions/syntella-reports" ]]; then
-  rm -rf "$AGENT_WS/.openclaw/extensions/reports" "$AGENT_WS/.openclaw/extensions/syntella-reports"
+  rm -rf "$AGENT_WS/.openclaw/extensions/reports" "$AGENT_WS/.openclaw/extensions/syntella-reports" "$CHILD_HOME/.openclaw/extensions/reports" "$CHILD_HOME/.openclaw/extensions/syntella-reports"
   cp -R "$SHARED_WS_ROOT/templates/extensions/syntella-reports" "$AGENT_WS/.openclaw/extensions/syntella-reports"
+  cp -R "$SHARED_WS_ROOT/templates/extensions/syntella-reports" "$CHILD_HOME/.openclaw/extensions/syntella-reports"
 elif [[ -d "$SHARED_WS_ROOT/templates/extensions/reports" ]]; then
-  rm -rf "$AGENT_WS/.openclaw/extensions/reports" "$AGENT_WS/.openclaw/extensions/syntella-reports"
+  rm -rf "$AGENT_WS/.openclaw/extensions/reports" "$AGENT_WS/.openclaw/extensions/syntella-reports" "$CHILD_HOME/.openclaw/extensions/reports" "$CHILD_HOME/.openclaw/extensions/syntella-reports"
   cp -R "$SHARED_WS_ROOT/templates/extensions/reports" "$AGENT_WS/.openclaw/extensions/syntella-reports"
+  cp -R "$SHARED_WS_ROOT/templates/extensions/reports" "$CHILD_HOME/.openclaw/extensions/syntella-reports"
 fi
 if [[ "${SYNTELLA_AGENT_SPECIALTY:-}" == "seo" && -d "$SHARED_WS_ROOT/templates/extensions/seo" ]]; then
-  rm -rf "$AGENT_WS/.openclaw/extensions/seo"
+  rm -rf "$AGENT_WS/.openclaw/extensions/seo" "$CHILD_HOME/.openclaw/extensions/seo"
   cp -R "$SHARED_WS_ROOT/templates/extensions/seo" "$AGENT_WS/.openclaw/extensions/seo"
+  cp -R "$SHARED_WS_ROOT/templates/extensions/seo" "$CHILD_HOME/.openclaw/extensions/seo"
 fi
 DISPLAY_NAME="$(python3 -c "
 import sys
@@ -271,10 +276,10 @@ config_set tools.fs.workspaceOnly false
 config_set tools.exec.applyPatch.workspaceOnly false
 
 # Write all JSON config (model, arrays, guilds) in a single Python pass.
-python3 - "$HOME/.openclaw/openclaw.json" "$CHILD_HOME" "$MODEL_PRIMARY" "__DISCORD_HUMAN_ID__" "__DISCORD_GUILD_ID__" "$DISCORD_CHANNEL_ID_AGENT" "$SPAWN_LOG" <<'PYSCRIPT'
+python3 - "$HOME/.openclaw/openclaw.json" "$CHILD_HOME" "$MODEL_PRIMARY" "__DISCORD_HUMAN_ID__" "__DISCORD_GUILD_ID__" "$DISCORD_CHANNEL_ID_AGENT" "$SPAWN_LOG" "$AGENT_WS" "${SYNTELLA_AGENT_SPECIALTY:-}" <<'PYSCRIPT'
 import json, os, sys
 
-global_cfg_path, home, model_primary, human_id, guild_id, channel_id, log_path = sys.argv[1:8]
+global_cfg_path, home, model_primary, human_id, guild_id, channel_id, log_path, agent_ws, specialty = sys.argv[1:10]
 cfg_path = os.path.join(home, ".openclaw-main", "openclaw.json")
 os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
 
@@ -330,6 +335,25 @@ try:
     tools["allow"] = allow
 
     plugins = cfg.setdefault("plugins", {})
+    load = plugins.get("load")
+    if not isinstance(load, dict):
+        load = {}
+    paths = load.get("paths")
+    if not isinstance(paths, list):
+        paths = []
+    resolved_paths = [p for p in paths if isinstance(p, str)]
+    desired_paths = [
+        os.path.join(agent_ws, ".openclaw", "extensions", "syntella-tasks"),
+        os.path.join(agent_ws, ".openclaw", "extensions", "syntella-reports"),
+    ]
+    if specialty == "seo":
+        desired_paths.append(os.path.join(agent_ws, ".openclaw", "extensions", "seo"))
+    for path in desired_paths:
+        if os.path.isdir(path) and path not in resolved_paths:
+            resolved_paths.append(path)
+    load["paths"] = resolved_paths
+    plugins["load"] = load
+
     plugin_allow = plugins.get("allow")
     if not isinstance(plugin_allow, list):
         plugin_allow = []
