@@ -172,10 +172,17 @@
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || payload.ok === false) throw new Error(payload.detail || payload.error || payload.stderr || 'Could not create agent');
+        const createdAgentId = body.agent_id;
         ui.setAgentFeedback('Agent created.', 'success');
         ui.resetAgentForm();
         ui.setAgentDrawerOpen(false);
-        await Promise.all([actions.loadDepartments(), actions.loadTasks()]);
+        await actions.loadDepartments();
+        await Promise.all([
+          actions.loadTasks(),
+          typeof actions.renderBudget === 'function' ? actions.renderBudget() : Promise.resolve(),
+        ]);
+        const createdNode = utils.orgNodes().find((item) => item.dataset.agentId === createdAgentId);
+        if (createdNode) createdNode.click();
       } catch (error) {
         ui.setAgentFeedback(error.message || 'Could not create agent.', 'error');
       }
