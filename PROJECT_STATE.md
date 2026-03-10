@@ -122,6 +122,7 @@ Local data sources:
 - Team page now lets the user set an optional `monthly_budget` during agent creation.
 - Selected-agent drawer now lets the user edit an agent's monthly budget in place.
 - Team discovery now merges the root OpenClaw state with Syntella registry entries so spawned agents living in separate homes like `~/.openclaw-<agent_id>` still appear in the Team UI.
+- `TEAM.md` now treats Syntella's main Discord channel as both her inbox and the shared control channel that other agents should use for replies, completions, and blockers intended for Syntella.
 
 ### Models page
 
@@ -228,6 +229,7 @@ Local data sources:
 - Plugin registration now uses the OpenClaw optional-tool pattern and includes an explicit manifest `configSchema`.
 - Bootstrap and spawned-agent config now explicitly enable the plugin under `plugins.allow` and `plugins.entries.syntella-tasks.enabled`.
 - Fixed a runtime registration bug where the tasks/reports plugins exported `async register(...)`; OpenClaw ignores async plugin registration promises, so the tools were never actually exposed. Both plugins now register synchronously.
+- Fixed tool allowlist wiring: `plugins.allow` should contain plugin IDs (`syntella-tasks`, `syntella-reports`), but `tools.allow` must contain the actual tool names (`tasks`, `reports`). Spawn/bootstrap now write the correct values.
 - The tool currently supports:
   - `list`
   - `list_mine`

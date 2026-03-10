@@ -751,10 +751,10 @@ tools = cfg.setdefault('tools', {})
 allow = tools.get('allow')
 if not isinstance(allow, list):
     allow = []
-if 'syntella-tasks' not in allow:
-    allow.append('syntella-tasks')
-if 'syntella-reports' not in allow:
-    allow.append('syntella-reports')
+if 'tasks' not in allow:
+    allow.append('tasks')
+if 'reports' not in allow:
+    allow.append('reports')
 tools['allow'] = allow
 plugins = cfg.setdefault('plugins', {})
 plugin_allow = plugins.get('allow')
