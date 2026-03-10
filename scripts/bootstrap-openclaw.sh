@@ -444,7 +444,7 @@ seed_workspace_context_files() {
   local shared_ws="$ws_root/shared"
   local template_extensions_root="$ws_root/templates/extensions"
   mkdir -p "$syntella_ws" "$syntella_ws/memory" "$shared_ws"
-  mkdir -p "$syntella_ws/.openclaw/extensions" "$template_extensions_root"
+  mkdir -p "$template_extensions_root"
 
   render_template "$ws_tmpl/AGENTS.SYNTELLA.md.tmpl" "$syntella_ws/AGENTS.md"
   render_template "$ws_tmpl/AGENTS.SPAWNED.md.tmpl" "$ws_root/AGENTS.SPAWNED.md"
@@ -464,9 +464,7 @@ seed_workspace_context_files() {
     "$template_extensions_root/syntella-tasks" \
     "$template_extensions_root/syntella-reports" \
     "$template_extensions_root/seo"
-  cp -R "$ws_tmpl/extensions/tasks" "$syntella_ws/.openclaw/extensions/syntella-tasks"
   cp -R "$ws_tmpl/extensions/tasks" "$template_extensions_root/syntella-tasks"
-  cp -R "$ws_tmpl/extensions/reports" "$syntella_ws/.openclaw/extensions/syntella-reports"
   cp -R "$ws_tmpl/extensions/reports" "$template_extensions_root/syntella-reports"
   cp -R "$ws_tmpl/extensions/seo" "$template_extensions_root/seo"
 
@@ -703,12 +701,12 @@ PY
 verify_discord_dm_allowlist() {
   local dm_enabled dm_policy dm_human
   dm_enabled="$(oc config get channels.discord.dm.enabled 2>/dev/null | tr -d '"[:space:]' || true)"
-  dm_policy="$(oc config get channels.discord.dm.policy 2>/dev/null | tr -d '"[:space:]' || true)"
-  dm_human="$(oc config get channels.discord.dm.allowFrom.0 2>/dev/null | tr -d '"[:space:]' || true)"
+  dm_policy="$(oc config get channels.discord.dmPolicy 2>/dev/null | tr -d '"[:space:]' || true)"
+  dm_human="$(oc config get channels.discord.allowFrom.0 2>/dev/null | tr -d '"[:space:]' || true)"
 
   [[ "$dm_enabled" == "true" ]] || { echo "Error: channels.discord.dm.enabled is not true"; exit 1; }
-  [[ "$dm_policy" == "allowlist" ]] || { echo "Error: channels.discord.dm.policy is not allowlist"; exit 1; }
-  [[ "$dm_human" == "$DISCORD_HUMAN_ID" ]] || { echo "Error: channels.discord.dm.allowFrom[0] mismatch"; exit 1; }
+  [[ "$dm_policy" == "allowlist" ]] || { echo "Error: channels.discord.dmPolicy is not allowlist"; exit 1; }
+  [[ "$dm_human" == "$DISCORD_HUMAN_ID" ]] || { echo "Error: channels.discord.allowFrom[0] mismatch"; exit 1; }
 
   echo "Verified Discord DM allowlist (owner=${DISCORD_HUMAN_ID})."
 }
