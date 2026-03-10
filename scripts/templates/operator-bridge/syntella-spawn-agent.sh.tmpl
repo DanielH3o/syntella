@@ -194,6 +194,7 @@ with open(team_path, "w", encoding="utf-8") as f:
 PY
 
 log "Restarting root gateway to pick up native agent config"
+openclaw gateway stop >/dev/null 2>&1 || true
 pkill -f "openclaw gateway" >/dev/null 2>&1 || true
 sleep 1
 find "$ROOT_HOME" /tmp -name 'gateway.*.lock' -delete 2>/dev/null || true

@@ -392,42 +392,44 @@ if os.path.exists(config_path):
 channels = cfg.setdefault("channels", {})
 discord = channels.setdefault("discord", {})
 discord["enabled"] = True
-discord["token"] = token
-discord["groupPolicy"] = "allowlist"
-# Allow receiving bot-authored Discord messages (own self-messages are still filtered by OpenClaw).
-discord["allowBots"] = True
-
-# DM policy: only allow DMs from the configured human.
+discord["allowFrom"] = [str(human_id)]
+discord["dmPolicy"] = "allowlist"
 dm_cfg = discord.get("dm")
 if not isinstance(dm_cfg, dict):
     dm_cfg = {}
 dm_cfg["enabled"] = True
-dm_cfg["policy"] = "allowlist"
-dm_cfg["allowFrom"] = [str(human_id)]
 dm_cfg["groupEnabled"] = False
 discord["dm"] = dm_cfg
-# Remove legacy key if present.
-discord.pop("dmPolicy", None)
 
-guilds = discord.get("guilds")
-if not isinstance(guilds, dict):
-    guilds = {}
+accounts = discord.get("accounts")
+if not isinstance(accounts, dict):
+    accounts = {}
 
-guild_cfg = guilds.get(guild_id)
-if not isinstance(guild_cfg, dict):
-    guild_cfg = {}
+default_account = accounts.get("default")
+if not isinstance(default_account, dict):
+    default_account = {}
+default_account["name"] = "Syntella"
+default_account["token"] = token
+default_account["allowBots"] = True
+default_account["groupPolicy"] = "allowlist"
+default_account["guilds"] = {
+    guild_id: {
+        "requireMention": False,
+        "channels": {
+            channel_id: {"allow": True, "requireMention": False}
+        },
+    }
+}
+default_account["intents"] = {
+    "presence": False,
+    "guildMembers": False,
+}
+accounts["default"] = default_account
+discord["accounts"] = accounts
 
-guild_cfg["requireMention"] = False
-
-channels_cfg = guild_cfg.get("channels")
-if not isinstance(channels_cfg, dict):
-    channels_cfg = {}
-
-channels_cfg[channel_id] = {"allow": True, "requireMention": False}
-guild_cfg["channels"] = channels_cfg
-
-guilds[guild_id] = guild_cfg
-discord["guilds"] = guilds
+# Remove legacy single-account keys once the default account is populated.
+for legacy_key in ("token", "groupPolicy", "allowBots", "guilds", "intents"):
+    discord.pop(legacy_key, None)
 
 with open(config_path, "w", encoding="utf-8") as f:
     json.dump(cfg, f, indent=2, ensure_ascii=False)
@@ -796,6 +798,26 @@ if not isinstance(entry, dict):
 entry['enabled'] = True
 entries['syntella-reports'] = entry
 plugins['entries'] = entries
+bindings = cfg.get('bindings')
+if not isinstance(bindings, list):
+    bindings = []
+main_binding = {
+    'agentId': 'main',
+    'match': {
+        'channel': 'discord',
+        'accountId': 'default',
+    },
+}
+found = False
+for item in bindings:
+    if isinstance(item, dict) and item.get('agentId') == 'main':
+        item.clear()
+        item.update(main_binding)
+        found = True
+        break
+if not found:
+    bindings.append(main_binding)
+cfg['bindings'] = bindings
 with open(config_path, 'w') as f:
     json.dump(cfg, f, indent=2)
 PY
@@ -994,6 +1016,7 @@ start_gateway() {
   mkdir -p "$HOME/.openclaw/logs"
 
   # Always restart to pick up any config changes applied before this call.
+  openclaw gateway stop >/dev/null 2>&1 || true
   pkill -f "openclaw gateway" >/dev/null 2>&1 || true
   sleep 1
 

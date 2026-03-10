@@ -136,6 +136,8 @@ Local data sources:
 - `TEAM.md` now treats Syntella's main Discord channel as both her inbox and the shared control channel that other agents should use for replies, completions, and blockers intended for Syntella.
 - Spawned-agent identity is now made explicit in both runtime and instructions: spawned gateways receive `OPENCLAW_AGENT_ID=<agent_id>`, and AGENTS templates now distinguish the team-facing agent ID from the underlying OpenClaw profile name `main`.
 - Fixed spawned workspace path wiring. Child runtimes were inheriting the root `syntella` workspace because the CLI `config set agents.defaults.workspace ...` call was failing non-fatally and the JSON config pass was not writing `agents.defaults.workspace`. Spawn now writes the child workspace path directly into config and also exports `SYNTELLA_WORKSPACE=<agent workspace>` when starting the child gateway.
+- Bootstrap/root config now normalizes Discord into OpenClaw's native multi-account shape. Syntella/main is represented as `channels.discord.accounts.default` with a `bindings` entry for `agentId = main`, instead of relying on legacy top-level single-account Discord fields.
+- Gateway restart paths now call `openclaw gateway stop` before starting again, to reduce restart races while adding native agents.
 
 ### Models page
 
