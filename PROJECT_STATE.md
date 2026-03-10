@@ -46,6 +46,7 @@ Local data sources:
 - Reason: OpenClaw already stores usable local usage telemetry per message/session/agent, so the main missing layer is attribution, not token accounting.
 - Syntella/main should own the primary heartbeat-based control loop.
 - Worker agents should remain event-driven by default and only get their own heartbeat for narrow, explicit reasons.
+- Syntella should migrate toward OpenClaw's native single-root multi-agent architecture instead of continuing the current separate-home-per-agent spawn model.
 
 ### Local development
 
@@ -86,6 +87,16 @@ Local data sources:
 
 ## What Is Done
 
+### Native multi-agent migration prototype
+
+- Added a first migration helper at [scripts/openclaw_native_agent.py](/Users/daniel/.openclaw/workspace/syntella/scripts/openclaw_native_agent.py).
+- The helper mutates the root `~/.openclaw/openclaw.json` to register a native non-main agent under:
+  - `agents.list`
+  - `channels.discord.accounts`
+  - `bindings`
+- It also creates the target workspace and `agentDir` paths.
+- This is the first concrete step toward replacing the current separate-home spawn model with a native single-root OpenClaw multi-agent architecture.
+
 ### Local server
 
 - Single local dev server serves frontend and local APIs.
@@ -124,6 +135,7 @@ Local data sources:
 - Team discovery now merges the root OpenClaw state with Syntella registry entries so spawned agents living in separate homes like `~/.openclaw-<agent_id>` still appear in the Team UI.
 - `TEAM.md` now treats Syntella's main Discord channel as both her inbox and the shared control channel that other agents should use for replies, completions, and blockers intended for Syntella.
 - Spawned-agent identity is now made explicit in both runtime and instructions: spawned gateways receive `OPENCLAW_AGENT_ID=<agent_id>`, and AGENTS templates now distinguish the team-facing agent ID from the underlying OpenClaw profile name `main`.
+- Fixed spawned workspace path wiring. Child runtimes were inheriting the root `syntella` workspace because the CLI `config set agents.defaults.workspace ...` call was failing non-fatally and the JSON config pass was not writing `agents.defaults.workspace`. Spawn now writes the child workspace path directly into config and also exports `SYNTELLA_WORKSPACE=<agent workspace>` when starting the child gateway.
 
 ### Models page
 
@@ -361,16 +373,15 @@ This means total accounted tokens can be much larger than just input + output.
 
 ## Immediate Next Step
 
-Deploy to a fresh droplet and verify the new routine/reporting/runtime path end to end.
+Plan and begin migration away from the current separate-home spawn model toward a native single-root OpenClaw multi-agent architecture.
 
 Immediate direction:
 
-1. Redeploy and verify spawned agents now discover `syntella-tasks` and `syntella-reports` correctly in real OpenClaw workspaces.
-2. Verify routine save creates/updates real OpenClaw cron jobs, including one-shot `Date` routines.
-3. Verify `Run Now` triggers the intended agent turn through OpenClaw cron.
-4. Verify successful routine runs create durable DB-backed reports through the `reports` tool on a real droplet.
-5. Then harden Team-page agent creation and operator-bridge failure visibility further.
-6. After that, improve attribution accuracy by attaching exact `session_id` to task runs when possible.
+1. Use [OPENCLAW_MULTI_AGENT_MIGRATION_PLAN.md](/Users/daniel/.openclaw/workspace/syntella/OPENCLAW_MULTI_AGENT_MIGRATION_PLAN.md) as the architecture target.
+2. Prototype one native non-main agent under the root `~/.openclaw` home.
+3. Verify that agent appears under `~/.openclaw/agents/<agent_id>`.
+4. Verify correct workspace, Discord binding, and tasks/reports tool access.
+5. Then rewrite Team-page agent creation to use that native path instead of separate homes.
 
 ## Planned Next Work
 

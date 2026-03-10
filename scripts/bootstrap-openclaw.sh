@@ -248,7 +248,7 @@ install_openclaw_cli() {
   npm config set prefix "$HOME/.npm-global"
 
   # Skip optional deps (e.g. @discordjs/opus) to avoid native build failures on fresh droplets.
-  npm install -g --omit=optional openclaw@2026.2.24
+  npm install -g --omit=optional openclaw@latest
 
   ensure_openclaw_on_path || true
 }
@@ -563,6 +563,7 @@ EOF
 install_operator_bridge() {
   local bridge_dir="$HOME/.openclaw/operator-bridge"
   local bridge_py="$bridge_dir/server.py"
+  local native_helper_py="$bridge_dir/openclaw_native_agent.py"
   local spawn_sh="/usr/local/bin/syntella-spawn-agent"
   local env_dir="/etc/openclaw"
   local env_file="$env_dir/operator-bridge.env"
@@ -604,7 +605,9 @@ EOF
 
   mkdir -p "$bridge_dir"
   render_template "$TEMPLATE_DIR/operator-bridge/server.py" "$bridge_py"
+  cp "$SCRIPT_DIR/openclaw_native_agent.py" "$native_helper_py"
   chmod 700 "$bridge_py"
+  chmod 700 "$native_helper_py"
 
   # Gracefully stop existing bridge before restarting.
   pkill -f "operator-bridge/server.py" >/dev/null 2>&1 || true
@@ -757,6 +760,20 @@ if 'reports' not in allow:
     allow.append('reports')
 tools['allow'] = allow
 plugins = cfg.setdefault('plugins', {})
+load = plugins.get('load')
+if not isinstance(load, dict):
+    load = {}
+paths = load.get('paths')
+if not isinstance(paths, list):
+    paths = []
+for path in [
+    os.path.expanduser('~/.openclaw/workspace/templates/extensions/syntella-tasks'),
+    os.path.expanduser('~/.openclaw/workspace/templates/extensions/syntella-reports'),
+]:
+    if path not in paths:
+        paths.append(path)
+load['paths'] = paths
+plugins['load'] = load
 plugin_allow = plugins.get('allow')
 if not isinstance(plugin_allow, list):
     plugin_allow = []

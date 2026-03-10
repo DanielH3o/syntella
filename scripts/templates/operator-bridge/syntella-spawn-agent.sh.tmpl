@@ -1,475 +1,115 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# syntella-spawn-agent — Provision and start an isolated OpenClaw agent.
-#
-# Improvements:
-# - Port allocation checks both registry AND actual port usage (lsof/ss)
-# - Kills orphaned gateways before starting a new one
-# - Tracks gateway PID in registry for clean shutdown
-# - Reserves port in registry before starting gateway (prevents races)
-# - Consolidated logging to a single per-agent log file
-# - Idempotent: re-spawning an existing agent stops the old gateway first
-
 AGENT_ID="${1:-}"
 ROLE="${2:-}"
 DISCORD_BOT_TOKEN_AGENT="${3:-}"
 DISCORD_CHANNEL_ID_AGENT="${4:-}"
 MODEL_PRIMARY="${5:-moonshot/kimi-k2.5}"
-PORT="${6:-}"
 
 [[ -n "$AGENT_ID" && -n "$ROLE" && -n "$DISCORD_BOT_TOKEN_AGENT" && -n "$DISCORD_CHANNEL_ID_AGENT" && -n "$MODEL_PRIMARY" ]] || {
-  echo "usage: syntella-spawn-agent <agent_id> <role> <discord_token> <channel_id> <model_primary> [port]"
+  echo "usage: syntella-spawn-agent <agent_id> <role> <discord_token> <channel_id> <model_primary>"
   exit 2
 }
 
-# Source shared environment.
 set -a
 source /etc/openclaw/openclaw.env
+source /etc/openclaw/operator-bridge.env 2>/dev/null || true
 set +a
 
-# Paths.
-CHILD_HOME="$HOME/.openclaw-$AGENT_ID"
-CHILD_PROFILE="main"
-SHARED_WS_ROOT="$HOME/.openclaw/workspace"
+ROOT_HOME="$HOME/.openclaw"
+ROOT_PROFILE="main"
+SHARED_WS_ROOT="$ROOT_HOME/workspace"
 AGENT_WS="$SHARED_WS_ROOT/$AGENT_ID"
+AGENT_DIR="$ROOT_HOME/agents/$AGENT_ID/agent"
 REGISTRY="$SHARED_WS_ROOT/agents/registry.json"
 SPAWN_LOG="$AGENT_WS/spawn.log"
+NATIVE_HELPER="$ROOT_HOME/operator-bridge/openclaw_native_agent.py"
 
-mkdir -p "$AGENT_WS/memory" "$SHARED_WS_ROOT/agents" "$CHILD_HOME"
+mkdir -p "$AGENT_WS/memory" "$SHARED_WS_ROOT/agents" "$ROOT_HOME/logs"
 
 log() { echo "$(date -Iseconds) $*" >> "$SPAWN_LOG"; }
-log "START: agent_id=$AGENT_ID role='${ROLE:0:40}...' port='$PORT'"
+log "START: native agent_id=$AGENT_ID role='${ROLE:0:80}...'"
 
-# Helper: check if a port is in use by any process.
-port_in_use() {
-  local p="$1"
-  if command -v ss >/dev/null 2>&1; then
-    ss -ltn 2>/dev/null | grep -q ":${p} " && return 0
-  fi
-  if command -v lsof >/dev/null 2>&1; then
-    lsof -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1 && return 0
-  fi
-  # Fallback: bash TCP connect test.
-  (echo >/dev/tcp/127.0.0.1/"$p") >/dev/null 2>&1 && return 0
-  return 1
-}
-
-# Helper: kill any gateway running on a specific port.
-kill_gateway_on_port() {
-  local p="$1"
-  if command -v lsof >/dev/null 2>&1; then
-    local pids
-    pids="$(lsof -ti tcp:"$p" 2>/dev/null || true)"
-    if [[ -n "$pids" ]]; then
-      echo "$pids" | xargs kill 2>/dev/null || true
-      sleep 1
-      # Force-kill if still alive.
-      echo "$pids" | xargs kill -9 2>/dev/null || true
-    fi
-  fi
-  # Also kill by pattern matching for this agent.
-  pkill -f "openclaw.*gateway.*--port $p" 2>/dev/null || true
-}
-
-# Stop existing gateway for this agent (idempotent re-spawn).
-existing_port=""
-existing_pid=""
-if [[ -f "$REGISTRY" ]]; then
-  existing_port="$(python3 -c "
-import json, sys
-try:
-    d=json.load(open('$REGISTRY'))
-    e=d.get('$AGENT_ID',{})
-    print(e.get('port',''))
-except Exception:
-    print('')
-" 2>/dev/null || true)"
-  existing_pid="$(python3 -c "
-import json
-try:
-    d=json.load(open('$REGISTRY'))
-    e=d.get('$AGENT_ID',{})
-    print(e.get('pid',''))
-except Exception:
-    print('')
-" 2>/dev/null || true)"
-fi
-
-if [[ -n "$existing_pid" ]]; then
-  log "Killing existing gateway for $AGENT_ID (pid=$existing_pid)"
-  kill "$existing_pid" 2>/dev/null || true
-  sleep 1
-fi
-
-if [[ -n "$existing_port" ]]; then
-  log "Cleaning up port $existing_port for re-spawn"
-  kill_gateway_on_port "$existing_port"
-fi
-
-# Also kill any process bound to the child home's gateway specifically.
-pkill -f "OPENCLAW_HOME=$CHILD_HOME.*gateway" 2>/dev/null || true
-sleep 0.5
-
-# Port allocation: check registry AND actual port usage.
-if [[ -z "$PORT" ]]; then
-  PORT="$(python3 - "$REGISTRY" <<'PY'
-import json, os, sys, subprocess
-
-registry_path = sys.argv[1]
-base = 19002
-used = set()
-
-# Read ports from registry.
-if os.path.exists(registry_path):
-    try:
-        d = json.load(open(registry_path, "r"))
-        for v in d.values():
-            port = v.get("port")
-            if isinstance(port, int):
-                used.add(port)
-    except Exception:
-        pass
-
-# Also check actual port usage via ss/lsof.
-try:
-    out = subprocess.run(
-        ["ss", "-ltn"], capture_output=True, text=True, timeout=5
-    ).stdout
-    for line in out.splitlines():
-        parts = line.split()
-        if len(parts) >= 4:
-            addr = parts[3]
-            if ":" in addr:
-                try:
-                    p = int(addr.rsplit(":", 1)[1])
-                    if p >= base:
-                        used.add(p)
-                except ValueError:
-                    pass
-except Exception:
-    pass
-
-port = base
-while port in used:
-    port += 1
-print(port)
-PY
-)"
-fi
-
-log "Allocated port=$PORT"
-
-# Double-check the allocated port isn't actually in use.
-if port_in_use "$PORT"; then
-  log "Port $PORT in use despite allocation — cleaning up"
-  kill_gateway_on_port "$PORT"
-  sleep 1
-  if port_in_use "$PORT"; then
-    echo "ERROR: Port $PORT still in use after cleanup" >&2
-    exit 1
-  fi
-fi
-
-oc_child() { OPENCLAW_HOME="$CHILD_HOME" openclaw --profile "$CHILD_PROFILE" "$@"; }
-
-main_token_before="$(openclaw config get channels.discord.token 2>/dev/null | tr -d '"[:space:]' || true)"
-
-# Pre-clean stale config keys.
-python3 - "$CHILD_HOME" <<'PY'
-import json, os, sys
-home = sys.argv[1]
-cfg_path = os.path.join(home, ".openclaw-main", "openclaw.json")
-if os.path.exists(cfg_path):
-    try:
-        with open(cfg_path, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-    except Exception:
-        cfg = {}
-    agents = cfg.get("agents")
-    if isinstance(agents, dict) and "main" in agents:
-        agents.pop("main", None)
-        with open(cfg_path, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, indent=2)
-PY
-
-# Copy spawned agent template.
-cp "$SHARED_WS_ROOT/AGENTS.SPAWNED.md" "$AGENT_WS/AGENTS.md" 2>/dev/null || true
-mkdir -p "$AGENT_WS/.openclaw/extensions" "$CHILD_HOME/.openclaw/extensions"
-if [[ -d "$SHARED_WS_ROOT/templates/extensions/syntella-tasks" ]]; then
-  rm -rf "$AGENT_WS/.openclaw/extensions/tasks" "$AGENT_WS/.openclaw/extensions/syntella-tasks" "$CHILD_HOME/.openclaw/extensions/tasks" "$CHILD_HOME/.openclaw/extensions/syntella-tasks"
-  cp -R "$SHARED_WS_ROOT/templates/extensions/syntella-tasks" "$AGENT_WS/.openclaw/extensions/syntella-tasks"
-  cp -R "$SHARED_WS_ROOT/templates/extensions/syntella-tasks" "$CHILD_HOME/.openclaw/extensions/syntella-tasks"
-elif [[ -d "$SHARED_WS_ROOT/templates/extensions/tasks" ]]; then
-  rm -rf "$AGENT_WS/.openclaw/extensions/tasks" "$AGENT_WS/.openclaw/extensions/syntella-tasks" "$CHILD_HOME/.openclaw/extensions/tasks" "$CHILD_HOME/.openclaw/extensions/syntella-tasks"
-  cp -R "$SHARED_WS_ROOT/templates/extensions/tasks" "$AGENT_WS/.openclaw/extensions/syntella-tasks"
-  cp -R "$SHARED_WS_ROOT/templates/extensions/tasks" "$CHILD_HOME/.openclaw/extensions/syntella-tasks"
-fi
-if [[ -d "$SHARED_WS_ROOT/templates/extensions/syntella-reports" ]]; then
-  rm -rf "$AGENT_WS/.openclaw/extensions/reports" "$AGENT_WS/.openclaw/extensions/syntella-reports" "$CHILD_HOME/.openclaw/extensions/reports" "$CHILD_HOME/.openclaw/extensions/syntella-reports"
-  cp -R "$SHARED_WS_ROOT/templates/extensions/syntella-reports" "$AGENT_WS/.openclaw/extensions/syntella-reports"
-  cp -R "$SHARED_WS_ROOT/templates/extensions/syntella-reports" "$CHILD_HOME/.openclaw/extensions/syntella-reports"
-elif [[ -d "$SHARED_WS_ROOT/templates/extensions/reports" ]]; then
-  rm -rf "$AGENT_WS/.openclaw/extensions/reports" "$AGENT_WS/.openclaw/extensions/syntella-reports" "$CHILD_HOME/.openclaw/extensions/reports" "$CHILD_HOME/.openclaw/extensions/syntella-reports"
-  cp -R "$SHARED_WS_ROOT/templates/extensions/reports" "$AGENT_WS/.openclaw/extensions/syntella-reports"
-  cp -R "$SHARED_WS_ROOT/templates/extensions/reports" "$CHILD_HOME/.openclaw/extensions/syntella-reports"
-fi
-if [[ "${SYNTELLA_AGENT_SPECIALTY:-}" == "seo" && -d "$SHARED_WS_ROOT/templates/extensions/seo" ]]; then
-  rm -rf "$AGENT_WS/.openclaw/extensions/seo" "$CHILD_HOME/.openclaw/extensions/seo"
-  cp -R "$SHARED_WS_ROOT/templates/extensions/seo" "$AGENT_WS/.openclaw/extensions/seo"
-  cp -R "$SHARED_WS_ROOT/templates/extensions/seo" "$CHILD_HOME/.openclaw/extensions/seo"
-fi
 DISPLAY_NAME="$(python3 -c "
 import sys
 s='$AGENT_ID'.replace('-', ' ').strip()
 print(' '.join(w.capitalize() for w in s.split()) or '$AGENT_ID')
 ")"
+ACCOUNT_ID="${AGENT_ID//-/}"
+
+if [[ ! -f "$NATIVE_HELPER" ]]; then
+  echo "ERROR: native agent helper not found at $NATIVE_HELPER" >&2
+  exit 1
+fi
+
+mkdir -p "$AGENT_WS" "$AGENT_WS/memory" "$AGENT_DIR"
+
+# Seed workspace files.
+cp "$SHARED_WS_ROOT/AGENTS.SPAWNED.md" "$AGENT_WS/AGENTS.md" 2>/dev/null || true
+cp "$SHARED_WS_ROOT/syntella/SOUL.md" "$AGENT_WS/SOUL.md" 2>/dev/null || true
 sed -i "s|__AGENT_NAME__|${DISPLAY_NAME}|g; s|__AGENT_ID__|${AGENT_ID}|g" "$AGENT_WS/AGENTS.md" 2>/dev/null || true
+mkdir -p "$AGENT_WS/.openclaw/extensions" "$AGENT_WS/skills"
 
-# Ensure child runtime has provider env fallback.
-mkdir -p "$CHILD_HOME/.openclaw-main"
-if [[ -f "$HOME/.openclaw/.env" ]]; then
-  cp "$HOME/.openclaw/.env" "$CHILD_HOME/.env"
-elif [[ -n "${MOONSHOT_API_KEY:-}" ]]; then
-  echo "MOONSHOT_API_KEY=${MOONSHOT_API_KEY}" > "$CHILD_HOME/.env"
-fi
-cp "$CHILD_HOME/.env" "$CHILD_HOME/.openclaw-main/.env" 2>/dev/null || true
-chmod 600 "$CHILD_HOME/.env" "$CHILD_HOME/.openclaw-main/.env" 2>/dev/null || true
-
-# Mirror auth profiles from main runtime when present.
-MAIN_AUTH_PATH="$(find "$HOME/.openclaw" -type f -path '*/agents/main/agent/auth-profiles.json' 2>/dev/null | head -n1 || true)"
-if [[ -n "$MAIN_AUTH_PATH" && -f "$MAIN_AUTH_PATH" ]]; then
-  REL_AUTH_PATH="${MAIN_AUTH_PATH#"$HOME/.openclaw/"}"
-  CHILD_AUTH_PATH="$CHILD_HOME/$REL_AUTH_PATH"
-  mkdir -p "$(dirname "$CHILD_AUTH_PATH")"
-  cp "$MAIN_AUTH_PATH" "$CHILD_AUTH_PATH"
-  chmod 600 "$CHILD_AUTH_PATH" 2>/dev/null || true
+if [[ -d "$SHARED_WS_ROOT/templates/extensions/seo/skills/seo-authority-operator" && "${SYNTELLA_AGENT_SPECIALTY:-}" == "seo" ]]; then
+  rm -rf "$AGENT_WS/skills/seo-authority-operator"
+  mkdir -p "$AGENT_WS/skills"
+  cp -R "$SHARED_WS_ROOT/templates/extensions/seo/skills/seo-authority-operator" "$AGENT_WS/skills/seo-authority-operator"
 fi
 
-log "Setting OpenClaw config for child agent"
+today="$(date +%F)"
+yesterday="$(date -d 'yesterday' +%F 2>/dev/null || date -v-1d +%F 2>/dev/null || true)"
+[[ -f "$AGENT_WS/memory/${today}.md" ]] || echo "# ${today}" >"$AGENT_WS/memory/${today}.md"
+if [[ -n "$yesterday" ]]; then
+  [[ -f "$AGENT_WS/memory/${yesterday}.md" ]] || echo "# ${yesterday}" >"$AGENT_WS/memory/${yesterday}.md"
+fi
 
-# Set basic config via CLI (non-critical errors are logged, not fatal).
-config_set() {
-  if ! oc_child config set "$@" 2>/dev/null; then
-    log "WARN: config set $* failed (non-fatal)"
-  fi
-}
+log "Registering native agent in root OpenClaw config"
+python3 "$NATIVE_HELPER" \
+  --agent-id "$AGENT_ID" \
+  --display-name "$DISPLAY_NAME" \
+  --workspace "$AGENT_WS" \
+  --agent-dir "$AGENT_DIR" \
+  --account-id "$ACCOUNT_ID" \
+  --discord-token "$DISCORD_BOT_TOKEN_AGENT" \
+  --guild-id "__DISCORD_GUILD_ID__" \
+  --channel-id "$DISCORD_CHANNEL_ID_AGENT" \
+  --tool-profile "full" \
+  --mention-pattern "$AGENT_ID" \
+  --mention-pattern "$DISPLAY_NAME" >> "$SPAWN_LOG"
 
-config_set agents.defaults.workspace "$AGENT_WS"
-config_set agents.defaults.sandbox.workspaceAccess "rw"
-config_set agents.defaults.model.primary "$MODEL_PRIMARY"
-config_set agents.defaults.model.fallbacks '[]'
-config_set gateway.mode local
-config_set gateway.bind loopback
-config_set gateway.auth.mode token
-config_set channels.discord.enabled true
-config_set channels.discord.groupPolicy "allowlist"
-config_set channels.discord.allowBots true
-config_set channels.discord.token "$DISCORD_BOT_TOKEN_AGENT"
-config_set channels.discord.dm.enabled true
-config_set channels.discord.dm.policy "allowlist"
-config_set channels.discord.dm.groupEnabled false
-config_set tools.exec.host gateway
-config_set tools.exec.security full
-config_set tools.exec.ask off
-config_set tools.fs.workspaceOnly false
-config_set tools.exec.applyPatch.workspaceOnly false
-
-# Write all JSON config (model, arrays, guilds) in a single Python pass.
-python3 - "$HOME/.openclaw/openclaw.json" "$CHILD_HOME" "$MODEL_PRIMARY" "__DISCORD_HUMAN_ID__" "__DISCORD_GUILD_ID__" "$DISCORD_CHANNEL_ID_AGENT" "$SPAWN_LOG" "$AGENT_WS" "${SYNTELLA_AGENT_SPECIALTY:-}" "$DISCORD_BOT_TOKEN_AGENT" <<'PYSCRIPT'
+log "Updating agent-specific config in root openclaw.json"
+python3 - "$ROOT_HOME/openclaw.json" "$AGENT_ID" "$MODEL_PRIMARY" "${SYNTELLA_AGENT_SPECIALTY:-}" <<'PY'
 import json, os, sys
+config_path, agent_id, model_primary, specialty = sys.argv[1:5]
+cfg = {}
+if os.path.exists(config_path):
+    with open(config_path, "r", encoding="utf-8") as f:
+        cfg = json.load(f)
+agents = cfg.setdefault("agents", {})
+entries = agents.get("list")
+if not isinstance(entries, list):
+    entries = []
+for entry in entries:
+    if isinstance(entry, dict) and entry.get("id") == agent_id:
+        entry.setdefault("model", {})["primary"] = model_primary
+        tools = entry.get("tools")
+        if not isinstance(tools, dict):
+            tools = {}
+        if specialty == "seo":
+            tools["profile"] = "full"
+        entry["tools"] = tools
+        break
+with open(config_path, "w", encoding="utf-8") as f:
+    json.dump(cfg, f, indent=2)
+    f.write("\n")
+PY
 
-global_cfg_path, home, model_primary, human_id, guild_id, channel_id, log_path, agent_ws, specialty, discord_bot_token = sys.argv[1:11]
-cfg_path = os.path.join(home, ".openclaw-main", "openclaw.json")
-os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
-
-def log(msg):
-    with open(log_path, "a") as f:
-        f.write(f"{msg}\n")
-
-try:
-    if os.path.exists(global_cfg_path):
-        with open(global_cfg_path, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-    elif os.path.exists(cfg_path):
-        with open(cfg_path, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-    else:
-        cfg = {}
-
-    # Model config.
-    agents = cfg.setdefault("agents", {})
-    defs = agents.setdefault("defaults", {})
-    defs.setdefault("model", {})["primary"] = model_primary
-    defs.setdefault("model", {})["fallbacks"] = []
-    # Remove invalid key for older/newer schemas that reject agents.main.
-    if isinstance(agents, dict) and "main" in agents:
-        agents.pop("main", None)
-
-    # Discord config with proper array values.
-    channels = cfg.setdefault("channels", {})
-    discord = channels.setdefault("discord", {})
-    discord["enabled"] = True
-    discord["allowBots"] = True
-    discord["token"] = discord_bot_token
-    discord["allowFrom"] = [human_id]
-
-    dm = discord.setdefault("dm", {})
-    dm["enabled"] = True
-    dm["groupEnabled"] = False
-    dm["policy"] = "allowlist"
-
-    discord["guilds"] = {
-        guild_id: {
-            "requireMention": False,
-            "channels": {
-                channel_id: {"allow": True, "requireMention": False}
-            },
-        }
-    }
-
-    tools = cfg.setdefault("tools", {})
-    allow = tools.get("allow")
-    if not isinstance(allow, list):
-        allow = []
-    if "tasks" not in allow:
-        allow.append("tasks")
-    if "reports" not in allow:
-        allow.append("reports")
-    tools["allow"] = allow
-
-    plugins = cfg.setdefault("plugins", {})
-    load = plugins.get("load")
-    if not isinstance(load, dict):
-        load = {}
-    paths = load.get("paths")
-    if not isinstance(paths, list):
-        paths = []
-    resolved_paths = [p for p in paths if isinstance(p, str)]
-    desired_paths = [
-        os.path.join(agent_ws, ".openclaw", "extensions", "syntella-tasks"),
-        os.path.join(agent_ws, ".openclaw", "extensions", "syntella-reports"),
-    ]
-    if specialty == "seo":
-        desired_paths.append(os.path.join(agent_ws, ".openclaw", "extensions", "seo"))
-    for path in desired_paths:
-        if os.path.isdir(path) and path not in resolved_paths:
-            resolved_paths.append(path)
-    load["paths"] = resolved_paths
-    plugins["load"] = load
-
-    plugin_allow = plugins.get("allow")
-    if not isinstance(plugin_allow, list):
-        plugin_allow = []
-    if "syntella-tasks" not in plugin_allow:
-        plugin_allow.append("syntella-tasks")
-    if "syntella-reports" not in plugin_allow:
-        plugin_allow.append("syntella-reports")
-    plugins["allow"] = plugin_allow
-
-    entries = plugins.get("entries")
-    if not isinstance(entries, dict):
-        entries = {}
-    entry = entries.get("syntella-tasks")
-    if not isinstance(entry, dict):
-        entry = {}
-    entry["enabled"] = True
-    entries["syntella-tasks"] = entry
-    entry = entries.get("syntella-reports")
-    if not isinstance(entry, dict):
-        entry = {}
-    entry["enabled"] = True
-    entries["syntella-reports"] = entry
-    plugins["entries"] = entries
-
-    with open(cfg_path, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=2)
-
-    log(f"CONFIG_OK: allowFrom={discord.get('allowFrom')}, dm.allowFrom={dm.get('allowFrom')}, guilds={list(discord.get('guilds', {}).keys())}")
-
-except Exception as e:
-    log(f"CONFIG_ERROR: {e}")
-    import traceback
-    with open(log_path, "a") as f:
-        traceback.print_exc(file=f)
-    sys.exit(1)
-PYSCRIPT
-
-# Validate critical config.
-child_group_policy="$(oc_child config get channels.discord.groupPolicy 2>/dev/null | tr -d '"[:space:]' || true)"
-child_guild_allow="$(oc_child config get channels.discord.guilds.__DISCORD_GUILD_ID__.channels.${DISCORD_CHANNEL_ID_AGENT}.allow 2>/dev/null | tr -d '"[:space:]' || true)"
-child_model_primary="$(oc_child config get agents.defaults.model.primary 2>/dev/null | tr -d '"[:space:]' || true)"
-
-if [[ "$child_group_policy" != "allowlist" || "$child_guild_allow" != "true" ]]; then
-  echo "ERROR: child guild allowlist wiring failed (groupPolicy=${child_group_policy:-<unset>}, channelAllow=${child_guild_allow:-<unset>}, channel=${DISCORD_CHANNEL_ID_AGENT:-<unset>})" >&2
-  oc_child config get channels.discord.guilds >&2 || true
-  exit 1
-fi
-if [[ "$child_model_primary" != "$MODEL_PRIMARY" ]]; then
-  echo "ERROR: child model wiring failed (agents.defaults.model.primary=${child_model_primary:-<unset>})" >&2
-  exit 1
-fi
-
-main_token_after="$(openclaw config get channels.discord.token 2>/dev/null | tr -d '"[:space:]' || true)"
-if [[ -n "$main_token_before" && "$main_token_before" != "$main_token_after" ]]; then
-  echo "ERROR: main profile discord token changed during child spawn; aborting to protect main bot." >&2
-  exit 1
-fi
-
-log "Config validated, starting gateway on port $PORT"
-
-# Remove stale lock files for this child home.
-find "$CHILD_HOME" /tmp -name 'gateway.*.lock' -delete 2>/dev/null || true
-
-# Start the agent's gateway.
-nohup env OPENCLAW_HOME="$CHILD_HOME" OPENCLAW_PROFILE="$CHILD_PROFILE" OPENCLAW_AGENT_ID="$AGENT_ID" \
-  openclaw --profile "$CHILD_PROFILE" gateway --allow-unconfigured --port "$PORT" \
-  > "$AGENT_WS/gateway.log" 2>&1 &
-GATEWAY_PID=$!
-
-log "Gateway started with PID=$GATEWAY_PID"
-
-# Wait for gateway to be ready.
-ready=0
-for _ in $(seq 1 25); do
-  if grep -q "listening on ws://127.0.0.1:${PORT}" "$AGENT_WS/gateway.log" 2>/dev/null; then
-    ready=1
-    break
-  fi
-  # Also check if the process died.
-  if ! kill -0 "$GATEWAY_PID" 2>/dev/null; then
-    echo "ERROR: gateway process (PID $GATEWAY_PID) died during startup" >&2
-    tail -n 40 "$AGENT_WS/gateway.log" >&2 || true
-    exit 1
-  fi
-  sleep 1
-done
-
-if [[ "$ready" != "1" ]]; then
-  echo "ERROR: child gateway did not become ready on port $PORT within 25s" >&2
-  tail -n 40 "$AGENT_WS/gateway.log" >&2 || true
-  # Kill the failed gateway so the port isn't orphaned.
-  kill "$GATEWAY_PID" 2>/dev/null || true
-  exit 1
-fi
-
-log "Gateway ready, updating registry"
-
-# Update registry, SOUL.md, and TEAM.md.
-python3 - "$AGENT_ID" "$PORT" "$ROLE" "$CHILD_HOME" "__DISCORD_GUILD_ID__" "$DISCORD_CHANNEL_ID_AGENT" "$GATEWAY_PID" "${SYNTELLA_MONTHLY_BUDGET:-}" "${SYNTELLA_AGENT_SPECIALTY:-}" <<'PY'
+log "Updating registry, SOUL.md, and TEAM.md"
+python3 - "$AGENT_ID" "$ROLE" "$AGENT_WS" "$AGENT_DIR" "$DISCORD_CHANNEL_ID_AGENT" "${SYNTELLA_MONTHLY_BUDGET:-}" "${SYNTELLA_AGENT_SPECIALTY:-}" <<'PY'
 import json, os, re, sys
 
-agent, port, role_raw, home, guild_id, channel_id, pid, monthly_budget_raw, specialty = (
-    sys.argv[1],
-    int(sys.argv[2]),
-    sys.argv[3],
-    sys.argv[4],
-    sys.argv[5],
-    sys.argv[6],
-    int(sys.argv[7]),
-    sys.argv[8],
-    sys.argv[9].strip().lower(),
-)
+agent, role_raw, workspace, agent_dir, channel_id, monthly_budget_raw, specialty = sys.argv[1:8]
 
 if " — " in role_raw:
     role, personality = role_raw.split(" — ", 1)
@@ -481,37 +121,35 @@ try:
 except ValueError:
     monthly_budget = None
 
-# 1) Update registry.
-p = os.path.expanduser("~/.openclaw/workspace/agents/registry.json")
-os.makedirs(os.path.dirname(p), exist_ok=True)
-d = {}
-if os.path.exists(p):
+registry_path = os.path.expanduser("~/.openclaw/workspace/agents/registry.json")
+os.makedirs(os.path.dirname(registry_path), exist_ok=True)
+registry = {}
+if os.path.exists(registry_path):
     try:
-        with open(p, "r", encoding="utf-8") as f:
-            d = json.load(f)
+        with open(registry_path, "r", encoding="utf-8") as f:
+            registry = json.load(f)
     except Exception:
-        d = {}
+        registry = {}
 
-d[agent] = {
-    "port": port,
-    "pid": pid,
+entry = registry.get(agent, {}) if isinstance(registry, dict) else {}
+if not isinstance(entry, dict):
+    entry = {}
+entry.update({
     "role": role.strip(),
     "description": personality.strip(),
     "personality": personality.strip(),
-    "home": home,
-    "guild_id": guild_id,
+    "workspace": workspace,
+    "agent_dir": agent_dir,
     "channel_id": channel_id,
     "monthly_budget": monthly_budget,
     "specialty": specialty or None,
-}
+})
+registry[agent] = entry
+with open(registry_path, "w", encoding="utf-8") as f:
+    json.dump(registry, f, indent=2)
+    f.write("\n")
 
-with open(p, "w", encoding="utf-8") as f:
-    json.dump(d, f, indent=2)
-
-# 2) Write agent SOUL.md identity section.
-agent_ws = os.path.expanduser(f"~/.openclaw/workspace/{agent}")
-os.makedirs(agent_ws, exist_ok=True)
-soul_path = os.path.join(agent_ws, "SOUL.md")
+soul_path = os.path.join(workspace, "SOUL.md")
 base = ""
 if os.path.exists(soul_path):
     with open(soul_path, "r", encoding="utf-8") as f:
@@ -525,61 +163,76 @@ identity_block = (
 with open(soul_path, "w", encoding="utf-8") as f:
     f.write(base + identity_block)
 
-# 3) Add/update shared TEAM.md roster.
 shared_dir = os.path.expanduser("~/.openclaw/workspace/shared")
 os.makedirs(shared_dir, exist_ok=True)
 team_path = os.path.join(shared_dir, "TEAM.md")
-entry = (
+block = (
+    f"<!-- AGENT:{agent}:START -->\n"
     f"- **{agent}**\n"
     f"  - role: {role.strip()}\n"
     f"  - personality: {(personality or role_raw).strip()}\n"
-    f"  - port: {port}\n"
     f"  - inbox_channel_id: {channel_id}\n"
     f"  - monthly_budget_usd: {monthly_budget if monthly_budget is not None else 'unset'}\n"
     f"  - specialty: {specialty or 'general'}\n"
+    f"<!-- AGENT:{agent}:END -->\n"
 )
-start = f"<!-- AGENT:{agent}:START -->"
-end = f"<!-- AGENT:{agent}:END -->"
-block = f"{start}\n{entry}{end}\n"
-
 if os.path.exists(team_path):
     with open(team_path, "r", encoding="utf-8") as f:
-        t = f.read()
+        text = f.read()
 else:
-    t = "# TEAM.md\n\n## Agents\n\n"
-
-if start in t and end in t:
-    t = re.sub(re.escape(start) + r".*?" + re.escape(end) + r"\n?", block, t, flags=re.S)
+    text = "# TEAM.md\n\n## Agents\n\n"
+start = f"<!-- AGENT:{agent}:START -->"
+end = f"<!-- AGENT:{agent}:END -->"
+if start in text and end in text:
+    text = re.sub(re.escape(start) + r".*?" + re.escape(end) + r"\n?", block, text, flags=re.S)
 else:
-    if "## Agents" not in t:
-        t = t.rstrip() + "\n\n## Agents\n\n"
-    t = t.rstrip() + "\n\n" + block
-
+    if "## Agents" not in text:
+        text = text.rstrip() + "\n\n## Agents\n\n"
+    text = text.rstrip() + "\n\n" + block
 with open(team_path, "w", encoding="utf-8") as f:
-    f.write(t)
-
-print(
-    json.dumps(
-        {
-            "agent_id": agent,
-            "port": port,
-            "pid": pid,
-            "home": home,
-            "guild_id": guild_id,
-            "channel_id": channel_id,
-            "monthly_budget": monthly_budget,
-            "specialty": specialty or None,
-            "guild_configured": True,
-            "status": "started",
-        }
-    )
-)
+    f.write(text)
 PY
-PY_EXIT=$?
 
-if [[ $PY_EXIT -ne 0 ]]; then
-  echo "ERROR: Registry/TEAM.md update failed with exit code $PY_EXIT" >&2
+log "Restarting root gateway to pick up native agent config"
+pkill -f "openclaw gateway" >/dev/null 2>&1 || true
+sleep 1
+find "$ROOT_HOME" /tmp -name 'gateway.*.lock' -delete 2>/dev/null || true
+nohup bash -lc 'export PATH="$HOME/.npm-global/bin:$PATH"; exec openclaw gateway --port 18789' > "$ROOT_HOME/logs/gateway.log" 2>&1 &
+GATEWAY_PID=$!
+
+ready=0
+for _ in $(seq 1 30); do
+  if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -q ':18789 '; then
+    ready=1
+    break
+  fi
+  if command -v lsof >/dev/null 2>&1 && lsof -iTCP:18789 -sTCP:LISTEN >/dev/null 2>&1; then
+    ready=1
+    break
+  fi
+  if ! kill -0 "$GATEWAY_PID" 2>/dev/null; then
+    echo "ERROR: root gateway died during restart" >&2
+    tail -n 50 "$ROOT_HOME/logs/gateway.log" >&2 || true
+    exit 1
+  fi
+  sleep 1
+done
+
+if [[ "$ready" != "1" ]]; then
+  echo "ERROR: root gateway did not become ready on port 18789 within 30s" >&2
+  tail -n 50 "$ROOT_HOME/logs/gateway.log" >&2 || true
   exit 1
 fi
 
-log "SPAWN_COMPLETE port=$PORT pid=$GATEWAY_PID"
+log "NATIVE_SPAWN_COMPLETE gateway_pid=$GATEWAY_PID"
+python3 - "$DISCORD_CHANNEL_ID_AGENT" <<'PY'
+import json
+import sys
+print(json.dumps({
+    "ok": True,
+    "native": True,
+    "guild_configured": True,
+    "guild_id": "__DISCORD_GUILD_ID__",
+    "channel_id": sys.argv[1],
+}))
+PY

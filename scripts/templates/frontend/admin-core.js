@@ -30,7 +30,6 @@
       agentDescriptionInput: document.getElementById('agent-description-input'),
       agentModelSelect: document.getElementById('agent-model-select'),
       agentSpecialtySelect: document.getElementById('agent-specialty-select'),
-      agentPortInput: document.getElementById('agent-port-input'),
       agentDiscordTokenInput: document.getElementById('agent-discord-token-input'),
       agentChannelIdInput: document.getElementById('agent-channel-id-input'),
       agentMonthlyBudgetInput: document.getElementById('agent-monthly-budget-input'),
