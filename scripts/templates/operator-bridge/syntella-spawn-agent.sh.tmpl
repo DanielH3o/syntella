@@ -100,6 +100,42 @@ for entry in entries:
             tools["profile"] = "full"
         entry["tools"] = tools
         break
+main_entry = None
+for entry in entries:
+    if isinstance(entry, dict) and entry.get("id") == "main":
+        main_entry = entry
+        break
+if main_entry is None:
+    main_entry = {"id": "main"}
+    entries.insert(0, main_entry)
+main_entry["name"] = "Syntella"
+main_entry["workspace"] = os.path.expanduser("~/.openclaw/workspace/syntella")
+main_entry["agentDir"] = os.path.expanduser("~/.openclaw/agents/main/agent")
+identity = main_entry.get("identity")
+if not isinstance(identity, dict):
+    identity = {}
+identity["name"] = "Syntella"
+main_entry["identity"] = identity
+bindings = cfg.get("bindings")
+if not isinstance(bindings, list):
+    bindings = []
+main_binding = {
+    "agentId": "main",
+    "match": {
+        "channel": "discord",
+        "accountId": "default",
+    },
+}
+found = False
+for item in bindings:
+    if isinstance(item, dict) and item.get("agentId") == "main":
+        item.clear()
+        item.update(main_binding)
+        found = True
+        break
+if not found:
+    bindings.insert(0, main_binding)
+cfg["bindings"] = bindings
 with open(config_path, "w", encoding="utf-8") as f:
     json.dump(cfg, f, indent=2)
     f.write("\n")

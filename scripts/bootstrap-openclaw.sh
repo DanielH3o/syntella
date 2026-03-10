@@ -431,6 +431,38 @@ discord["accounts"] = accounts
 for legacy_key in ("token", "groupPolicy", "allowBots", "guilds", "intents"):
     discord.pop(legacy_key, None)
 
+agents = cfg.setdefault("agents", {})
+entries = agents.get("list")
+if not isinstance(entries, list):
+    entries = []
+main_entry = None
+for item in entries:
+    if isinstance(item, dict) and item.get("id") == "main":
+        main_entry = item
+        break
+if main_entry is None:
+    main_entry = {"id": "main"}
+    entries.insert(0, main_entry)
+main_entry["name"] = "Syntella"
+main_entry["workspace"] = os.path.expanduser("~/.openclaw/workspace/syntella")
+main_entry["agentDir"] = os.path.expanduser("~/.openclaw/agents/main/agent")
+identity = main_entry.get("identity")
+if not isinstance(identity, dict):
+    identity = {}
+identity["name"] = "Syntella"
+main_entry["identity"] = identity
+group_chat = main_entry.get("groupChat")
+if not isinstance(group_chat, dict):
+    group_chat = {}
+group_chat["mentionPatterns"] = ["syntella", "main", "chief autonomy officer", "cao"]
+main_entry["groupChat"] = group_chat
+tools_cfg = main_entry.get("tools")
+if not isinstance(tools_cfg, dict):
+    tools_cfg = {}
+tools_cfg["profile"] = "full"
+main_entry["tools"] = tools_cfg
+agents["list"] = entries
+
 with open(config_path, "w", encoding="utf-8") as f:
     json.dump(cfg, f, indent=2, ensure_ascii=False)
     f.write("\n")
