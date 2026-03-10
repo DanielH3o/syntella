@@ -123,6 +123,7 @@ Local data sources:
 - Selected-agent drawer now lets the user edit an agent's monthly budget in place.
 - Team discovery now merges the root OpenClaw state with Syntella registry entries so spawned agents living in separate homes like `~/.openclaw-<agent_id>` still appear in the Team UI.
 - `TEAM.md` now treats Syntella's main Discord channel as both her inbox and the shared control channel that other agents should use for replies, completions, and blockers intended for Syntella.
+- Spawned-agent identity is now made explicit in both runtime and instructions: spawned gateways receive `OPENCLAW_AGENT_ID=<agent_id>`, and AGENTS templates now distinguish the team-facing agent ID from the underlying OpenClaw profile name `main`.
 
 ### Models page
 

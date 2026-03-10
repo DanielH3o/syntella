@@ -422,7 +422,7 @@ log "Config validated, starting gateway on port $PORT"
 find "$CHILD_HOME" /tmp -name 'gateway.*.lock' -delete 2>/dev/null || true
 
 # Start the agent's gateway.
-nohup env OPENCLAW_HOME="$CHILD_HOME" OPENCLAW_PROFILE="$CHILD_PROFILE" \
+nohup env OPENCLAW_HOME="$CHILD_HOME" OPENCLAW_PROFILE="$CHILD_PROFILE" OPENCLAW_AGENT_ID="$AGENT_ID" \
   openclaw --profile "$CHILD_PROFILE" gateway --allow-unconfigured --port "$PORT" \
   > "$AGENT_WS/gateway.log" 2>&1 &
 GATEWAY_PID=$!
