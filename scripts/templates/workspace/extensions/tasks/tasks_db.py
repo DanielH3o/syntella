@@ -7,7 +7,7 @@ from pathlib import Path
 
 WORKSPACE = Path(os.environ.get("SYNTELLA_WORKSPACE", os.path.expanduser("~/.openclaw/workspace")))
 DB_PATH = WORKSPACE / "tasks.db"
-VALID_STATUSES = {"backlog", "in_progress", "review", "done"}
+VALID_STATUSES = {"backlog", "todo", "in_progress", "review", "done"}
 VALID_PRIORITIES = {"low", "medium", "high"}
 TERMINAL_RUN_STATUSES = {"review", "done", "cancelled", "failed"}
 
@@ -21,6 +21,11 @@ def get_conn():
 def utc_now_iso():
     import datetime as _dt
     return _dt.datetime.now(_dt.timezone.utc).isoformat()
+
+
+def normalize_task_status(status):
+    value = str(status or "backlog").strip().lower() or "backlog"
+    return value if value in VALID_STATUSES else "backlog"
 
 
 def ensure_schema(conn):
@@ -42,6 +47,7 @@ def ensure_schema(conn):
 
 
 def ensure_task_run_state(conn, task_id, assignee, status):
+    status = normalize_task_status(status)
     assignee = (assignee or "").strip()
     if not assignee:
         return
@@ -103,7 +109,7 @@ def normalize_task(row):
         "title": item.get("title"),
         "description": item.get("description") or "",
         "assignee": item.get("assignee") or "",
-        "status": item.get("status") or "backlog",
+        "status": normalize_task_status(item.get("status")),
         "priority": item.get("priority") or "medium",
         "created_at": item.get("created_at"),
         "updated_at": item.get("updated_at"),
@@ -182,7 +188,7 @@ def create_task(payload):
     description = (payload.get("description") or "").strip()
     assignee = (payload.get("assignee") or payload.get("agent_id") or "").strip()
     priority = (payload.get("priority") or "medium").strip().lower()
-    status = (payload.get("status") or "backlog").strip().lower()
+    status = normalize_task_status(payload.get("status") or "backlog")
     if priority not in VALID_PRIORITIES:
         return {"ok": False, "error": f"priority must be one of {sorted(VALID_PRIORITIES)}"}
     if status not in VALID_STATUSES:
@@ -210,7 +216,7 @@ def update_task(payload, field):
         return {"ok": False, "error": "task_id is required"}
     value = payload.get(field)
     if field == "status":
-        value = (value or "").strip().lower()
+        value = normalize_task_status(value)
         if value not in VALID_STATUSES:
             return {"ok": False, "error": f"status must be one of {sorted(VALID_STATUSES)}"}
     else:

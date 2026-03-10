@@ -31,6 +31,7 @@ FRONTEND_ROOT = Path(__file__).resolve().parent / "templates" / "frontend"
 USAGE_SYNC_MAX_EVENTS = int(os.environ.get("SYNTELLA_USAGE_SYNC_MAX_EVENTS", "20000"))
 TERMINAL_RUN_STATUSES = {"review", "done", "cancelled", "failed"}
 INTERNAL_MODEL_IDS = {"delivery-mirror", "gateway-injected"}
+VALID_TASK_STATUSES = {"backlog", "todo", "in_progress", "review", "done"}
 
 CONTENT_TYPES = {
     ".css": "text/css; charset=utf-8",
@@ -44,6 +45,11 @@ CONTENT_TYPES = {
 
 def utc_now_iso():
     return datetime.now(timezone.utc).isoformat()
+
+
+def normalize_task_status(status):
+    value = str(status or "backlog").strip().lower() or "backlog"
+    return value if value in VALID_TASK_STATUSES else "backlog"
 
 
 def get_conn():
@@ -1674,6 +1680,7 @@ def fetch_task_detail(task_id):
     runs = enrich_runs(conn, task_run_rows(conn, task_id))
     rollup = task_rollup_from_runs(runs)
     result = dict(task)
+    result["status"] = normalize_task_status(result.get("status"))
     result["estimated_cost"] = rollup["estimated_cost"]
     result["estimated_tokens"] = rollup["estimated_tokens"]
     result["run_count"] = rollup["run_count"]
@@ -1690,6 +1697,7 @@ def fetch_tasks():
         "SELECT * FROM tasks ORDER BY priority DESC, created_at DESC"
     ).fetchall()]
     for task in tasks:
+        task["status"] = normalize_task_status(task.get("status"))
         runs = enrich_runs(conn, task_run_rows(conn, task["id"]))
         rollup = task_rollup_from_runs(runs)
         task["estimated_cost"] = rollup["estimated_cost"]
@@ -1987,6 +1995,7 @@ def backfill_active_task_runs():
 
 
 def ensure_task_run_state(task_id, assignee, status):
+    status = normalize_task_status(status)
     assignee = (assignee or "").strip()
     if not assignee:
         return

@@ -5,7 +5,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const helperPath = path.join(__dirname, "tasks_db.py");
 
-const TASK_STATUSES = ["backlog", "in_progress", "review", "done"] as const;
+const TASK_STATUSES = ["backlog", "todo", "in_progress", "review", "done"] as const;
 const TASK_ACTIONS = [
   "list",
   "list_mine",
@@ -46,11 +46,20 @@ function summarize(result: any): string {
   if (Array.isArray(result.tasks)) {
     const count = result.tasks.length;
     const scope = result.scope ? ` (${result.scope})` : "";
-    return `Fetched ${count} task${count === 1 ? "" : "s"}${scope}.`;
+    if (!count) {
+      return `Fetched 0 tasks${scope}.`;
+    }
+    const lines = result.tasks.slice(0, 20).map((task: any) => {
+      const assignee = task.assignee ? ` @${task.assignee}` : " unassigned";
+      const priority = task.priority ? ` ${task.priority}` : "";
+      return `#${task.id} ${task.title} [${task.status}]${priority}${assignee}`;
+    });
+    const extra = count > lines.length ? `\n...and ${count - lines.length} more.` : "";
+    return `Fetched ${count} task${count === 1 ? "" : "s"}${scope}:\n${lines.join("\n")}${extra}`;
   }
   if (result.task) {
     const task = result.task;
-    return `Task ${task.id}: ${task.title} [${task.status}]`;
+    return `Task #${task.id}: ${task.title}\nStatus: ${task.status}\nPriority: ${task.priority || "medium"}\nAssignee: ${task.assignee || "unassigned"}\nDescription: ${task.description || "No description."}`;
   }
   return "Task tool completed.";
 }

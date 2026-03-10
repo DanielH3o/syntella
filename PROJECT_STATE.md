@@ -262,6 +262,8 @@ Local data sources:
 - A run auto-closes when a task leaves active execution.
 - Estimated task cost is now computed from `usage_events` for that agent during the run window.
 - This is intentionally approximate for v1.
+- Canonical task statuses are `backlog`, `todo`, `in_progress`, `review`, `done` across UI, API, and tools.
+- `todo` is preserved as a distinct state from `backlog`: `backlog` is parked/unprepared work, while `todo` is ready and queued.
 
 ### Budget page
 
