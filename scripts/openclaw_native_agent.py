@@ -107,7 +107,8 @@ def ensure_discord_account(channels_cfg: dict, args: argparse.Namespace) -> None
 
     account["name"] = args.display_name or args.agent_id
     account["token"] = args.discord_token
-    account["allowBots"] = False
+    # Agents need to receive instructions from Syntella's Discord bot in their inbox channels.
+    account["allowBots"] = True
     account["groupPolicy"] = "allowlist"
     account["guilds"] = {
         args.guild_id: {
