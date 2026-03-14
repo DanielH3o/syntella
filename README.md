@@ -62,11 +62,17 @@ export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 curl -fsSL https://raw.githubusercontent.com/DanielH3o/syntella/main/scripts/bootstrap-root.sh | bash
 ```
 
-After bootstrap, frontend files are in:
+After bootstrap, Syntella-managed admin files are in:
+
+- `~/.openclaw/workspace/admin`
+
+Customer-owned project space lives in:
 
 - `~/.openclaw/workspace/project`
 
-Bootstrap writes startup context docs at workspace root (overwrite mode):
+Bootstrap now preserves customer workspace state by default. System-managed admin assets are updated in place, while the customer project workspace is left alone.
+
+Bootstrap writes startup context docs at workspace root:
 
 - `~/.openclaw/workspace/AGENTS.md`
 - `~/.openclaw/workspace/SOUL.md`
@@ -74,8 +80,8 @@ Bootstrap writes startup context docs at workspace root (overwrite mode):
 - `~/.openclaw/workspace/MEMORY.md`
 - `~/.openclaw/workspace/memory/YYYY-MM-DD.md` (today + yesterday)
 
-Project files remain in `~/.openclaw/workspace/project`.
-Edit files (or ask your agent to edit them), then refresh browser.
+Customer website/frontend files, reports, and project assets should live in `~/.openclaw/workspace/project`.
+Syntella admin stays separate at `/admin`.
 
 ## Manual path
 

@@ -43,6 +43,7 @@ SYNTELLA_EXEC_MAX_OUTPUT_BYTES="${SYNTELLA_EXEC_MAX_OUTPUT_BYTES:-16384}"
 OPERATOR_BRIDGE_PORT="${OPERATOR_BRIDGE_PORT:-8787}"
 OPERATOR_BRIDGE_TOKEN=""
 SYNTELLA_API_PORT="${SYNTELLA_API_PORT:-8788}"
+SYNTELLA_PRESERVE_CUSTOMER_STATE="${SYNTELLA_PRESERVE_CUSTOMER_STATE:-1}"
 
 # OPENCLAW_HOME should point to the user home base (e.g. /home/openclaw), not ~/.openclaw.
 # If inherited incorrectly from the environment, normalize it before any `openclaw config` calls.
@@ -113,6 +114,30 @@ render_template() {
     -e "s|__OPERATOR_BRIDGE_PORT__|${OPERATOR_BRIDGE_PORT}|g" \
     -e "s|__OPERATOR_BRIDGE_TOKEN__|${OPERATOR_BRIDGE_TOKEN}|g" \
     "$src" > "$dst"
+}
+
+should_preserve_state() {
+  [[ "$SYNTELLA_PRESERVE_CUSTOMER_STATE" == "1" ]]
+}
+
+copy_managed_file() {
+  local src="$1"
+  local dst="$2"
+  local mode="${3:-managed}"
+  if [[ "$mode" == "preserve" ]] && should_preserve_state && [[ -e "$dst" ]]; then
+    return 0
+  fi
+  cp "$src" "$dst"
+}
+
+render_managed_template() {
+  local src="$1"
+  local dst="$2"
+  local mode="${3:-managed}"
+  if [[ "$mode" == "preserve" ]] && should_preserve_state && [[ -e "$dst" ]]; then
+    return 0
+  fi
+  render_template "$src" "$dst"
 }
 
 assert_templates_exist() {
@@ -478,14 +503,14 @@ seed_workspace_context_files() {
   mkdir -p "$syntella_ws" "$syntella_ws/memory" "$shared_ws"
   mkdir -p "$template_extensions_root"
 
-  render_template "$ws_tmpl/AGENTS.SYNTELLA.md.tmpl" "$syntella_ws/AGENTS.md"
-  render_template "$ws_tmpl/AGENTS.SPAWNED.md.tmpl" "$ws_root/AGENTS.SPAWNED.md"
-  render_template "$ws_tmpl/HEARTBEAT.MAIN.md.tmpl" "$syntella_ws/HEARTBEAT.md"
-  cp "$ws_tmpl/SOUL.md" "$syntella_ws/SOUL.md"
-  cp "$ws_tmpl/USER.md" "$shared_ws/USER.md"
-  cp "$ws_tmpl/MEMORY.md" "$syntella_ws/MEMORY.md"
-  cp "$ws_tmpl/TEAM.md" "$shared_ws/TEAM.md"
-  cp "$ws_tmpl/TASKS.md" "$shared_ws/TASKS.md"
+  render_managed_template "$ws_tmpl/AGENTS.SYNTELLA.md.tmpl" "$syntella_ws/AGENTS.md" preserve
+  render_managed_template "$ws_tmpl/AGENTS.SPAWNED.md.tmpl" "$ws_root/AGENTS.SPAWNED.md" managed
+  render_managed_template "$ws_tmpl/HEARTBEAT.MAIN.md.tmpl" "$syntella_ws/HEARTBEAT.md" preserve
+  copy_managed_file "$ws_tmpl/SOUL.md" "$syntella_ws/SOUL.md" preserve
+  copy_managed_file "$ws_tmpl/USER.md" "$shared_ws/USER.md" preserve
+  copy_managed_file "$ws_tmpl/MEMORY.md" "$syntella_ws/MEMORY.md" preserve
+  copy_managed_file "$ws_tmpl/TEAM.md" "$shared_ws/TEAM.md" preserve
+  copy_managed_file "$ws_tmpl/TASKS.md" "$shared_ws/TASKS.md" preserve
   rm -rf \
     "$syntella_ws/.openclaw/extensions/tasks" \
     "$syntella_ws/.openclaw/extensions/reports" \
@@ -744,7 +769,11 @@ verify_discord_dm_allowlist() {
 }
 
 configure_openclaw_runtime() {
-  say "Writing workspace root context files (overwrite mode)"
+  if should_preserve_state; then
+    say "Writing workspace root context files (preserve customer state mode)"
+  else
+    say "Writing workspace root context files (overwrite mode)"
+  fi
   seed_workspace_context_files
 
   say "Ensuring OpenClaw gateway baseline config"
@@ -875,32 +904,96 @@ setup_frontend_workspace() {
     return 0
   fi
 
-  say "Setting up workspace frontend project (nginx)"
+  say "Setting up admin and project frontend directories (nginx)"
   sudo apt-get update -y
   sudo apt-get install -y nginx
 
+  local admin_dir="$HOME/.openclaw/workspace/admin"
   local project_dir="$HOME/.openclaw/workspace/project"
-  mkdir -p "$project_dir"
+  mkdir -p "$admin_dir" "$project_dir"
 
-  cp "$TEMPLATE_DIR/frontend/index.html" "$project_dir/index.html"
-  cp "$TEMPLATE_DIR/frontend/admin.html" "$project_dir/admin.html"
-  cp "$TEMPLATE_DIR/frontend/styles.css" "$project_dir/styles.css"
-  cp "$TEMPLATE_DIR/frontend/admin.css" "$project_dir/admin.css"
-  cp "$TEMPLATE_DIR/frontend/app.js" "$project_dir/app.js"
-  cp "$TEMPLATE_DIR/frontend/admin.js" "$project_dir/admin.js"
-  cp "$TEMPLATE_DIR/frontend/admin-core.js" "$project_dir/admin-core.js"
-  cp "$TEMPLATE_DIR/frontend/admin-work.js" "$project_dir/admin-work.js"
-  cp "$TEMPLATE_DIR/frontend/admin-models.js" "$project_dir/admin-models.js"
-  cp "$TEMPLATE_DIR/frontend/admin-integrations.js" "$project_dir/admin-integrations.js"
-  cp "$TEMPLATE_DIR/frontend/admin-budget.js" "$project_dir/admin-budget.js"
-  cp "$TEMPLATE_DIR/frontend/admin-team.js" "$project_dir/admin-team.js"
-  cp "$TEMPLATE_DIR/frontend/README.md" "$project_dir/README.md"
+  # Syntella-owned admin surface: safe to replace on every update.
+  cp "$TEMPLATE_DIR/frontend/admin.html" "$admin_dir/admin.html"
+  cp "$TEMPLATE_DIR/frontend/admin.css" "$admin_dir/admin.css"
+  cp "$TEMPLATE_DIR/frontend/admin.js" "$admin_dir/admin.js"
+  cp "$TEMPLATE_DIR/frontend/admin-core.js" "$admin_dir/admin-core.js"
+  cp "$TEMPLATE_DIR/frontend/admin-work.js" "$admin_dir/admin-work.js"
+  cp "$TEMPLATE_DIR/frontend/admin-models.js" "$admin_dir/admin-models.js"
+  cp "$TEMPLATE_DIR/frontend/admin-integrations.js" "$admin_dir/admin-integrations.js"
+  cp "$TEMPLATE_DIR/frontend/admin-budget.js" "$admin_dir/admin-budget.js"
+  cp "$TEMPLATE_DIR/frontend/admin-team.js" "$admin_dir/admin-team.js"
+  cp "$TEMPLATE_DIR/frontend/README.md" "$admin_dir/README.md"
 
-  # Project-level instruction docs removed intentionally.
-  # Startup/system guidance now lives at workspace root: ~/.openclaw/workspace/*.md
+  # Customer-owned project space: create once, then preserve across updates.
+  if [[ ! -f "$project_dir/index.html" ]]; then
+    cat > "$project_dir/index.html" <<'EOF'
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Project Workspace</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f6f4ef;
+      color: #1a2940;
+    }
+    main {
+      width: min(92vw, 720px);
+      padding: 32px;
+      border: 1px solid rgba(26, 41, 64, 0.1);
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.7);
+      box-shadow: 0 20px 60px rgba(32, 44, 74, 0.08);
+    }
+    h1 { margin-top: 0; font-size: 2rem; }
+    p { line-height: 1.7; color: rgba(26, 41, 64, 0.76); }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Project workspace ready</h1>
+    <p>
+      This directory is reserved for the customer's own website, frontend assets,
+      reports, and project files.
+    </p>
+    <p>
+      Syntella's admin lives separately at <code>/admin</code> and can be updated
+      without overwriting the contents of this workspace.
+    </p>
+  </main>
+</body>
+</html>
+EOF
+  fi
+
+  if [[ ! -f "$project_dir/README.md" ]]; then
+    cat > "$project_dir/README.md" <<'EOF'
+# Project Workspace
+
+This directory belongs to the customer/project.
+
+Use it for:
+
+- website/frontend files
+- generated reports
+- client assets
+- project-specific documents
+
+Syntella updates should preserve this directory.
+EOF
+  fi
 
   # Nginx (www-data) must be able to traverse parent dirs to read project files.
-  chmod 755 "$HOME" "$HOME/.openclaw" "$HOME/.openclaw/workspace" "$project_dir" || true
+  chmod 755 "$HOME" "$HOME/.openclaw" "$HOME/.openclaw/workspace" "$admin_dir" "$project_dir" || true
+  chmod 644 "$admin_dir"/* || true
   chmod 644 "$project_dir"/* || true
 
   if [[ -z "$FRONTEND_ALLOWED_IP" ]]; then
@@ -937,7 +1030,11 @@ http {
     index index.html;
 
     location = /admin {
-      try_files /admin.html =404;
+      alias ${admin_dir}/admin.html;
+    }
+
+    location ~ ^/(admin\.css|admin\.js|admin-core\.js|admin-work\.js|admin-models\.js|admin-integrations\.js|admin-budget\.js|admin-team\.js)$ {
+      alias ${admin_dir}$uri;
     }
 
     location /api/ {
@@ -959,7 +1056,8 @@ http {
 }
 EOF
 
-  sudo chmod 755 "$HOME" "$HOME/.openclaw" "$HOME/.openclaw/workspace" "$project_dir"
+  sudo chmod 755 "$HOME" "$HOME/.openclaw" "$HOME/.openclaw/workspace" "$admin_dir" "$project_dir"
+  sudo chmod 644 "$admin_dir"/*
   sudo chmod 644 "$project_dir"/*
 
   sudo nginx -t
@@ -974,13 +1072,13 @@ EOF
   local marker local_ok api_ok
   marker="oc-bootstrap-marker-$(date +%s)-$RANDOM"
   # Remove any markers left by previous runs before appending a fresh one.
-  sed -i '/<!-- oc-bootstrap-marker-/d' "$project_dir/index.html" 2>/dev/null || true
-  echo "<!-- ${marker} -->" >> "$project_dir/index.html"
+  sed -i '/<!-- oc-bootstrap-marker-/d' "$admin_dir/admin.html" 2>/dev/null || true
+  echo "<!-- ${marker} -->" >> "$admin_dir/admin.html"
 
   local_ok=0
   api_ok=0
 
-  if curl -fsS --max-time 3 http://127.0.0.1 2>/dev/null | grep -q "$marker"; then
+  if curl -fsS --max-time 3 http://127.0.0.1/admin 2>/dev/null | grep -q "$marker"; then
     local_ok=1
   fi
 

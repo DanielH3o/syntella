@@ -46,9 +46,13 @@ fi
 mkdir -p "$AGENT_WS" "$AGENT_WS/memory" "$AGENT_DIR"
 
 # Seed workspace files.
-cp "$SHARED_WS_ROOT/AGENTS.SPAWNED.md" "$AGENT_WS/AGENTS.md" 2>/dev/null || true
-cp "$SHARED_WS_ROOT/syntella/SOUL.md" "$AGENT_WS/SOUL.md" 2>/dev/null || true
-sed -i "s|__AGENT_NAME__|${DISPLAY_NAME}|g; s|__AGENT_ID__|${AGENT_ID}|g" "$AGENT_WS/AGENTS.md" 2>/dev/null || true
+if [[ ! -f "$AGENT_WS/AGENTS.md" ]]; then
+  cp "$SHARED_WS_ROOT/AGENTS.SPAWNED.md" "$AGENT_WS/AGENTS.md" 2>/dev/null || true
+  sed -i "s|__AGENT_NAME__|${DISPLAY_NAME}|g; s|__AGENT_ID__|${AGENT_ID}|g" "$AGENT_WS/AGENTS.md" 2>/dev/null || true
+fi
+if [[ ! -f "$AGENT_WS/SOUL.md" ]]; then
+  cp "$SHARED_WS_ROOT/syntella/SOUL.md" "$AGENT_WS/SOUL.md" 2>/dev/null || true
+fi
 mkdir -p "$AGENT_WS/.openclaw/extensions" "$AGENT_WS/skills"
 
 if [[ -d "$SHARED_WS_ROOT/templates/extensions/seo/skills/seo-authority-operator" && "${SYNTELLA_AGENT_SPECIALTY:-}" == "seo" ]]; then

@@ -23,6 +23,9 @@ Frontend:
 
 - static admin UI in [scripts/templates/frontend/admin.html](/Users/daniel/.openclaw/workspace/syntella/scripts/templates/frontend/admin.html)
 - served locally by the Python dev server
+- separate standalone marketing site in [website/index.html](/Users/daniel/.openclaw/workspace/syntella/website/index.html)
+- on droplets, Syntella-managed admin assets should live in `~/.openclaw/workspace/admin`
+- customer-owned website/frontend/report files should live in `~/.openclaw/workspace/project` and be preserved across updates
 
 Local server:
 
@@ -53,6 +56,7 @@ Local data sources:
 - Local-first workflow is required.
 - The droplet/bootstrap path is too slow for iterative UI and product work.
 - The local server is now the main dev loop for dashboard/admin work.
+- Bootstrap/update runs should preserve customer workspace state by default.
 
 ### Agent and model management
 
@@ -138,6 +142,17 @@ Local data sources:
 - Fixed spawned workspace path wiring. Child runtimes were inheriting the root `syntella` workspace because the CLI `config set agents.defaults.workspace ...` call was failing non-fatally and the JSON config pass was not writing `agents.defaults.workspace`. Spawn now writes the child workspace path directly into config and also exports `SYNTELLA_WORKSPACE=<agent workspace>` when starting the child gateway.
 - Bootstrap/root config now normalizes Discord into OpenClaw's native multi-account shape. Syntella/main is represented as `channels.discord.accounts.default` with a `bindings` entry for `agentId = main`, instead of relying on legacy top-level single-account Discord fields.
 - Gateway restart paths now call `openclaw gateway stop` before starting again, to reduce restart races while adding native agents.
+- Bootstrap now supports state-preserving upgrades by default via `SYNTELLA_PRESERVE_CUSTOMER_STATE=1`.
+- In preserve mode, rerunning bootstrap will still refresh system-managed code/templates, but it will not overwrite existing customer workspace files like:
+  - `~/.openclaw/workspace/syntella/AGENTS.md`
+  - `~/.openclaw/workspace/syntella/HEARTBEAT.md`
+  - `~/.openclaw/workspace/syntella/SOUL.md`
+  - `~/.openclaw/workspace/shared/TEAM.md`
+  - `~/.openclaw/workspace/shared/TASKS.md`
+- Native agent spawn now preserves an existing agent workspace `AGENTS.md` and `SOUL.md` instead of rewriting them on re-registration.
+- Frontend deployment boundary is now explicit:
+  - `~/.openclaw/workspace/admin` is Syntella-owned and replaceable on updates
+  - `~/.openclaw/workspace/project` is customer-owned and should be preserved
 
 ### Models page
 
