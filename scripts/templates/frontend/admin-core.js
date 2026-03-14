@@ -14,6 +14,8 @@
       panelResponsibilities: document.getElementById('org-panel-responsibilities'),
       panelBudgetInput: document.getElementById('org-panel-budget-input'),
       panelBudgetHelp: document.getElementById('org-panel-budget-help'),
+      panelTools: document.getElementById('org-panel-tools'),
+      panelToolsHelp: document.getElementById('org-panel-tools-help'),
       panelBudgetFeedback: document.getElementById('org-panel-budget-feedback'),
       panelBudgetSave: document.getElementById('org-panel-budget-save'),
       teamChartShell: document.getElementById('team-chart-shell'),

@@ -84,7 +84,7 @@ python3 "$NATIVE_HELPER" \
 
 log "Updating agent-specific config in root openclaw.json"
 python3 - "$ROOT_HOME/openclaw.json" "$AGENT_ID" "$MODEL_PRIMARY" "${SYNTELLA_AGENT_SPECIALTY:-}" <<'PY'
-import json, os, sys
+import json, os, sqlite3, sys
 config_path, agent_id, model_primary, specialty = sys.argv[1:5]
 cfg = {}
 if os.path.exists(config_path):
@@ -100,8 +100,38 @@ for entry in entries:
         tools = entry.get("tools")
         if not isinstance(tools, dict):
             tools = {}
-        if specialty == "seo":
-            tools["profile"] = "full"
+        tools["profile"] = "full"
+        default_tools = ["tasks", "reports"]
+        integration_tool_map = {
+            "ghost": "ghost",
+            "google_search_console": "search_console",
+            "google_analytics": "analytics",
+        }
+        db_path = os.path.expanduser("~/.openclaw/workspace/tasks.db")
+        if os.path.exists(db_path):
+            try:
+                conn = sqlite3.connect(db_path)
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute(
+                    "SELECT system, enabled, allowed_specialties FROM integrations"
+                ).fetchall()
+                conn.close()
+                for row in rows:
+                    if not row["enabled"]:
+                        continue
+                    tool_name = integration_tool_map.get(row["system"])
+                    if not tool_name:
+                        continue
+                    try:
+                        allowed = json.loads(row["allowed_specialties"] or "[]")
+                    except Exception:
+                        allowed = []
+                    if allowed and specialty not in allowed:
+                        continue
+                    default_tools.append(tool_name)
+            except Exception:
+                pass
+        tools["allow"] = list(dict.fromkeys(default_tools))
         entry["tools"] = tools
         break
 main_entry = None

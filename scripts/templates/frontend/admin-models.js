@@ -1,6 +1,12 @@
 (function () {
   window.SyntellaAdminRegister((app) => {
     const { refs, state, utils, ui, actions } = app;
+    const runtimeMessage = (payload, successMessage) => {
+      const runtime = payload && payload.runtime;
+      if (!runtime) return successMessage;
+      if (runtime.ok) return `${successMessage} Gateway reloaded successfully.`;
+      return `${successMessage} Config saved, but gateway reload failed. Check ${runtime.log_file || 'gateway logs'}.`;
+    };
 
     const currentModelSelection = () => state.modelsCatalog.find((item) => utils.modelKey(item.provider, item.model_id) === state.selectedModelKey) || null;
 
@@ -169,7 +175,7 @@
         const refreshed = state.modelsCatalog.find((item) => utils.modelKey(item.provider, item.model_id) === utils.modelKey(selected.provider, selected.model_id)) || null;
         resetModelsForm(refreshed);
         renderModels();
-        ui.setModelsFeedback('Override cleared.', 'success');
+        ui.setModelsFeedback(runtimeMessage(payload, 'Override cleared.'), payload.runtime && !payload.runtime.ok ? 'error' : 'success');
       } catch (error) {
         ui.setModelsFeedback(error.message || 'Could not clear override.', 'error');
       }
@@ -208,7 +214,7 @@
         resetModelsForm(refreshed);
         renderModels();
         refs.modelProviderApiKeyInput.value = '';
-        ui.setModelsFeedback('Model saved to the shared OpenClaw catalog.', 'success');
+        ui.setModelsFeedback(runtimeMessage(payload, 'Model saved to the shared OpenClaw catalog.'), payload.runtime && !payload.runtime.ok ? 'error' : 'success');
       } catch (error) {
         ui.setModelsFeedback(error.message || 'Could not save model.', 'error');
       }

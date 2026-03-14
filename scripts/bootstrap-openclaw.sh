@@ -167,6 +167,15 @@ assert_templates_exist() {
     "$TEMPLATE_DIR/workspace/extensions/reports/openclaw.plugin.json"
     "$TEMPLATE_DIR/workspace/extensions/reports/index.ts"
     "$TEMPLATE_DIR/workspace/extensions/reports/reports_db.py"
+    "$TEMPLATE_DIR/workspace/extensions/ghost/openclaw.plugin.json"
+    "$TEMPLATE_DIR/workspace/extensions/ghost/index.ts"
+    "$TEMPLATE_DIR/workspace/extensions/ghost/status.py"
+    "$TEMPLATE_DIR/workspace/extensions/search-console/openclaw.plugin.json"
+    "$TEMPLATE_DIR/workspace/extensions/search-console/index.ts"
+    "$TEMPLATE_DIR/workspace/extensions/search-console/status.py"
+    "$TEMPLATE_DIR/workspace/extensions/analytics/openclaw.plugin.json"
+    "$TEMPLATE_DIR/workspace/extensions/analytics/index.ts"
+    "$TEMPLATE_DIR/workspace/extensions/analytics/status.py"
     "$TEMPLATE_DIR/operator-bridge/syntella-spawn-agent.sh.tmpl"
     "$TEMPLATE_DIR/operator-bridge/server.py"
   )
@@ -520,9 +529,18 @@ seed_workspace_context_files() {
     "$template_extensions_root/reports" \
     "$template_extensions_root/syntella-tasks" \
     "$template_extensions_root/syntella-reports" \
+    "$template_extensions_root/ghost" \
+    "$template_extensions_root/search-console" \
+    "$template_extensions_root/analytics" \
+    "$template_extensions_root/syntella-ghost" \
+    "$template_extensions_root/syntella-search-console" \
+    "$template_extensions_root/syntella-analytics" \
     "$template_extensions_root/seo"
   cp -R "$ws_tmpl/extensions/tasks" "$template_extensions_root/syntella-tasks"
   cp -R "$ws_tmpl/extensions/reports" "$template_extensions_root/syntella-reports"
+  cp -R "$ws_tmpl/extensions/ghost" "$template_extensions_root/syntella-ghost"
+  cp -R "$ws_tmpl/extensions/search-console" "$template_extensions_root/syntella-search-console"
+  cp -R "$ws_tmpl/extensions/analytics" "$template_extensions_root/syntella-analytics"
   cp -R "$ws_tmpl/extensions/seo" "$template_extensions_root/seo"
 
   local today yesterday

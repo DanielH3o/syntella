@@ -4,9 +4,11 @@
 import json
 import os
 import re
+import socket
 import sqlite3
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -28,10 +30,50 @@ OPERATOR_BRIDGE_URL = os.environ.get("SYNTELLA_OPERATOR_BRIDGE_URL", "http://127
 DB_PATH = WORKSPACE / "tasks.db"
 REGISTRY = WORKSPACE / "agents" / "registry.json"
 FRONTEND_ROOT = Path(__file__).resolve().parent / "templates" / "frontend"
+OPENCLAW_GATEWAY_PORT = int(os.environ.get("OPENCLAW_GATEWAY_PORT", "18789"))
+OPENCLAW_GATEWAY_LOG = OPENCLAW_STATE_DIR / "logs" / "gateway.log"
 USAGE_SYNC_MAX_EVENTS = int(os.environ.get("SYNTELLA_USAGE_SYNC_MAX_EVENTS", "20000"))
 TERMINAL_RUN_STATUSES = {"review", "done", "cancelled", "failed"}
 INTERNAL_MODEL_IDS = {"delivery-mirror", "gateway-injected"}
 VALID_TASK_STATUSES = {"backlog", "todo", "in_progress", "review", "done"}
+CORE_TOOL_DEFS = [
+    {
+        "tool": "tasks",
+        "plugin": "syntella-tasks",
+        "label": "Tasks",
+        "extension_dir": "syntella-tasks",
+        "system": None,
+        "core": True,
+    },
+    {
+        "tool": "reports",
+        "plugin": "syntella-reports",
+        "label": "Reports",
+        "extension_dir": "syntella-reports",
+        "system": None,
+        "core": True,
+    },
+]
+INTEGRATION_TOOL_DEFS = {
+    "ghost": {
+        "tool": "ghost",
+        "plugin": "syntella-ghost",
+        "label": "Ghost CMS",
+        "extension_dir": "syntella-ghost",
+    },
+    "google_search_console": {
+        "tool": "search_console",
+        "plugin": "syntella-search-console",
+        "label": "Google Search Console",
+        "extension_dir": "syntella-search-console",
+    },
+    "google_analytics": {
+        "tool": "analytics",
+        "plugin": "syntella-analytics",
+        "label": "Google Analytics",
+        "extension_dir": "syntella-analytics",
+    },
+}
 
 CONTENT_TYPES = {
     ".css": "text/css; charset=utf-8",
@@ -338,6 +380,14 @@ def write_openclaw_config(data):
         handle.write("\n")
 
 
+def gateway_is_listening():
+    try:
+        with socket.create_connection(("127.0.0.1", OPENCLAW_GATEWAY_PORT), timeout=1):
+            return True
+    except OSError:
+        return False
+
+
 def read_operator_bridge_token():
     token = os.environ.get("OPERATOR_BRIDGE_TOKEN", "").strip()
     if token:
@@ -392,6 +442,20 @@ def discover_openclaw_agents():
     registry = read_registry()
     discovered = {}
     agent_sources = {}
+    integrations = list_integrations()
+    config = read_openclaw_config()
+    runtime_tools = {}
+    agents_cfg = config.get("agents")
+    entries = agents_cfg.get("list") if isinstance(agents_cfg, dict) else None
+    if isinstance(entries, list):
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            agent_id = (entry.get("id") or "").strip()
+            tools_cfg = entry.get("tools")
+            allow = tools_cfg.get("allow") if isinstance(tools_cfg, dict) else None
+            if agent_id and isinstance(allow, list):
+                runtime_tools[agent_id] = [str(item).strip() for item in allow if str(item).strip()]
     agents_root = OPENCLAW_STATE_DIR / "agents"
 
     if agents_root.exists():
@@ -445,6 +509,8 @@ def discover_openclaw_agents():
             "channel_id": registry_meta.get("channel_id"),
             "monthly_budget": parse_optional_number(registry_meta.get("monthly_budget"), float),
             "specialty": registry_meta.get("specialty"),
+            "tools": registry_meta.get("tools") if isinstance(registry_meta.get("tools"), list) else runtime_tools.get(agent_id) or derive_default_agent_tools(registry_meta.get("specialty"), integrations),
+            "available_tools": available_tool_descriptors(integrations),
             "status": "Running" if is_running or latest_ts else "Discovered",
             "latest_activity": latest_ts,
             "session_count": event_count,
@@ -491,10 +557,30 @@ def update_agent_metadata(agent_id, body):
         if specialty not in {None, "seo"}:
             raise ValueError("specialty must be empty or seo")
         updated["specialty"] = specialty
+    runtime_changed = False
+    if "tools" in body:
+        requested_tools = body.get("tools")
+        if not isinstance(requested_tools, list):
+            raise ValueError("tools must be a list")
+        allowed_tools = available_tool_names()
+        normalized_tools = [item["tool"] for item in CORE_TOOL_DEFS]
+        for item in requested_tools:
+            tool_name = str(item or "").strip()
+            if not tool_name:
+                continue
+            if tool_name not in allowed_tools:
+                raise ValueError(f"Unknown tool: {tool_name}")
+            normalized_tools.append(tool_name)
+        updated["tools"] = list(dict.fromkeys(normalized_tools))
+        runtime_changed = True
+    if "specialty" in body:
+        runtime_changed = True
 
     registry[agent_key] = updated
     write_registry(registry)
-    return discover_openclaw_agents().get(agent_key)
+    if runtime_changed:
+        sync_agent_runtime_tools(agent_key, updated)
+    return discover_openclaw_agents().get(agent_key), runtime_changed
 
 
 def parse_bool(value):
@@ -641,6 +727,93 @@ def run_openclaw_command(args):
         stderr = (result.stderr or result.stdout or "").strip()
         raise RuntimeError(stderr or "OpenClaw cron command failed")
     return (result.stdout or "").strip()
+
+
+def restart_openclaw_gateway(reason="runtime config update"):
+    env = os.environ.copy()
+    env["PATH"] = f"{Path.home() / '.npm-global' / 'bin'}:{env.get('PATH', '')}"
+    OPENCLAW_GATEWAY_LOG.parent.mkdir(parents=True, exist_ok=True)
+
+    details = {
+        "ok": False,
+        "reason": reason,
+        "port": OPENCLAW_GATEWAY_PORT,
+        "log_file": str(OPENCLAW_GATEWAY_LOG),
+    }
+
+    try:
+        stop_result = subprocess.run(
+            ["openclaw", "gateway", "stop"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            env=env,
+        )
+        details["stop_output"] = (stop_result.stdout or stop_result.stderr or "").strip()
+    except Exception as exc:
+        details["stop_output"] = str(exc)
+
+    try:
+        pkill_result = subprocess.run(
+            ["pkill", "-f", "openclaw gateway"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
+        details["pkill_output"] = (pkill_result.stdout or pkill_result.stderr or "").strip()
+    except Exception as exc:
+        details["pkill_output"] = str(exc)
+
+    time.sleep(1)
+
+    for lock_path in list(OPENCLAW_STATE_DIR.rglob("gateway.*.lock")):
+        try:
+            lock_path.unlink()
+        except OSError:
+            pass
+
+    try:
+        for lock_path in Path("/tmp").rglob("gateway.*.lock"):
+            try:
+                lock_path.unlink()
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+    try:
+        log_handle = OPENCLAW_GATEWAY_LOG.open("a", encoding="utf-8")
+        process = subprocess.Popen(
+            [
+                "bash",
+                "-lc",
+                f'exec openclaw gateway --port {OPENCLAW_GATEWAY_PORT}',
+            ],
+            stdout=log_handle,
+            stderr=subprocess.STDOUT,
+            env=env,
+            start_new_session=True,
+        )
+        log_handle.close()
+    except Exception as exc:
+        details["error"] = f"Failed to start gateway: {exc}"
+        return details
+
+    details["pid"] = process.pid
+
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        if gateway_is_listening():
+            details["ok"] = True
+            return details
+        if process.poll() is not None:
+            break
+        time.sleep(1)
+
+    details["exit_code"] = process.poll()
+    details["error"] = "Gateway did not become ready within 30 seconds."
+    return details
 
 
 def read_openclaw_cron_jobs():
@@ -910,7 +1083,6 @@ def apply_model_to_openclaw_config(body):
         provider_models.append(model_entry)
 
     write_openclaw_config(config)
-
 
 def observed_model_usage():
     placeholders = ",".join("?" for _ in INTERNAL_MODEL_IDS)
@@ -1233,6 +1405,175 @@ def list_integrations():
             "updated_at": current.get("updated_at"),
         })
     return integrations
+
+
+def available_tool_descriptors(integrations=None):
+    integration_index = {
+        item["system"]: item
+        for item in (integrations if integrations is not None else list_integrations())
+    }
+    descriptors = [dict(item) for item in CORE_TOOL_DEFS]
+    for system, meta in INTEGRATION_TOOL_DEFS.items():
+        integration = integration_index.get(system, {})
+        descriptors.append({
+            **meta,
+            "system": system,
+            "core": False,
+            "enabled": bool(integration.get("enabled")),
+            "allowed_specialties": integration.get("allowed_specialties") or [],
+            "configured": bool(integration.get("configured")),
+        })
+    return descriptors
+
+
+def available_tool_names(integrations=None):
+    return {item["tool"] for item in available_tool_descriptors(integrations)}
+
+
+def derive_default_agent_tools(specialty=None, integrations=None):
+    normalized_specialty = (specialty or "").strip().lower()
+    tool_names = [item["tool"] for item in CORE_TOOL_DEFS]
+    for item in available_tool_descriptors(integrations):
+        if item.get("core"):
+            continue
+        if not item.get("enabled"):
+            continue
+        allowed_specialties = item.get("allowed_specialties") or []
+        if allowed_specialties and normalized_specialty not in allowed_specialties:
+            continue
+        tool_names.append(item["tool"])
+    return list(dict.fromkeys(tool_names))
+
+
+def build_integration_plugin_config(system, integration):
+    config = dict(integration.get("config") or {})
+    secrets = dict(integration.get("secrets") or {})
+    if system == "ghost":
+        return {
+            "asimaAdminUrl": config.get("asima_admin_url", ""),
+            "asimaAdminKey": secrets.get("asima_admin_key", ""),
+            "wonderfulAdminUrl": config.get("wonderful_admin_url", ""),
+            "wonderfulAdminKey": secrets.get("wonderful_admin_key", ""),
+        }
+    if system == "google_search_console":
+        return {
+            "asimaProperty": config.get("asima_property", ""),
+            "wonderfulProperty": config.get("wonderful_property", ""),
+            "serviceAccountJson": secrets.get("service_account_json", ""),
+        }
+    if system == "google_analytics":
+        return {
+            "asimaPropertyId": config.get("asima_property_id", ""),
+            "wonderfulPropertyId": config.get("wonderful_property_id", ""),
+            "serviceAccountJson": secrets.get("service_account_json", ""),
+        }
+    return {}
+
+
+def sync_integrations_to_openclaw_config(integrations=None):
+    integration_list = integrations if integrations is not None else list_integrations()
+    config = read_openclaw_config()
+    tools_cfg = config.setdefault("tools", {})
+    tool_allow = tools_cfg.get("allow")
+    if not isinstance(tool_allow, list):
+        tool_allow = []
+
+    plugins = config.setdefault("plugins", {})
+    load = plugins.get("load")
+    if not isinstance(load, dict):
+        load = {}
+    paths = load.get("paths")
+    if not isinstance(paths, list):
+        paths = []
+
+    plugin_allow = plugins.get("allow")
+    if not isinstance(plugin_allow, list):
+        plugin_allow = []
+    entries = plugins.get("entries")
+    if not isinstance(entries, dict):
+        entries = {}
+
+    descriptors = available_tool_descriptors(integration_list)
+    by_system = {item["system"]: item for item in integration_list}
+    template_root = OPENCLAW_STATE_DIR / "workspace" / "templates" / "extensions"
+
+    for item in descriptors:
+        extension_path = str(template_root / item["extension_dir"])
+        if extension_path not in paths:
+            paths.append(extension_path)
+        if item["plugin"] not in plugin_allow:
+            plugin_allow.append(item["plugin"])
+        if item["tool"] not in tool_allow:
+            tool_allow.append(item["tool"])
+
+        entry = entries.get(item["plugin"])
+        if not isinstance(entry, dict):
+            entry = {}
+        if item.get("core"):
+            entry["enabled"] = True
+        else:
+            integration = by_system.get(item["system"], {})
+            entry["enabled"] = bool(integration.get("enabled"))
+            entry["config"] = build_integration_plugin_config(item["system"], integration)
+        entries[item["plugin"]] = entry
+
+    load["paths"] = paths
+    plugins["load"] = load
+    plugins["allow"] = plugin_allow
+    plugins["entries"] = entries
+    tools_cfg["allow"] = tool_allow
+    config["tools"] = tools_cfg
+    config["plugins"] = plugins
+    write_openclaw_config(config)
+
+
+def sync_agent_runtime_tools(agent_id, agent_meta, integrations=None):
+    config = read_openclaw_config()
+    agents_cfg = config.get("agents")
+    entries = agents_cfg.get("list") if isinstance(agents_cfg, dict) else None
+    if not isinstance(entries, list):
+        return False
+
+    target_entry = None
+    for entry in entries:
+        if isinstance(entry, dict) and entry.get("id") == agent_id:
+            target_entry = entry
+            break
+    if target_entry is None:
+        return False
+
+    tools_cfg = target_entry.get("tools")
+    if not isinstance(tools_cfg, dict):
+        tools_cfg = {}
+
+    explicit_tools = agent_meta.get("tools")
+    if isinstance(explicit_tools, list) and explicit_tools:
+        tool_names = [str(item).strip() for item in explicit_tools if str(item).strip()]
+    else:
+        tool_names = derive_default_agent_tools(agent_meta.get("specialty"), integrations)
+
+    tools_cfg["allow"] = list(dict.fromkeys(tool_names))
+    target_entry["tools"] = tools_cfg
+    write_openclaw_config(config)
+    return True
+
+
+def sync_all_agent_runtime_tools(integrations=None):
+    integration_list = integrations if integrations is not None else list_integrations()
+    config = read_openclaw_config()
+    agents_cfg = config.get("agents")
+    entries = agents_cfg.get("list") if isinstance(agents_cfg, dict) else None
+    if not isinstance(entries, list):
+        return
+    registry = read_registry()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        agent_id = (entry.get("id") or "").strip()
+        if not agent_id:
+            continue
+        agent_meta = registry.get(agent_id) if isinstance(registry.get(agent_id), dict) else {}
+        sync_agent_runtime_tools(agent_id, agent_meta or {}, integration_list)
 
 
 def upsert_integration(body):
@@ -2207,9 +2548,18 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 apply_model_to_openclaw_config(body)
                 upsert_model_override(body)
-                return self._send_json(200, {"ok": True, "models": list_models()})
+                runtime = restart_openclaw_gateway("model override update")
+                return self._send_json(200, {"ok": True, "models": list_models(), "runtime": runtime})
             except ValueError as exc:
                 return self._send_json(400, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                return self._send_json(500, {"ok": False, "error": str(exc)})
+
+        if path == "/api/runtime/reload":
+            try:
+                runtime = restart_openclaw_gateway("manual runtime reload")
+                status = 200 if runtime.get("ok") else 500
+                return self._send_json(status, {"ok": bool(runtime.get("ok")), "runtime": runtime})
             except Exception as exc:
                 return self._send_json(500, {"ok": False, "error": str(exc)})
 
@@ -2217,7 +2567,11 @@ class Handler(BaseHTTPRequestHandler):
             body = self._parse_body()
             try:
                 integration = upsert_integration(body)
-                return self._send_json(200, {"ok": True, "integration": integration, "integrations": list_integrations()})
+                integrations = list_integrations()
+                sync_integrations_to_openclaw_config(integrations)
+                sync_all_agent_runtime_tools(integrations)
+                runtime = restart_openclaw_gateway("integration update")
+                return self._send_json(200, {"ok": True, "integration": integration, "integrations": integrations, "runtime": runtime})
             except ValueError as exc:
                 return self._send_json(400, {"ok": False, "error": str(exc)})
             except Exception as exc:
@@ -2298,8 +2652,9 @@ class Handler(BaseHTTPRequestHandler):
             agent_id = path.rsplit("/", 1)[-1]
             body = self._parse_body()
             try:
-                agent = update_agent_metadata(agent_id, body)
-                return self._send_json(200, {"ok": True, "agent": agent})
+                agent, runtime_changed = update_agent_metadata(agent_id, body)
+                runtime = restart_openclaw_gateway("agent runtime update") if runtime_changed else None
+                return self._send_json(200, {"ok": True, "agent": agent, "runtime": runtime})
             except ValueError as exc:
                 message = str(exc)
                 status = 404 if message == "Agent not found." else 400
@@ -2350,7 +2705,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json(400, {"ok": False, "error": "provider and model_id are required"})
             try:
                 delete_model_override(provider, model_id)
-                return self._send_json(200, {"ok": True, "models": list_models()})
+                runtime = restart_openclaw_gateway("model override delete")
+                return self._send_json(200, {"ok": True, "models": list_models(), "runtime": runtime})
             except Exception as exc:
                 return self._send_json(500, {"ok": False, "error": str(exc)})
 
@@ -2361,7 +2717,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json(400, {"ok": False, "error": "system is required"})
             try:
                 clear_integration(system)
-                return self._send_json(200, {"ok": True, "integrations": list_integrations()})
+                integrations = list_integrations()
+                sync_integrations_to_openclaw_config(integrations)
+                sync_all_agent_runtime_tools(integrations)
+                runtime = restart_openclaw_gateway("integration delete")
+                return self._send_json(200, {"ok": True, "integrations": integrations, "runtime": runtime})
             except ValueError as exc:
                 return self._send_json(400, {"ok": False, "error": str(exc)})
             except Exception as exc:

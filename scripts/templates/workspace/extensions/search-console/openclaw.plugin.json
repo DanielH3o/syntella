@@ -1,0 +1,15 @@
+{
+  "id": "syntella-search-console",
+  "name": "Syntella Search Console",
+  "version": "0.1.0",
+  "description": "Google Search Console integration tool for Syntella SEO workflows.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "asimaProperty": { "type": "string" },
+      "wonderfulProperty": { "type": "string" },
+      "serviceAccountJson": { "type": "string" }
+    }
+  }
+}

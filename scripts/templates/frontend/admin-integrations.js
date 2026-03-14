@@ -1,6 +1,12 @@
 (function () {
   window.SyntellaAdminRegister((app) => {
     const { refs, state, utils, ui, actions } = app;
+    const runtimeMessage = (payload, successMessage) => {
+      const runtime = payload && payload.runtime;
+      if (!runtime) return successMessage;
+      if (runtime.ok) return `${successMessage} Gateway reloaded successfully.`;
+      return `${successMessage} Config saved, but gateway reload failed. Check ${runtime.log_file || 'gateway logs'}.`;
+    };
 
     const INTEGRATION_META = {
       ghost: { label: 'Ghost CMS' },
@@ -125,7 +131,7 @@
         state.integrationsCatalog = payload.integrations || [];
         resetIntegrationForm(null);
         renderIntegrations();
-        ui.setIntegrationsFeedback('Integration cleared.', 'success');
+        ui.setIntegrationsFeedback(runtimeMessage(payload, 'Integration cleared.'), payload.runtime && !payload.runtime.ok ? 'error' : 'success');
       } catch (error) {
         ui.setIntegrationsFeedback(error.message || 'Could not clear integration.', 'error');
       }
@@ -156,7 +162,7 @@
         const refreshed = state.integrationsCatalog.find((item) => item.system === system) || null;
         resetIntegrationForm(refreshed);
         renderIntegrations();
-        ui.setIntegrationsFeedback(`${INTEGRATION_META[system]?.label || 'Integration'} saved.`, 'success');
+        ui.setIntegrationsFeedback(runtimeMessage(payload, `${INTEGRATION_META[system]?.label || 'Integration'} saved.`), payload.runtime && !payload.runtime.ok ? 'error' : 'success');
       } catch (error) {
         ui.setIntegrationsFeedback(error.message || 'Could not save integration.', 'error');
       }

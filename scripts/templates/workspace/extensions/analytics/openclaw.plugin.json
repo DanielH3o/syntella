@@ -1,0 +1,15 @@
+{
+  "id": "syntella-analytics",
+  "name": "Syntella Analytics",
+  "version": "0.1.0",
+  "description": "Google Analytics integration tool for Syntella SEO workflows.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "asimaPropertyId": { "type": "string" },
+      "wonderfulPropertyId": { "type": "string" },
+      "serviceAccountJson": { "type": "string" }
+    }
+  }
+}

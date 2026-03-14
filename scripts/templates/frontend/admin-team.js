@@ -14,9 +14,29 @@
       refs.panelBudgetInput.value = '';
       refs.panelBudgetInput.disabled = true;
       refs.panelBudgetSave.disabled = true;
+      refs.panelTools.innerHTML = '<div class="models-helper">Select an agent to manage tool access.</div>';
+      refs.panelToolsHelp.textContent = 'Select an agent to control which OpenClaw tools they can actually use.';
       refs.panelBudgetHelp.textContent = 'Select an agent to configure their budget cap.';
       ui.setAgentPanelBudgetFeedback('');
       ui.setTeamPanelOpen(false);
+    };
+
+    const renderToolOptions = (tools, availableTools) => {
+      const selected = new Set((tools || []).map((item) => String(item)));
+      const visibleTools = (availableTools || []).filter((item) => item.core || item.enabled);
+      if (!visibleTools.length) {
+        refs.panelTools.innerHTML = '<div class="models-helper">No tools are available yet.</div>';
+        return;
+      }
+      refs.panelTools.innerHTML = visibleTools.map((item) => `
+        <label class="agent-tools-option">
+          <input type="checkbox" data-agent-tool="${utils.escapeHtml(item.tool)}" ${selected.has(item.tool) ? 'checked' : ''} ${item.core ? 'disabled' : ''} />
+          <span>
+            <strong>${utils.escapeHtml(item.label)}</strong>
+            <span>${utils.escapeHtml(item.core ? 'Core Syntella workflow tool.' : `${item.enabled ? 'Enabled integration tool.' : 'Currently disabled at the integration layer.'}`)}</span>
+          </span>
+        </label>
+      `).join('');
     };
 
     const renderOrgPanel = (node) => {
@@ -35,6 +55,10 @@
       refs.panelBudgetHelp.textContent = node.dataset.agentBudget
         ? `Current monthly budget cap: ${utils.formatCurrency(Number(node.dataset.agentBudget || 0))}.`
         : 'No monthly budget cap is set for this agent yet.';
+      const tools = JSON.parse(node.dataset.agentTools || '[]');
+      const availableTools = JSON.parse(node.dataset.agentAvailableTools || '[]');
+      renderToolOptions(tools, availableTools);
+      refs.panelToolsHelp.textContent = 'Changes here update the real OpenClaw agent config and reload the gateway.';
       ui.setAgentPanelBudgetFeedback('');
       ui.setTeamPanelOpen(true);
     };
@@ -54,6 +78,8 @@
       node.dataset.agentDesc = data.description;
       node.dataset.agentResponsibilities = data.responsibilities.join('|');
       node.dataset.agentBudget = data.monthlyBudget == null ? '' : String(data.monthlyBudget);
+      node.dataset.agentTools = JSON.stringify(data.tools || []);
+      node.dataset.agentAvailableTools = JSON.stringify(data.availableTools || []);
       const eyebrowDot = data.status === 'Running' ? 'status-dot--online' : 'status-dot--offline';
       node.innerHTML = `
         <span class="org-node__eyebrow"><span class="status-dot ${eyebrowDot}"></span> ${utils.escapeHtml(data.eyebrow)}</span>
@@ -85,6 +111,8 @@
         department: isRoot ? 'Primary profile' : role,
         summary: role,
         monthlyBudget: agent && agent.monthly_budget != null ? Number(agent.monthly_budget) : null,
+        tools: agent && Array.isArray(agent.tools) ? agent.tools : [],
+        availableTools: agent && Array.isArray(agent.available_tools) ? agent.available_tools : [],
         meta: [
           status === 'Running' ? 'Active now' : status,
           agent && agent.specialty === 'seo' ? 'SEO specialist' : null,
@@ -195,14 +223,19 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             monthly_budget: refs.panelBudgetInput.value.trim(),
+            tools: Array.from(refs.panelTools.querySelectorAll('[data-agent-tool]:checked')).map((input) => input.dataset.agentTool),
           }),
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || payload.ok === false) throw new Error(payload.error || 'Could not save budget');
-        ui.setAgentPanelBudgetFeedback('Budget saved.', 'success');
+        const runtime = payload.runtime;
+        const message = runtime
+          ? (runtime.ok ? 'Agent settings saved. Gateway reloaded successfully.' : `Agent settings saved, but gateway reload failed. Check ${runtime.log_file || 'gateway logs'}.`)
+          : 'Agent settings saved.';
+        ui.setAgentPanelBudgetFeedback(message, runtime && !runtime.ok ? 'error' : 'success');
         await Promise.all([actions.loadDepartments(), typeof actions.renderBudget === 'function' ? actions.renderBudget() : Promise.resolve()]);
       } catch (error) {
-        ui.setAgentPanelBudgetFeedback(error.message || 'Could not save budget.', 'error');
+        ui.setAgentPanelBudgetFeedback(error.message || 'Could not save agent settings.', 'error');
       }
     });
 

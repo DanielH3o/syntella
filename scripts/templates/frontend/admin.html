@@ -977,9 +977,14 @@
                 <input id="org-panel-budget-input" inputmode="decimal" placeholder="Unset" />
                 <p id="org-panel-budget-help" class="models-helper">Select an agent to configure their budget cap.</p>
               </div>
+              <div class="task-form__field">
+                <label class="form-label">Enabled Tools</label>
+                <div id="org-panel-tools" class="agent-tools-list"></div>
+                <p id="org-panel-tools-help" class="models-helper">Select an agent to control which OpenClaw tools they can actually use.</p>
+              </div>
               <div id="org-panel-budget-feedback" class="agent-feedback" aria-live="polite"></div>
               <div class="models-form__actions">
-                <button type="button" id="org-panel-budget-save" class="btn btn-primary">Save Budget</button>
+                <button type="button" id="org-panel-budget-save" class="btn btn-primary">Save Agent Settings</button>
               </div>
               <div class="team-chart__panel-footer">
                 <span id="org-panel-status">Status: -</span>

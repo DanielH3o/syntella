@@ -63,6 +63,7 @@ Local data sources:
 - Agent creation should be available from the Team page.
 - Model availability and pricing should have a dedicated Models page.
 - External service credentials and tool configuration should have a dedicated Integrations page.
+- Agent tool access should be reflected in real OpenClaw runtime config, not only in Syntella metadata.
 - Model pricing should default from OpenClaw/local model metadata when available.
 - Missing or zero-cost model pricing should be overridable locally by the user.
 - `~/.openclaw/openclaw.json` is the canonical base catalog for models in this environment.
@@ -136,6 +137,8 @@ Local data sources:
 - Team metadata now surfaces each agent's inbox channel.
 - Team page now lets the user set an optional `monthly_budget` during agent creation.
 - Selected-agent drawer now lets the user edit an agent's monthly budget in place.
+- Selected-agent drawer now also manages which OpenClaw tools an agent can actually use.
+- Saving agent tool access now updates the native OpenClaw agent entry and triggers a best-effort gateway reload.
 - Team discovery now merges the root OpenClaw state with Syntella registry entries so spawned agents living in separate homes like `~/.openclaw-<agent_id>` still appear in the Team UI.
 - `TEAM.md` now treats Syntella's main Discord channel as both her inbox and the shared control channel that other agents should use for replies, completions, and blockers intended for Syntella.
 - Spawned-agent identity is now made explicit in both runtime and instructions: spawned gateways receive `OPENCLAW_AGENT_ID=<agent_id>`, and AGENTS templates now distinguish the team-facing agent ID from the underlying OpenClaw profile name `main`.
@@ -165,9 +168,11 @@ Local data sources:
   - custom display metadata
   - custom models not present in local OpenClaw metadata
 - Saving a model now patches the global OpenClaw catalog in `~/.openclaw/openclaw.json`.
+- Model save/delete now also trigger a best-effort root gateway restart so catalog changes become live without a manual reload.
+- Added a manual runtime reload API at `/api/runtime/reload` for explicit OpenClaw gateway restarts from the control plane.
 - Model creation/editing now uses a right-side drawer instead of an always-visible inline editor.
 - The model drawer now supports provider connection fields including base URL, adapter, and API key entry.
-- Clearing an override removes only the Syntella override layer, not the base OpenClaw model entry.
+- Clearing an override still removes only the Syntella override layer, then reloads runtime so the base OpenClaw metadata is reapplied immediately.
 - Models page supports:
   - catalog listing
   - provider/status/search filters
@@ -192,6 +197,12 @@ Local data sources:
   - notes
 - Added APIs for:
   - `/api/integrations`
+- Integration save/clear now syncs plugin config into `~/.openclaw/openclaw.json`, recalculates agent tool allowlists, and triggers a best-effort gateway reload.
+- Added first-pass runtime plugins/tools for:
+  - `ghost`
+  - `search_console`
+  - `analytics`
+- Those integrations currently expose runtime/config status checks as the first live OpenClaw tool surface.
 - This page is intended to be the control layer for future `ghost`, `search-console`, and `analytics` tools.
 
 ### Tasks page

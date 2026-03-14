@@ -1,0 +1,16 @@
+{
+  "id": "syntella-ghost",
+  "name": "Syntella Ghost",
+  "version": "0.1.0",
+  "description": "Ghost CMS integration tool for Syntella-managed publishing workflows.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "asimaAdminUrl": { "type": "string" },
+      "asimaAdminKey": { "type": "string" },
+      "wonderfulAdminUrl": { "type": "string" },
+      "wonderfulAdminKey": { "type": "string" }
+    }
+  }
+}
