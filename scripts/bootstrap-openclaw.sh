@@ -34,6 +34,7 @@ FRONTEND_ENABLED="${FRONTEND_ENABLED:-1}"
 FRONTEND_URL=""
 # Lock frontend to this source IP/CIDR (required when FRONTEND_ENABLED=1), e.g. "203.0.113.10" or "203.0.113.0/24".
 FRONTEND_ALLOWED_IP="${FRONTEND_ALLOWED_IP:-}"
+PUBLIC_IP_CACHE="${PUBLIC_IP_CACHE:-}"
 # Exec approval posture for runtime command execution:
 # - full: no interactive exec approvals (default for this droplet kit)
 # - strict: leave host approval posture unchanged
@@ -910,11 +911,19 @@ PY
 }
 
 detect_public_ip() {
+  if [[ -n "$PUBLIC_IP_CACHE" ]]; then
+    printf '%s\n' "$PUBLIC_IP_CACHE"
+    return 0
+  fi
+
   # Prefer cloud metadata (most reliable on DigitalOcean).
-  curl -fsS --max-time 2 http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address 2>/dev/null \
+  PUBLIC_IP_CACHE="$(
+    curl -fsS --max-time 2 http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address 2>/dev/null \
     || curl -fsS --max-time 3 ifconfig.me 2>/dev/null \
     || curl -fsS --max-time 3 https://api.ipify.org 2>/dev/null \
     || true
+  )"
+  printf '%s\n' "$PUBLIC_IP_CACHE"
 }
 
 setup_frontend_workspace() {
@@ -931,16 +940,10 @@ setup_frontend_workspace() {
   mkdir -p "$admin_dir" "$project_dir"
 
   # Syntella-owned admin surface: safe to replace on every update.
-  cp "$TEMPLATE_DIR/frontend/admin.html" "$admin_dir/admin.html"
-  cp "$TEMPLATE_DIR/frontend/admin.css" "$admin_dir/admin.css"
-  cp "$TEMPLATE_DIR/frontend/admin.js" "$admin_dir/admin.js"
-  cp "$TEMPLATE_DIR/frontend/admin-core.js" "$admin_dir/admin-core.js"
-  cp "$TEMPLATE_DIR/frontend/admin-work.js" "$admin_dir/admin-work.js"
-  cp "$TEMPLATE_DIR/frontend/admin-models.js" "$admin_dir/admin-models.js"
-  cp "$TEMPLATE_DIR/frontend/admin-integrations.js" "$admin_dir/admin-integrations.js"
-  cp "$TEMPLATE_DIR/frontend/admin-budget.js" "$admin_dir/admin-budget.js"
-  cp "$TEMPLATE_DIR/frontend/admin-team.js" "$admin_dir/admin-team.js"
-  cp "$TEMPLATE_DIR/frontend/README.md" "$admin_dir/README.md"
+  local admin_asset
+  for admin_asset in admin.html admin.css admin.js admin-core.js admin-work.js admin-models.js admin-integrations.js admin-budget.js admin-team.js README.md; do
+    cp "$TEMPLATE_DIR/frontend/$admin_asset" "$admin_dir/$admin_asset"
+  done
 
   # Customer-owned project space: create once, then preserve across updates.
   if [[ ! -f "$project_dir/index.html" ]]; then
@@ -1008,11 +1011,6 @@ Use it for:
 Syntella updates should preserve this directory.
 EOF
   fi
-
-  # Nginx (www-data) must be able to traverse parent dirs to read project files.
-  chmod 755 "$HOME" "$HOME/.openclaw" "$HOME/.openclaw/workspace" "$admin_dir" "$project_dir" || true
-  chmod 644 "$admin_dir"/* || true
-  chmod 644 "$project_dir"/* || true
 
   if [[ -z "$FRONTEND_ALLOWED_IP" ]]; then
     echo "FRONTEND_ALLOWED_IP is required when FRONTEND_ENABLED=1 (example: 203.0.113.10 or 203.0.113.0/24)."
@@ -1116,6 +1114,41 @@ EOF
   fi
 }
 
+send_discord_api_message() {
+  local message="$1"
+  python3 - "$DISCORD_BOT_TOKEN" "$DISCORD_CHANNEL_ID" "$message" <<'PY'
+import json
+import sys
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
+
+token, channel_id, message = sys.argv[1:4]
+payload = json.dumps({"content": message}).encode("utf-8")
+request = Request(
+    f"https://discord.com/api/v10/channels/{channel_id}/messages",
+    data=payload,
+    headers={
+        "Authorization": f"Bot {token}",
+        "Content-Type": "application/json",
+        "User-Agent": "syntella-bootstrap/1.0",
+    },
+    method="POST",
+)
+try:
+    with urlopen(request, timeout=15) as response:
+        body = response.read().decode("utf-8")
+        parsed = json.loads(body) if body else {}
+        if response.status < 200 or response.status >= 300:
+            raise RuntimeError(f"Discord API returned status {response.status}")
+        print(parsed.get("id", "ok"))
+except HTTPError as exc:
+    detail = exc.read().decode("utf-8", errors="replace")
+    raise SystemExit(f"discord_http_error:{exc.code}:{detail}")
+except URLError as exc:
+    raise SystemExit(f"discord_url_error:{exc.reason}")
+PY
+}
+
 send_discord_boot_ping() {
   local ts msg host ip
   ts="$(date -u +"%Y-%m-%d %H:%M:%S UTC")"
@@ -1130,15 +1163,19 @@ send_discord_boot_ping() {
 
   local attempt
   for attempt in 1 2 3 4 5 6; do
-    if oc message send --channel discord --target "channel:${DISCORD_CHANNEL_ID}" --message "$msg" >/dev/null 2>&1; then
-      echo "Sent Discord startup ping to channel:${DISCORD_CHANNEL_ID}"
+    if send_discord_api_message "$msg" >/dev/null 2>&1; then
+      echo "Sent Discord startup ping to channel:${DISCORD_CHANNEL_ID} via Discord API"
       return 0
     fi
-    sleep 2
+    if oc message send --channel discord --target "channel:${DISCORD_CHANNEL_ID}" --message "$msg" >/dev/null 2>&1; then
+      echo "Sent Discord startup ping to channel:${DISCORD_CHANNEL_ID} via OpenClaw"
+      return 0
+    fi
+    sleep 3
   done
 
   echo "Warning: failed to send Discord startup ping after retries."
-  echo "Check bot token, guild/channel IDs, and bot permissions."
+  echo "Check bot token, guild/channel IDs, bot permissions, and outbound HTTPS access."
   return 1
 }
 
@@ -1162,7 +1199,7 @@ start_gateway() {
   mkdir -p "$HOME/.openclaw/logs"
 
   # Always restart to pick up any config changes applied before this call.
-  openclaw gateway stop >/dev/null 2>&1 || true
+  oc gateway stop >/dev/null 2>&1 || true
   pkill -f "openclaw gateway" >/dev/null 2>&1 || true
   sleep 1
 

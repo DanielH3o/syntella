@@ -57,6 +57,7 @@ Local data sources:
 - The droplet/bootstrap path is too slow for iterative UI and product work.
 - The local server is now the main dev loop for dashboard/admin work.
 - Bootstrap/update runs should preserve customer workspace state by default.
+- Bootstrap startup notifications should not depend solely on OpenClaw's message routing; initial deployment pings now send directly via the Discord HTTP API with OpenClaw CLI as a fallback.
 
 ### Agent and model management
 
@@ -146,6 +147,10 @@ Local data sources:
 - Bootstrap/root config now normalizes Discord into OpenClaw's native multi-account shape. Syntella/main is represented as `channels.discord.accounts.default` with a `bindings` entry for `agentId = main`, instead of relying on legacy top-level single-account Discord fields.
 - Gateway restart paths now call `openclaw gateway stop` before starting again, to reduce restart races while adding native agents.
 - Bootstrap now supports state-preserving upgrades by default via `SYNTELLA_PRESERVE_CUSTOMER_STATE=1`.
+- Bootstrap script has been trimmed slightly to reduce duplicate work:
+  - public IP detection is cached across the run
+  - admin asset copy now uses a loop instead of repetitive `cp` lines
+  - startup Discord ping now uses direct Discord API delivery first, then OpenClaw CLI fallback
 - In preserve mode, rerunning bootstrap will still refresh system-managed code/templates, but it will not overwrite existing customer workspace files like:
   - `~/.openclaw/workspace/syntella/AGENTS.md`
   - `~/.openclaw/workspace/syntella/HEARTBEAT.md`
