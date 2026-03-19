@@ -1381,14 +1381,14 @@ def load_integrations():
     return by_system
 
 
-def list_integrations():
+def list_integrations(include_secrets=False):
     stored = load_integrations()
     integrations = []
     for system, defaults in INTEGRATION_DEFAULTS.items():
         current = stored.get(system, {})
         config = current.get("config", {})
         secrets = current.get("secrets", {})
-        integrations.append({
+        integration = {
             "system": system,
             "display_name": current.get("display_name") or defaults["display_name"],
             "description": defaults["description"],
@@ -1403,7 +1403,10 @@ def list_integrations():
             "notes": current.get("notes") or "",
             "configured": any(bool(str(value).strip()) for value in config.values()) or any(bool((secrets.get(field["key"]) or "").strip()) for field in defaults["secret_fields"]),
             "updated_at": current.get("updated_at"),
-        })
+        }
+        if include_secrets:
+            integration["secrets"] = secrets
+        integrations.append(integration)
     return integrations
 
 
@@ -1471,7 +1474,7 @@ def build_integration_plugin_config(system, integration):
 
 
 def sync_integrations_to_openclaw_config(integrations=None):
-    integration_list = integrations if integrations is not None else list_integrations()
+    integration_list = integrations if integrations is not None else list_integrations(include_secrets=True)
     config = read_openclaw_config()
     tools_cfg = config.setdefault("tools", {})
     tool_allow = tools_cfg.get("allow")
@@ -1559,7 +1562,7 @@ def sync_agent_runtime_tools(agent_id, agent_meta, integrations=None):
 
 
 def sync_all_agent_runtime_tools(integrations=None):
-    integration_list = integrations if integrations is not None else list_integrations()
+    integration_list = integrations if integrations is not None else list_integrations(include_secrets=True)
     config = read_openclaw_config()
     agents_cfg = config.get("agents")
     entries = agents_cfg.get("list") if isinstance(agents_cfg, dict) else None
@@ -2568,8 +2571,9 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 integration = upsert_integration(body)
                 integrations = list_integrations()
-                sync_integrations_to_openclaw_config(integrations)
-                sync_all_agent_runtime_tools(integrations)
+                full_integrations = list_integrations(include_secrets=True)
+                sync_integrations_to_openclaw_config(full_integrations)
+                sync_all_agent_runtime_tools(full_integrations)
                 runtime = restart_openclaw_gateway("integration update")
                 return self._send_json(200, {"ok": True, "integration": integration, "integrations": integrations, "runtime": runtime})
             except ValueError as exc:
@@ -2718,8 +2722,9 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 clear_integration(system)
                 integrations = list_integrations()
-                sync_integrations_to_openclaw_config(integrations)
-                sync_all_agent_runtime_tools(integrations)
+                full_integrations = list_integrations(include_secrets=True)
+                sync_integrations_to_openclaw_config(full_integrations)
+                sync_all_agent_runtime_tools(full_integrations)
                 runtime = restart_openclaw_gateway("integration delete")
                 return self._send_json(200, {"ok": True, "integrations": integrations, "runtime": runtime})
             except ValueError as exc:
