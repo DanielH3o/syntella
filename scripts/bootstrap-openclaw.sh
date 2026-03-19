@@ -1124,7 +1124,7 @@ http {
     }
 
     location ~ ^/(admin\.css|admin\.js|admin-core\.js|admin-work\.js|admin-models\.js|admin-integrations\.js|admin-budget\.js|admin-team\.js)$ {
-      alias ${admin_dir}$uri;
+      alias ${admin_dir}\$uri;
     }
 
     location /api/ {
