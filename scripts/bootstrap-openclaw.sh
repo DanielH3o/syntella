@@ -318,10 +318,27 @@ mkdir -p "$HOME/.openclaw/credentials"
 mkdir -p "$HOME/.openclaw/workspace"
 
 ensure_gateway_token() {
+  local config_file="$HOME/.openclaw/openclaw.json"
   local token=""
 
-  token="$(oc config get gateway.auth.token 2>/dev/null | tr -d '"[:space:]' || true)"
-  if [[ -n "$token" && "$token" != "null" ]]; then
+  token="$(python3 - "$config_file" <<'PY'
+import json, os, sys
+config_path = sys.argv[1]
+if not os.path.exists(config_path):
+    raise SystemExit(0)
+try:
+    with open(config_path, "r", encoding="utf-8") as f:
+        cfg = json.load(f)
+except Exception:
+    raise SystemExit(0)
+gateway = cfg.get("gateway")
+auth = gateway.get("auth") if isinstance(gateway, dict) else None
+token = auth.get("token") if isinstance(auth, dict) else ""
+if token:
+    print(token)
+PY
+)"
+  if [[ -n "$token" ]]; then
     return 0
   fi
 
@@ -337,7 +354,26 @@ PY
     token="$(date +%s)-$RANDOM-$RANDOM"
   fi
 
-  oc config set gateway.auth.token "$token"
+  python3 - "$config_file" "$token" <<'PY'
+import json, os, sys
+config_path, token = sys.argv[1:3]
+cfg = {}
+if os.path.exists(config_path):
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+    except Exception:
+        cfg = {}
+gateway = cfg.setdefault("gateway", {})
+auth = gateway.get("auth")
+if not isinstance(auth, dict):
+    auth = {}
+auth["token"] = token
+gateway["auth"] = auth
+with open(config_path, "w", encoding="utf-8") as f:
+    json.dump(cfg, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+PY
 }
 
 parse_discord_target() {
@@ -787,6 +823,143 @@ verify_discord_dm_allowlist() {
   echo "Verified Discord DM allowlist (owner=${DISCORD_HUMAN_ID})."
 }
 
+apply_openclaw_baseline_config() {
+  local config_file="$HOME/.openclaw/openclaw.json"
+
+  python3 - "$config_file" "$DISCORD_CHANNEL_ID" <<'PY'
+import json
+import os
+import sys
+
+config_path, channel_id = sys.argv[1:3]
+cfg = {}
+if os.path.exists(config_path):
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+    except Exception:
+        cfg = {}
+
+gateway = cfg.setdefault("gateway", {})
+gateway["mode"] = "local"
+gateway["bind"] = "loopback"
+auth = gateway.get("auth")
+if not isinstance(auth, dict):
+    auth = {}
+auth["mode"] = "token"
+gateway["auth"] = auth
+gateway["trustedProxies"] = ["127.0.0.1"]
+
+agents = cfg.setdefault("agents", {})
+defs = agents.setdefault("defaults", {})
+model = defs.get("model")
+if not isinstance(model, dict):
+    model = {}
+model["primary"] = "moonshot/kimi-k2.5"
+defs["model"] = model
+defs["workspace"] = os.path.expanduser("~/.openclaw/workspace/syntella")
+sandbox = defs.get("sandbox")
+if not isinstance(sandbox, dict):
+    sandbox = {}
+sandbox["mode"] = "off"
+sandbox["workspaceAccess"] = "rw"
+defs["sandbox"] = sandbox
+heartbeat = defs.get("heartbeat")
+if not isinstance(heartbeat, dict):
+    heartbeat = {}
+heartbeat["every"] = "15m"
+heartbeat["target"] = "discord"
+heartbeat["to"] = channel_id
+defs["heartbeat"] = heartbeat
+
+tools = cfg.setdefault("tools", {})
+allow = tools.get("allow")
+if not isinstance(allow, list):
+    allow = []
+for tool in ["tasks", "reports"]:
+    if tool not in allow:
+        allow.append(tool)
+tools["allow"] = allow
+
+exec_cfg = tools.get("exec")
+if not isinstance(exec_cfg, dict):
+    exec_cfg = {}
+exec_cfg["host"] = "gateway"
+exec_cfg["security"] = "full"
+exec_cfg["ask"] = "off"
+apply_patch = exec_cfg.get("applyPatch")
+if not isinstance(apply_patch, dict):
+    apply_patch = {}
+apply_patch["workspaceOnly"] = False
+exec_cfg["applyPatch"] = apply_patch
+tools["exec"] = exec_cfg
+
+fs_cfg = tools.get("fs")
+if not isinstance(fs_cfg, dict):
+    fs_cfg = {}
+fs_cfg["workspaceOnly"] = False
+tools["fs"] = fs_cfg
+
+plugins = cfg.setdefault("plugins", {})
+load = plugins.get("load")
+if not isinstance(load, dict):
+    load = {}
+paths = load.get("paths")
+if not isinstance(paths, list):
+    paths = []
+for path in [
+    os.path.expanduser("~/.openclaw/workspace/templates/extensions/syntella-tasks"),
+    os.path.expanduser("~/.openclaw/workspace/templates/extensions/syntella-reports"),
+]:
+    if path not in paths:
+        paths.append(path)
+load["paths"] = paths
+plugins["load"] = load
+
+plugin_allow = plugins.get("allow")
+if not isinstance(plugin_allow, list):
+    plugin_allow = []
+for plugin in ["syntella-tasks", "syntella-reports"]:
+    if plugin not in plugin_allow:
+        plugin_allow.append(plugin)
+plugins["allow"] = plugin_allow
+
+entries = plugins.get("entries")
+if not isinstance(entries, dict):
+    entries = {}
+for plugin in ["syntella-tasks", "syntella-reports"]:
+    entry = entries.get(plugin)
+    if not isinstance(entry, dict):
+        entry = {}
+    entry["enabled"] = True
+    entries[plugin] = entry
+plugins["entries"] = entries
+
+bindings = cfg.get("bindings")
+if not isinstance(bindings, list):
+    bindings = []
+main_binding = {
+    "agentId": "main",
+    "match": {
+        "channel": "discord",
+        "accountId": "default",
+    },
+}
+for item in bindings:
+    if isinstance(item, dict) and item.get("agentId") == "main":
+        item.clear()
+        item.update(main_binding)
+        break
+else:
+    bindings.append(main_binding)
+cfg["bindings"] = bindings
+
+with open(config_path, "w", encoding="utf-8") as f:
+    json.dump(cfg, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+PY
+}
+
 configure_openclaw_runtime() {
   if should_preserve_state; then
     say "Writing workspace root context files (preserve customer state mode)"
@@ -796,10 +969,6 @@ configure_openclaw_runtime() {
   seed_workspace_context_files
 
   say "Ensuring OpenClaw gateway baseline config"
-  oc config set gateway.mode local
-  oc config set gateway.bind loopback
-  oc config set gateway.auth.mode token
-  oc config set gateway.trustedProxies '["127.0.0.1"]'
   ensure_gateway_token
 
   say "Configuring model provider (shared env file + defaults)"
@@ -809,101 +978,7 @@ configure_openclaw_runtime() {
   install_operator_bridge
   install_syntella_api
 
-  oc config set agents.defaults.model.primary "moonshot/kimi-k2.5"
-  oc config set agents.defaults.workspace "~/.openclaw/workspace/syntella"
-  oc config set agents.defaults.sandbox.mode "off"
-  oc config set agents.defaults.sandbox.workspaceAccess "rw"
-  oc config set agents.defaults.heartbeat.every "15m"
-  oc config set agents.defaults.heartbeat.target "discord"
-  # Ensure channel ID is stored as string (not number) in JSON
-  python3 - "$HOME/.openclaw/openclaw.json" "$DISCORD_CHANNEL_ID" <<'PY'
-import json, os, sys
-config_path, channel_id = sys.argv[1:3]
-cfg = {}
-if os.path.exists(config_path):
-    try:
-        with open(config_path, 'r') as f:
-            cfg = json.load(f)
-    except Exception:
-        cfg = {}
-agents = cfg.setdefault('agents', {})
-defs = agents.setdefault('defaults', {})
-hb = defs.setdefault('heartbeat', {})
-hb['to'] = channel_id  # Explicitly set as string
-tools = cfg.setdefault('tools', {})
-allow = tools.get('allow')
-if not isinstance(allow, list):
-    allow = []
-if 'tasks' not in allow:
-    allow.append('tasks')
-if 'reports' not in allow:
-    allow.append('reports')
-tools['allow'] = allow
-plugins = cfg.setdefault('plugins', {})
-load = plugins.get('load')
-if not isinstance(load, dict):
-    load = {}
-paths = load.get('paths')
-if not isinstance(paths, list):
-    paths = []
-for path in [
-    os.path.expanduser('~/.openclaw/workspace/templates/extensions/syntella-tasks'),
-    os.path.expanduser('~/.openclaw/workspace/templates/extensions/syntella-reports'),
-]:
-    if path not in paths:
-        paths.append(path)
-load['paths'] = paths
-plugins['load'] = load
-plugin_allow = plugins.get('allow')
-if not isinstance(plugin_allow, list):
-    plugin_allow = []
-if 'syntella-tasks' not in plugin_allow:
-    plugin_allow.append('syntella-tasks')
-if 'syntella-reports' not in plugin_allow:
-    plugin_allow.append('syntella-reports')
-plugins['allow'] = plugin_allow
-entries = plugins.get('entries')
-if not isinstance(entries, dict):
-    entries = {}
-entry = entries.get('syntella-tasks')
-if not isinstance(entry, dict):
-    entry = {}
-entry['enabled'] = True
-entries['syntella-tasks'] = entry
-entry = entries.get('syntella-reports')
-if not isinstance(entry, dict):
-    entry = {}
-entry['enabled'] = True
-entries['syntella-reports'] = entry
-plugins['entries'] = entries
-bindings = cfg.get('bindings')
-if not isinstance(bindings, list):
-    bindings = []
-main_binding = {
-    'agentId': 'main',
-    'match': {
-        'channel': 'discord',
-        'accountId': 'default',
-    },
-}
-found = False
-for item in bindings:
-    if isinstance(item, dict) and item.get('agentId') == 'main':
-        item.clear()
-        item.update(main_binding)
-        found = True
-        break
-if not found:
-    bindings.append(main_binding)
-cfg['bindings'] = bindings
-with open(config_path, 'w') as f:
-    json.dump(cfg, f, indent=2)
-PY
-  oc config set tools.exec.host "gateway"
-  oc config set tools.exec.security "full"
-  oc config set tools.exec.ask "off"
-  oc config set tools.fs.workspaceOnly false
-  oc config set tools.exec.applyPatch.workspaceOnly false
+  apply_openclaw_baseline_config
 
   say "Configuring Discord channel allowlist"
   configure_discord_channel
@@ -932,7 +1007,6 @@ setup_frontend_workspace() {
   fi
 
   say "Setting up admin and project frontend directories (nginx)"
-  sudo apt-get update -y
   sudo apt-get install -y nginx
 
   local admin_dir="$HOME/.openclaw/workspace/admin"

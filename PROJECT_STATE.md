@@ -58,6 +58,7 @@ Local data sources:
 - The local server is now the main dev loop for dashboard/admin work.
 - Bootstrap/update runs should preserve customer workspace state by default.
 - Bootstrap startup notifications should not depend solely on OpenClaw's message routing; initial deployment pings now send directly via the Discord HTTP API with OpenClaw CLI as a fallback.
+- Bootstrap now batches core OpenClaw baseline config by editing `openclaw.json` in one pass instead of issuing many sequential `oc config set` calls.
 
 ### Agent and model management
 
@@ -150,6 +151,7 @@ Local data sources:
 - Bootstrap script has been trimmed slightly to reduce duplicate work:
   - public IP detection is cached across the run
   - admin asset copy now uses a loop instead of repetitive `cp` lines
+  - core gateway/agent/tools baseline config is applied in one JSON update instead of many CLI writes
   - startup Discord ping now uses direct Discord API delivery first, then OpenClaw CLI fallback
 - In preserve mode, rerunning bootstrap will still refresh system-managed code/templates, but it will not overwrite existing customer workspace files like:
   - `~/.openclaw/workspace/syntella/AGENTS.md`
