@@ -1120,6 +1120,7 @@ http {
     index index.html;
 
     location = /admin {
+      default_type text/html;
       alias ${admin_dir}/admin.html;
     }
 
